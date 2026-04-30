@@ -1,0 +1,57 @@
+# ─── RISK LIMITS — Single Source of Truth ────────────────────────────────────
+# All limits loaded at startup. Changing this file requires restart.
+# Risk Agent validates every order against these limits. Cannot be bypassed.
+
+position_limits:
+  max_single_stock_pct: 5.0          # Max % of portfolio in any one stock
+  max_stocks_in_portfolio: 40        # Hard cap on total positions
+  min_stock_market_cap_cr: 500       # ₹500 Cr minimum market cap
+  min_stock_price: 50                # No sub-₹50 stocks (penny stock filter)
+  max_stocks_per_strategy: 20        # Each strategy manages max 20 positions
+
+sector_limits:
+  max_sector_exposure_pct: 20.0      # GICS Sector level 1
+  max_top3_sectors_pct: 50.0         # Top 3 sectors combined cap
+
+liquidity_limits:
+  max_order_as_pct_of_10d_adv: 5.0  # Never exceed 5% of 10-day ADV
+  min_adv_cr: 5.0                    # Min ₹5Cr ADV for any stock
+
+portfolio_limits:
+  max_portfolio_beta: 1.2            # Upper beta bound
+  min_portfolio_beta: 0.0            # Lower beta bound (no net short)
+  vol_target_annual_pct: 10.0        # 10% annual vol target
+  max_gross_exposure_pct: 100.0      # No leverage (cash segment only)
+
+drawdown_limits:
+  daily_loss_limit_pct: 2.0          # Halt new trades if day loss > 2%
+  weekly_loss_limit_pct: 4.0         # Halt new trades if week loss > 4%
+  drawdown_alert_pct: 8.0            # Send alert at 8% drawdown
+  drawdown_reduce_pct: 10.0          # Start reducing positions at 10%
+  drawdown_kill_switch_pct: 12.0     # Full flatten at 12% drawdown
+  max_consecutive_loss_days: 5       # Alert after 5 red days
+
+circuit_breakers:
+  nse_upper_circuit_buffer_pct: 1.0  # Don't buy within 1% of upper circuit
+  nse_lower_circuit_buffer_pct: 1.0  # Don't sell within 1% of lower circuit
+  vix_india_reduce_threshold: 25.0   # Scale down sizing if VIX > 25
+  vix_india_halt_threshold: 35.0     # No new positions if VIX > 35
+
+kill_switch:
+  triggers:
+    drawdown_pct: 12.0
+    daily_loss_pct: 3.0
+    broker_down_minutes: 15
+    reconciliation_mismatch_pct: 5.0
+    consecutive_failed_orders: 5
+  actions:
+    - cancel_all_pending_orders
+    - flatten_all_positions
+    - send_critical_alert
+    - halt_trading_hours: 24
+
+order_limits:
+  min_order_value: 5000              # ₹5,000 minimum order (avoid tiny lots)
+  max_order_value_pct: 5.0           # Single order max 5% of portfolio
+  max_orders_per_day: 50             # Circuit breaker on excessive trading
+  order_timeout_minutes: 30          # Cancel unfilled orders after 30 min

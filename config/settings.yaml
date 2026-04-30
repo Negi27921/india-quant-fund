@@ -1,0 +1,66 @@
+app:
+  name: "India Quant Fund"
+  version: "1.0.0"
+  timezone: "Asia/Kolkata"
+
+market:
+  exchanges: ["NSE", "BSE"]
+  open_time: "09:15"
+  close_time: "15:30"
+  pre_open_end: "09:08"
+  settlement: "T+1"
+  currency: "INR"
+
+universe:
+  index: "NIFTY500"
+  min_market_cap_cr: 500
+  min_price: 50
+  min_adv_cr: 5.0
+  max_stocks: 500
+
+data:
+  ohlcv_lookback_days: 504        # 2 years daily for features
+  backfill_years: 7
+  update_time: "06:00"
+  validation_threshold: 0.10      # abort if >10% universe missing
+
+strategy:
+  rebalance_times:
+    momentum_st: "weekly"
+    momentum_mt: "monthly"
+    mean_reversion: "daily"
+    factor: "monthly"
+    event: "daily"
+  capital_allocation:
+    momentum_st: 0.25
+    momentum_mt: 0.25
+    mean_reversion: 0.20
+    factor: 0.25
+    event: 0.05
+
+costs:
+  brokerage_per_order: 20         # ₹20 flat
+  stt_buy_pct: 0.0                # STT on buy (delivery): 0% from Oct 2024 budget
+  stt_sell_pct: 0.001             # STT on sell (delivery): 0.1%
+  exchange_charge_pct: 0.0000297  # NSE transaction charge
+  sebi_charge_pct: 0.000001       # SEBI charges
+  gst_on_brokerage: 0.18          # 18% GST on brokerage
+  stamp_duty_buy_pct: 0.00015     # 0.015% on buy side
+
+agents:
+  primary_model: "deepseek-chat"
+  fast_model: "gemini-2.0-flash"
+  fallback_model: "gpt-4o-mini"
+  max_retries: 3
+  timeout_seconds: 30
+
+monitoring:
+  pnl_poll_interval_seconds: 300  # 5 minutes
+  health_check_interval_seconds: 60
+  alert_channels: ["telegram", "email"]
+
+reporting:
+  daily_report_time: "16:00"
+  weekly_report_day: "friday"
+  weekly_report_time: "17:00"
+  output_dir: "./reports"

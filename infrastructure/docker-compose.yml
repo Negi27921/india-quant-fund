@@ -1,0 +1,85 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - iqf
+
+  api:
+    build:
+      context: ..
+      dockerfile: infrastructure/Dockerfile
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=/app/data/db/iqf.duckdb
+      - PAPER_TRADING=true
+    volumes:
+      - db_data:/app/data/db
+      - logs_data:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/system/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - iqf
+
+  scheduler:
+    build:
+      context: ..
+      dockerfile: infrastructure/Dockerfile
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=/app/data/db/iqf.duckdb
+      - PAPER_TRADING=true
+    volumes:
+      - db_data:/app/data/db
+      - logs_data:/app/logs
+    depends_on:
+      api:
+        condition: service_healthy
+    command: python -m orchestration.scheduler
+    networks:
+      - iqf
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: infrastructure/Dockerfile.dashboard
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    networks:
+      - iqf
+
+volumes:
+  redis_data:
+  db_data:
+  logs_data:
+
+networks:
+  iqf:
+    driver: bridge

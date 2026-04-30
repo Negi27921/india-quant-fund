@@ -1,0 +1,93 @@
+momentum_st:
+  name: "Short-Term Momentum"
+  enabled: true
+  universe: "NIFTY500"
+  min_adv_cr: 5.0
+  min_price: 50
+  lookbacks:
+    roc_fast: 5
+    roc_slow: 20
+    volume_fast: 5
+    volume_slow: 60
+  weights:
+    roc_fast: 0.40
+    roc_slow: 0.40
+    volume_ratio: 0.20
+  entry_z_score: 1.28             # Top decile
+  exit_z_score: -0.25             # Bottom quartile triggers exit
+  max_positions: 15
+  max_weight_pct: 3.0
+  stop_loss_pct: 4.0
+  rebalance: "weekly"
+  hold_days_min: 5
+  hold_days_max: 15
+
+momentum_mt:
+  name: "Medium-Term Cross-Sectional Momentum"
+  enabled: true
+  universe: "NIFTY500"
+  min_adv_cr: 10.0
+  min_market_cap_cr: 1000
+  lookbacks:
+    formation_days: 252            # 12-month lookback
+    skip_days: 21                  # Skip last month (reversal)
+  entry_z_score: 0.84             # Top quintile
+  exit_z_score: 0.0               # Below median triggers exit
+  max_positions: 20
+  max_weight_pct: 4.0
+  stop_loss_pct: 8.0
+  rebalance: "monthly"
+  hold_days_min: 21
+  hold_days_max: 63
+
+mean_reversion:
+  name: "RSI Mean Reversion"
+  enabled: true
+  universe: "NIFTY100"            # Large-cap only (gap risk lower)
+  min_adv_cr: 20.0
+  rsi_period: 14
+  rsi_oversold: 30
+  rsi_overbought: 70
+  rsi_exit: 65
+  trend_filter_period: 200        # Price must be above 200d SMA
+  max_positions: 10
+  max_weight_pct: 5.0
+  stop_loss_pct: 3.0
+  take_profit_pct: 5.0
+  max_hold_days: 10
+  rebalance: "daily"
+
+factor:
+  name: "Quality-Value Factor"
+  enabled: true
+  universe: "NIFTY500"
+  min_adv_cr: 5.0
+  weights:
+    value: 0.35
+    quality: 0.40
+    low_vol: 0.25
+  value_factors:
+    - {name: "pe_inverse", col: "pe_ratio", transform: "inverse"}
+    - {name: "pb_inverse", col: "pb_ratio", transform: "inverse"}
+    - {name: "ev_ebitda_inverse", col: "ev_ebitda", transform: "inverse"}
+  quality_factors:
+    - {name: "roe", col: "roe"}
+    - {name: "gross_margin", col: "gross_margin"}
+    - {name: "debt_equity_neg", col: "debt_equity", transform: "negate"}
+  low_vol_factors:
+    - {name: "vol_60d_neg", col: "vol_60d", transform: "negate"}
+  top_n: 30
+  max_weight_pct: 4.0
+  rebalance: "monthly"
+
+event:
+  name: "Earnings Surprise Event"
+  enabled: true
+  universe: "NIFTY500"
+  min_adv_cr: 10.0
+  entry_delay_days: 1             # Enter 1 day after announcement
+  hold_days: 5
+  max_positions: 3
+  max_weight_pct: 2.0
+  stop_loss_pct: 5.0
+  min_surprise_pct: 5.0           # Min EPS surprise to trigger signal
