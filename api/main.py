@@ -11,7 +11,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from api.routers import portfolio, trades, risk, strategies, system, settings
+from api.routers import portfolio, trades, risk, strategies, system, settings, market, chat
 
 
 @asynccontextmanager
@@ -43,6 +43,8 @@ app.include_router(risk.router, prefix="/api/risk", tags=["Risk"])
 app.include_router(strategies.router, prefix="/api/strategies", tags=["Strategies"])
 app.include_router(system.router, prefix="/api/system", tags=["System"])
 app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
+app.include_router(market.router,   prefix="/api/market",   tags=["Market"])
+app.include_router(chat.router,     prefix="/api/chat",     tags=["Chat"])
 
 
 # ── WebSocket manager ─────────────────────────────────────────────────────────
