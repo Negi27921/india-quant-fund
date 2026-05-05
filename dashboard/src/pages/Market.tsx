@@ -468,6 +468,7 @@ function FiiDiiChart() {
 // ── Page ───────────────────────────────────────────────────────────────────────
 export function MarketPage() {
   const { data: indices, isLoading: idxLoading } = useMarketIndices();
+  const { data: sectors, isLoading: sectorsLoading } = useMarketSectors();
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
@@ -513,12 +514,12 @@ export function MarketPage() {
               accentColor="var(--violet)"
               style={{ flex: 1, minHeight: 240 }}
             >
-              {useMarketSectors().isLoading ? (
+              {sectorsLoading ? (
                 <div style={{ padding: 14 }}>
                   {Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton" style={{ height: 11, marginBottom: 8, borderRadius: 4 }} />)}
                 </div>
               ) : (
-                <SectorList data={useMarketSectors().data ?? []} />
+                <SectorList data={sectors ?? []} />
               )}
             </Panel>
 
