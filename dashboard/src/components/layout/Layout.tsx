@@ -6,7 +6,6 @@ import { useLiveStore } from "@/store/live";
 import { useUIStore } from "@/store/ui";
 import { ChartDrawer } from "@/components/charts/ChartDrawer";
 import { GlobalSearch } from "@/components/ui/GlobalSearch";
-import { MatrixRain } from "@/components/ui/MatrixRain";
 import { ChatBot } from "@/components/ui/ChatBot";
 import { useTheme } from "@/hooks/useTheme";
 
@@ -40,21 +39,12 @@ export function Layout() {
   return (
     <div
       className="flex h-screen overflow-hidden"
-      style={{ background: "var(--bg)", position: "relative" }}
+      style={{ background: "var(--bg)" }}
     >
-      {/* Matrix rain — behind everything */}
-      <MatrixRain />
-
-      {/* Sidebar sits above rain */}
-      <div style={{ position: "relative", zIndex: 10 }}>
-        <Sidebar />
-      </div>
+      <Sidebar />
 
       {/* Main content area */}
-      <div
-        className="flex-1 flex flex-col min-w-0 overflow-hidden"
-        style={{ position: "relative", zIndex: 5 }}
-      >
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <motion.main
           variants={pageVariants}
           initial="initial"
