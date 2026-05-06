@@ -283,7 +283,7 @@ function StockRow({ r, strategy }: { r: ScreenerResult; strategy: Strategy }) {
 export function ScreenerPage() {
   const [strategy, setStrategy] = useState<Strategy>("vcp");
   const [tab, setTab] = useState<"all" | "matched">("all");
-  const [universe, setUniverse] = useState<Universe>("nifty500");
+  const [universe, setUniverse] = useState<Universe>("full");
   const [minConf, setMinConf] = useState(0);
   const [minPrice, setMinPrice] = useState(0);
   const [maxPrice, setMaxPrice] = useState(0);
@@ -335,14 +335,14 @@ export function ScreenerPage() {
               Stock Screener
             </h1>
             <div style={{ fontSize: 11.5, color: "var(--text-3)", fontFamily: "var(--font-body)", marginTop: 4 }}>
-              Scanning <span style={{ color: "var(--blue)", fontWeight: 700 }}>{data?.universe_size ?? "—"}</span> stocks
-              {data ? (
-                <> · <span style={{ color: "var(--green)", fontWeight: 600 }}>{strong.length} Strong</span>
+              Universe: <span style={{ color: "var(--blue)", fontWeight: 700 }}>{data?.universe_size ?? (universe === "full" ? "2,137" : "503")}</span> NSE stocks
+              {data?.total != null ? (
+                <> · {data.total} scanned
+                  {" · "}<span style={{ color: "var(--green)", fontWeight: 600 }}>{strong.length} Strong</span>
                   {" · "}<span style={{ color: "var(--amber)", fontWeight: 600 }}>{moderate.length} Moderate</span>
-                  {" · "}{results.length - strong.length - moderate.length} Weak matched
                 </>
               ) : null}
-              {data?.last_scan ? <> · Last scan: {data.last_scan}</> : " · Cache warming..."}
+              {data?.last_scan ? <> · Last scan: {data.last_scan}</> : " · First scan takes ~15 min for full universe"}
             </div>
           </div>
 
@@ -424,10 +424,10 @@ export function ScreenerPage() {
               fontSize: 11.5, fontWeight: universe === "full" ? 700 : 500,
               transition: "all 150ms",
             }}
-            title={universe === "full" ? "Scanning all 2137 NSE stocks (slow)" : "Scanning Nifty 500 (503 stocks)"}
+            title={universe === "full" ? "Scanning all 2,137 NSE stocks (15-20 min first scan)" : "Switch to Nifty 500 (503 stocks, faster)"}
           >
             <Globe style={{ width: 12, height: 12 }} />
-            {universe === "full" ? "All NSE (2137)" : "Nifty 500"}
+            {universe === "full" ? "All NSE · 2,137" : "Nifty 500 · 503"}
           </button>
         </div>
 
@@ -529,7 +529,7 @@ export function ScreenerPage() {
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 80, gap: 16 }}>
               <Loader2 style={{ width: 32, height: 32, color: "var(--blue)", animation: "spin 1s linear infinite" }} />
               <div style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "var(--text-3)" }}>
-                Scanning {data?.universe_size ?? 140}+ stocks for {meta.label} setups...
+                Scanning {data?.universe_size ?? (universe === "full" ? "2,137" : "503")} stocks for {meta.label} setups... (first scan ~15 min)
               </div>
               <div style={{ fontSize: 11, color: "var(--text-4)" }}>This may take 60–90 seconds on first load</div>
             </div>

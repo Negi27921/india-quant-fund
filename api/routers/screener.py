@@ -103,12 +103,12 @@ for _t in SCAN_UNIVERSE:
         _seen.add(_t); _uniq.append(_t)
 SCAN_UNIVERSE = _uniq
 
-# ── Full NSE universe (~2137 stocks) ─────────────────────────────────────────
-# For practical scanning we default to nifty500; use universe=full to scan all.
-# Full list is fetched dynamically from NSE at scan time if needed.
-# We seed FULL_UNIVERSE with SCAN_UNIVERSE; the _run_scan logic can extend this
-# further from a live NSE equity list if available.
-FULL_UNIVERSE: list[str] = list(SCAN_UNIVERSE)  # extended at runtime if desired
+# ── Full NSE universe (2137 stocks from EQUITY_L.csv via sharewatch) ──────────
+try:
+    from api.full_universe import FULL_NSE_TICKERS
+    FULL_UNIVERSE: list[str] = FULL_NSE_TICKERS
+except ImportError:
+    FULL_UNIVERSE: list[str] = list(SCAN_UNIVERSE)  # fallback to Nifty 500
 
 
 # ── Technical helpers ──────────────────────────────────────────────────────

@@ -499,10 +499,23 @@ function FiiDiiPanel() {
             />
             <Tooltip
               contentStyle={{
-                background: "var(--surface-2)", border: "1px solid var(--border)",
-                borderRadius: 8, fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-1)",
+                background: "#050e05",
+                border: "1px solid rgba(0,229,53,0.5)",
+                borderRadius: 6,
+                fontSize: 11.5,
+                fontFamily: "var(--font-mono)",
+                color: "#e8ffe8",
+                boxShadow: "0 4px 24px rgba(0,0,0,0.8), 0 0 12px rgba(0,229,53,0.08)",
+                padding: "8px 12px",
               }}
-              formatter={(v: number, name: string) => [fmtCr(v), name === "fii" ? "FII Net" : "DII Net"]}
+              labelStyle={{ color: "#00e535", fontWeight: 700, fontSize: 11, letterSpacing: "0.06em", marginBottom: 4 }}
+              itemStyle={{ color: "#e8ffe8", padding: "2px 0" }}
+              cursor={{ fill: "rgba(0,229,53,0.06)" }}
+              formatter={(v: number, name: string) => {
+                const label = name === "fii" ? "FII Net" : "DII Net";
+                const color = name === "fii" ? "#60a5fa" : "#4ade80";
+                return [<span style={{ color, fontWeight: 700 }}>{fmtCr(v)}</span>, label];
+              }}
             />
             <ReferenceLine y={0} stroke="var(--border-2)" strokeDasharray="3 3" />
             <Bar dataKey="fii" radius={[2, 2, 0, 0]} maxBarSize={8}>
