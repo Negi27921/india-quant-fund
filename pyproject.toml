@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "india-quant-fund"
 version = "1.0.0"
 description = "Production-grade automated hedge fund for Indian equity markets"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.13"
 dependencies = [
     # Data
     "yfinance>=0.2.38",

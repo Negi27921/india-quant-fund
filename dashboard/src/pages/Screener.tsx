@@ -1,39 +1,58 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ScanSearch, RefreshCw, CheckCircle2, XCircle, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Filter, Loader2, Rocket, Layers, Zap } from "lucide-react";
+import { ScanSearch, RefreshCw, CheckCircle2, XCircle, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Filter, Loader2, Rocket, Layers, Zap, ArrowUpRight, GitMerge, BarChart3, Globe } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { useScreener, useTriggerScan, type ScreenerResult } from "@/api/market-queries";
 import { useQueryClient } from "@tanstack/react-query";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type Strategy = "vcp" | "ipo_base" | "rocket_base";
+type Strategy = "vcp" | "ipo_base" | "rocket_base" | "breakout" | "rsi_reversal" | "golden_cross";
+type Universe = "nifty500" | "full";
 
 const STRATEGY_META: Record<Strategy, { label: string; icon: React.ReactNode; color: string; desc: string }> = {
   vcp: {
     label: "VCP",
     icon: <Layers style={{ width: 14, height: 14 }} />,
-    color: "#5B7FFF",
+    color: "var(--blue)",
     desc: "Volatility Contraction Pattern — 4-wave tightening with declining volume",
   },
   ipo_base: {
     label: "IPO Base",
     icon: <Zap style={{ width: 14, height: 14 }} />,
-    color: "#06D6A0",
+    color: "var(--green)",
     desc: "Tight base after a strong leg-up, EMA support, volume drying up",
   },
   rocket_base: {
     label: "Rocket Base",
     icon: <Rocket style={{ width: 14, height: 14 }} />,
-    color: "#FF6B35",
+    color: "var(--amber)",
     desc: "80%+ momentum move, now consolidating ≤20% from peak",
+  },
+  breakout: {
+    label: "Breakout",
+    icon: <ArrowUpRight style={{ width: 14, height: 14 }} />,
+    color: "#a78bfa",
+    desc: "Near 52W high (<3%), volume surge 1.8×, RSI 50–75 momentum zone",
+  },
+  rsi_reversal: {
+    label: "RSI Reversal",
+    icon: <BarChart3 style={{ width: 14, height: 14 }} />,
+    color: "#2dd4bf",
+    desc: "RSI recovered from oversold (<35) with volume confirmation",
+  },
+  golden_cross: {
+    label: "Golden Cross",
+    icon: <GitMerge style={{ width: 14, height: 14 }} />,
+    color: "#fbbf24",
+    desc: "EMA20 > EMA50 fresh cross, price above SMA200, volume surge",
   },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function confBadge(conf: number): { label: string; color: string; bg: string; border: string } {
-  if (conf >= 70) return { label: "Strong", color: "#06D6A0", bg: "rgba(6,214,160,0.12)", border: "rgba(6,214,160,0.3)" };
-  if (conf >= 45) return { label: "Moderate", color: "#FFB017", bg: "rgba(255,176,23,0.12)", border: "rgba(255,176,23,0.3)" };
-  return { label: "Weak", color: "#5C5C78", bg: "rgba(92,92,120,0.1)", border: "rgba(92,92,120,0.2)" };
+  if (conf >= 70) return { label: "Strong", color: "var(--green)", bg: "var(--green-dim)", border: "rgba(34,197,94,0.3)" };
+  if (conf >= 45) return { label: "Moderate", color: "var(--amber)", bg: "var(--amber-dim)", border: "rgba(249,115,22,0.3)" };
+  return { label: "Weak", color: "var(--text-3)", bg: "var(--surface-3)", border: "var(--border)" };
 }
 
 const numColor = (v: number) => v > 0 ? "var(--green)" : v < 0 ? "var(--red)" : "var(--text-3)";
@@ -237,6 +256,7 @@ function StockRow({ r, strategy }: { r: ScreenerResult; strategy: Strategy }) {
 export function ScreenerPage() {
   const [strategy, setStrategy] = useState<Strategy>("vcp");
   const [tab, setTab] = useState<"all" | "matched">("all");
+  const [universe, setUniverse] = useState<Universe>("nifty500");
   const [minConf, setMinConf] = useState(0);
   const [minPrice, setMinPrice] = useState(0);
   const [maxPrice, setMaxPrice] = useState(0);
@@ -252,6 +272,7 @@ export function ScreenerPage() {
     minPrice,
     maxPrice,
     symbolFilter,
+    universe,
   );
   const data = query.data as import("@/api/market-queries").ScreenerResponse | undefined;
   const isLoading = query.isLoading;
@@ -264,7 +285,7 @@ export function ScreenerPage() {
   const handleScan = async () => {
     setScanning(true);
     try {
-      await triggerScan(strategy);
+      await triggerScan(strategy, universe);
       await new Promise(r => setTimeout(r, 2000));
       await qc.invalidateQueries({ queryKey: ["screener"] });
     } finally {
@@ -343,8 +364,8 @@ export function ScreenerPage() {
             style={{
               display: "flex", alignItems: "center", gap: 7,
               padding: "8px 16px", borderRadius: 10,
-              background: tab === "matched" ? "rgba(6,214,160,0.12)" : "var(--surface)",
-              border: `1px solid ${tab === "matched" ? "rgba(6,214,160,0.35)" : "var(--border)"}`,
+              background: tab === "matched" ? "var(--green-dim)" : "var(--surface)",
+              border: `1px solid ${tab === "matched" ? "rgba(34,197,94,0.35)" : "var(--border)"}`,
               color: tab === "matched" ? "var(--green)" : "var(--text-3)",
               cursor: "pointer", fontFamily: "var(--font-body)",
               fontSize: 12.5, fontWeight: tab === "matched" ? 700 : 500,
@@ -354,6 +375,25 @@ export function ScreenerPage() {
           >
             <CheckCircle2 style={{ width: 13, height: 13 }} />
             Matched Only
+          </button>
+
+          {/* Universe selector */}
+          <button
+            onClick={() => setUniverse(u => u === "nifty500" ? "full" : "nifty500")}
+            style={{
+              display: "flex", alignItems: "center", gap: 7,
+              padding: "8px 14px", borderRadius: 10,
+              background: universe === "full" ? "var(--blue-dim)" : "var(--surface)",
+              border: `1px solid ${universe === "full" ? "var(--border-blue)" : "var(--border)"}`,
+              color: universe === "full" ? "var(--blue)" : "var(--text-3)",
+              cursor: "pointer", fontFamily: "var(--font-body)",
+              fontSize: 11.5, fontWeight: universe === "full" ? 700 : 500,
+              transition: "all 150ms",
+            }}
+            title={universe === "full" ? "Scanning all 2137 NSE stocks (slow)" : "Scanning Nifty 500 (503 stocks)"}
+          >
+            <Globe style={{ width: 12, height: 12 }} />
+            {universe === "full" ? "All NSE (2137)" : "Nifty 500"}
           </button>
         </div>
 

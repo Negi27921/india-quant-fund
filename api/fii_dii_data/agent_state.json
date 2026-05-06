@@ -1,0 +1,102 @@
+{
+  "fii-streak": {
+    "last_alerted_sell_streak": 3,
+    "last_alerted_buy_streak": 0,
+    "current_sell_streak": 3,
+    "current_buy_streak": 0,
+    "sell_cumulative": -23244.21,
+    "buy_cumulative": 0,
+    "sell_absorption_pct": 111,
+    "buy_absorption_pct": 0,
+    "last_run_date": "01-Apr-2026",
+    "_updated_at": "2026-04-02T02:29:26.372Z"
+  },
+  "regime-classifier": {
+    "regime": "MILD_BEARISH",
+    "since": "01-Apr-2026",
+    "previous_regime": "MILD_BEARISH",
+    "fii_streak": -3,
+    "dii_absorption_pct": 131,
+    "vix": 25.01,
+    "recommendation": "Defensive posture. Tighten stops, reduce new entries, hedge existing positions.",
+    "fii_cumulative_10d": -43264.21,
+    "dii_cumulative_10d": 56848.52,
+    "last_run_date": "01-Apr-2026",
+    "_updated_at": "2026-04-01T19:02:09.899Z"
+  },
+  "flow-strength": {
+    "last_alerted_date": "01-Apr-2026",
+    "last_alerted_events": [
+      "FII_BLOODBATH",
+      "DII_MASSIVE_ABSORB",
+      "EXTREME_DIVERGENCE"
+    ],
+    "last_run_date": "01-Apr-2026",
+    "events_checked": 4,
+    "events_triggered": 3,
+    "latest_fii_net": -8331.15,
+    "latest_dii_net": 7171.8,
+    "_updated_at": "2026-04-01T19:02:09.905Z"
+  },
+  "flow-divergence": {
+    "last_signal": "CONTRARIAN_BULLISH",
+    "last_signal_date": "01-Apr-2026",
+    "today_divergence": 15502.95,
+    "divergence_percentile": 97,
+    "absorption_pct": 131,
+    "avg_fii_30d": -3407.54,
+    "avg_dii_30d": 3034.38,
+    "last_run_date": "01-Apr-2026",
+    "_updated_at": "2026-04-01T19:02:09.911Z"
+  },
+  "sector-rotation": {
+    "last_sector_lengths": {
+      "Financial Services": 13,
+      "Oil, Gas & Consumable Fuels": 13,
+      "Automobile and Auto Components": 13,
+      "Healthcare": 13,
+      "Capital Goods": 13,
+      "Information Technology": 13,
+      "Telecommunication": 13,
+      "Fast Moving Consumer Goods": 13,
+      "Metals & Mining": 13,
+      "Power": 13,
+      "Consumer Services": 13,
+      "Consumer Durables": 13,
+      "Services": 13,
+      "Chemicals": 13,
+      "Construction": 13,
+      "Realty": 13,
+      "Others": 13,
+      "Textiles": 13,
+      "Media, Entertainment & Publication": 13,
+      "Construction Materials": 13,
+      "Diversified": 13,
+      "Forest Materials": 13,
+      "Utilities": 13,
+      "Sovereign": 13
+    },
+    "total_sectors": 24,
+    "significant_moves": 15,
+    "sustained_exits": [
+      "Metals & Mining"
+    ],
+    "sustained_entries": [],
+    "top_inflow": "Information Technology",
+    "top_outflow": "Financial Services",
+    "last_run_date": "2026-04-23T23:00:01.863Z",
+    "_updated_at": "2026-04-23T23:00:01.863Z"
+  },
+  "weekly-digest": {
+    "last_digest_date": "2026-04-01T19:02:59.200Z",
+    "weekly_fii": -21135.21,
+    "weekly_dii": 30636.52,
+    "trading_days": 5,
+    "date_range": "25 Mar 2026 — 1 Apr 2026",
+    "_updated_at": "2026-04-01T19:02:59.201Z"
+  },
+  "confluence-detector": {
+    "active_confluences": [],
+    "_updated_at": "2026-04-02T04:23:39.822Z"
+  }
+}

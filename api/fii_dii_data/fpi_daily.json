@@ -1,0 +1,20 @@
+{
+  "fetched_at": "2026-04-23T23:00:01.747Z",
+  "source": "latest",
+  "rows": [
+    {
+      "date": "23-Apr-2026",
+      "equity_net": 14497.08,
+      "debt_net": 1103.58,
+      "hybrid_net": 37.68,
+      "total_net": 15638.34
+    }
+  ],
+  "latest": {
+    "date": "23-Apr-2026",
+    "equity_net": 14497.08,
+    "debt_net": 1103.58,
+    "hybrid_net": 37.68,
+    "total_net": 15638.34
+  }
+}

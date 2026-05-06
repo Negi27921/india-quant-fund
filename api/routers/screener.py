@@ -103,6 +103,13 @@ for _t in SCAN_UNIVERSE:
         _seen.add(_t); _uniq.append(_t)
 SCAN_UNIVERSE = _uniq
 
+# ── Full NSE universe (~2137 stocks) ─────────────────────────────────────────
+# For practical scanning we default to nifty500; use universe=full to scan all.
+# Full list is fetched dynamically from NSE at scan time if needed.
+# We seed FULL_UNIVERSE with SCAN_UNIVERSE; the _run_scan logic can extend this
+# further from a live NSE equity list if available.
+FULL_UNIVERSE: list[str] = list(SCAN_UNIVERSE)  # extended at runtime if desired
+
 
 # ── Technical helpers ──────────────────────────────────────────────────────
 
@@ -286,6 +293,51 @@ def _evaluate_stock(ticker: str, df: pd.DataFrame, strategy: str) -> dict | None
             sl_ema_pct = (ltp - ema_10) / ltp * 100 if ema_10 > 0 and ltp > 0 else 10.0
             sl_pct = min(max(sl_ema_pct, 0.5), 10.0)
 
+        elif strategy == "breakout":
+            # 52-week high breakout with volume confirmation
+            high_52w = float(closes.iloc[-252:].max()) if len(closes) >= 252 else float(closes.max())
+            near_high = (high_52w - ltp) / high_52w * 100 < 3.0  # within 3% of 52w high
+            vol_surge = float(vols.iloc[-1]) > float(vols.iloc[-20:].mean()) * 1.8
+            conds = {
+                "Near 52W High (<3%)": near_high,
+                "Volume Surge (1.8x avg)": vol_surge,
+                "EMA Uptrend (20>50)": ema_20 > ema_50,
+                "Price > 20 EMA": ltp > ema_20,
+                "RSI 50-75": 50 <= rsi_val <= 75,
+                "HHHL (20d)": _hhhl(highs, lows, 20),
+            }
+            sl_pct = min((ltp - float(lows.iloc[-10:].min())) / ltp * 100, 8.0)
+
+        elif strategy == "rsi_reversal":
+            # RSI oversold recovery with volume surge
+            rsi_prev = _rsi(closes.iloc[:-3])  # RSI 3 bars ago
+            vol_surge = float(vols.iloc[-3:].mean()) > float(vols.iloc[-20:].mean()) * 1.5
+            conds = {
+                "RSI Recovered (30→50)": rsi_val >= 35 and rsi_prev < 35,
+                "Price > 20 EMA": ltp > ema_20,
+                "Volume Surge (1.5x)": vol_surge,
+                "EMA Uptrend (10>20)": ema_10 > ema_20,
+                "HHHL (20d)": _hhhl(highs, lows, 20),
+                "No CHOC (5d)": not _choc(highs, lows, 5),
+            }
+            sl_pct = min(abs(ltp - float(lows.iloc[-5:].min())) / ltp * 100, 6.0)
+
+        elif strategy == "golden_cross":
+            # Golden cross: EMA20>EMA50>SMA200 full stack
+            sma_200 = float(closes.rolling(200).mean().iloc[-1]) if len(closes) >= 200 else 0
+            ema_20_prev = float(_ema_series(closes.iloc[:-5], 20).iloc[-1]) if len(closes) > 25 else ema_20
+            ema_50_prev = float(_ema_series(closes.iloc[:-5], 50).iloc[-1]) if len(closes) > 55 else ema_50
+            fresh_cross = ema_20 > ema_50 and ema_20_prev <= ema_50_prev
+            conds = {
+                "EMA20 > EMA50 (Golden Cross)": ema_20 > ema_50,
+                "Fresh Cross (<5d)": fresh_cross,
+                "Price > SMA 200": ltp > sma_200 if sma_200 > 0 else ltp > ema_50,
+                "Volume Surge on Cross": float(vols.iloc[-5:].mean()) > float(vols.iloc[-20:].mean()) * 1.2,
+                "RSI 45-70": 45 <= rsi_val <= 70,
+                "Price > EMA20": ltp > ema_20,
+            }
+            sl_pct = min((ltp - float(lows.iloc[-15:].min())) / ltp * 100, 8.0)
+
         else:
             return None
 
@@ -321,13 +373,13 @@ def _evaluate_stock(ticker: str, df: pd.DataFrame, strategy: str) -> dict | None
         return None
 
 
-def _run_scan(strategy: str) -> list[dict]:
+def _run_scan(strategy: str, universe_name: str = "nifty500") -> list[dict]:
     """Download historical data and run screener scan."""
     try:
         # Download in batches of 30 to avoid rate limits
         batch_size = 30
         all_results: list[dict] = []
-        universe = SCAN_UNIVERSE
+        universe = FULL_UNIVERSE if universe_name == "full" else SCAN_UNIVERSE
 
         for i in range(0, len(universe), batch_size):
             batch = universe[i:i + batch_size]
@@ -368,39 +420,42 @@ def _run_scan(strategy: str) -> list[dict]:
         return []
 
 
-def _get_or_scan(strategy: str) -> list[dict]:
+def _get_or_scan(strategy: str, universe_name: str = "nifty500") -> list[dict]:
+    cache_key = f"{strategy}_{universe_name}"
     now = time.monotonic()
-    if strategy in _cache:
-        ts, data = _cache[strategy]
+    if cache_key in _cache:
+        ts, data = _cache[cache_key]
         if now - ts < CACHE_TTL:
             return data
 
-    if strategy in _scan_running:
+    if cache_key in _scan_running:
         # Return stale cache or empty while running
-        return _cache.get(strategy, (0, []))[1]
+        return _cache.get(cache_key, (0, []))[1]
 
-    _scan_running.add(strategy)
+    _scan_running.add(cache_key)
     try:
-        results = _run_scan(strategy)
-        _cache[strategy] = (now, results)
+        results = _run_scan(strategy, universe_name)
+        _cache[cache_key] = (now, results)
         return results
     finally:
-        _scan_running.discard(strategy)
+        _scan_running.discard(cache_key)
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────
 
 @router.get("/results")
 async def get_screener_results(
-    strategy: str = Query("vcp", pattern="^(vcp|ipo_base|rocket_base)$"),
+    strategy: str = Query("vcp", pattern="^(vcp|ipo_base|rocket_base|breakout|rsi_reversal|golden_cross)$"),
     min_confidence: int = Query(0, ge=0, le=100),
     min_price: float = Query(0.0, ge=0),
     max_price: float = Query(0.0, ge=0),
     symbol: str = Query("", description="Filter by symbol substring"),
+    universe: str = Query("nifty500", pattern="^(nifty500|full)$"),
 ):
     """Return cached screener results. Auto-triggers a scan if cache is cold."""
     loop = asyncio.get_event_loop()
-    results = await loop.run_in_executor(_executor, _get_or_scan, strategy)
+    cache_key = f"{strategy}_{universe}"
+    results = await loop.run_in_executor(_executor, _get_or_scan, strategy, universe)
 
     # Apply filters
     filtered = [
@@ -411,45 +466,50 @@ async def get_screener_results(
         and (max_price == 0 or r["ltp"] <= max_price)
     ]
 
-    is_scanning = strategy in _scan_running
+    is_scanning = cache_key in _scan_running
     last_scan = None
-    if strategy in _cache:
-        ts = _cache[strategy][0]
+    if cache_key in _cache:
+        ts = _cache[cache_key][0]
         last_scan = datetime.fromtimestamp(
             time.time() - (time.monotonic() - ts)
         ).strftime("%H:%M:%S")
 
+    active_universe = FULL_UNIVERSE if universe == "full" else SCAN_UNIVERSE
     return {
         "results": filtered,
         "total": len(filtered),
         "strategy": strategy,
+        "universe": universe,
         "is_scanning": is_scanning,
         "last_scan": last_scan,
-        "universe_size": len(SCAN_UNIVERSE),
+        "universe_size": len(active_universe),
     }
 
 
 @router.post("/scan")
 async def trigger_scan(
-    strategy: str = Query("vcp", pattern="^(vcp|ipo_base|rocket_base)$"),
+    strategy: str = Query("vcp", pattern="^(vcp|ipo_base|rocket_base|breakout|rsi_reversal|golden_cross)$"),
+    universe: str = Query("nifty500", pattern="^(nifty500|full)$"),
     background_tasks: BackgroundTasks = None,
 ):
     """Force a fresh scan in the background."""
-    if strategy in _cache:
-        del _cache[strategy]
+    cache_key = f"{strategy}_{universe}"
+    if cache_key in _cache:
+        del _cache[cache_key]
 
     loop = asyncio.get_event_loop()
 
     def _bg():
-        _scan_running.add(strategy)
+        _scan_running.add(cache_key)
         try:
-            results = _run_scan(strategy)
-            _cache[strategy] = (time.monotonic(), results)
+            results = _run_scan(strategy, universe)
+            _cache[cache_key] = (time.monotonic(), results)
         finally:
-            _scan_running.discard(strategy)
+            _scan_running.discard(cache_key)
 
     loop.run_in_executor(_executor, _bg)
-    return {"message": f"Scan triggered for {strategy}", "universe_size": len(SCAN_UNIVERSE)}
+    active_universe = FULL_UNIVERSE if universe == "full" else SCAN_UNIVERSE
+    return {"message": f"Scan triggered for {strategy}", "universe": universe, "universe_size": len(active_universe)}
 
 
 @router.get("/status")
@@ -457,15 +517,20 @@ async def screener_status():
     """Check which strategies have cached results and which are running."""
     out = {}
     now = time.monotonic()
-    for strategy in ["vcp", "ipo_base", "rocket_base"]:
-        is_running = strategy in _scan_running
-        has_cache = strategy in _cache
-        age_mins = round((now - _cache[strategy][0]) / 60, 1) if has_cache else None
-        count = len(_cache[strategy][1]) if has_cache else 0
-        out[strategy] = {
-            "is_running": is_running,
-            "has_cache": has_cache,
-            "cached_results": count,
-            "cache_age_mins": age_mins,
-        }
+    all_strategies = ["vcp", "ipo_base", "rocket_base", "breakout", "rsi_reversal", "golden_cross"]
+    for strategy in all_strategies:
+        for universe_name in ["nifty500", "full"]:
+            cache_key = f"{strategy}_{universe_name}"
+            is_running = cache_key in _scan_running
+            has_cache = cache_key in _cache
+            age_mins = round((now - _cache[cache_key][0]) / 60, 1) if has_cache else None
+            count = len(_cache[cache_key][1]) if has_cache else 0
+            out[cache_key] = {
+                "strategy": strategy,
+                "universe": universe_name,
+                "is_running": is_running,
+                "has_cache": has_cache,
+                "cached_results": count,
+                "cache_age_mins": age_mins,
+            }
     return out

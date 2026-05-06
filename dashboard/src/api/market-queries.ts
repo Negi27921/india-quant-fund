@@ -5,6 +5,22 @@ export interface FiiDiiRow {
   date: string;
   fii_buy: number; fii_sell: number; fii_net: number;
   dii_buy: number; dii_sell: number; dii_net: number;
+  fii_idx_fut_net?: number;
+  fii_stk_fut_net?: number;
+  fii_idx_call_net?: number;
+  fii_idx_put_net?: number;
+  pcr?: number;
+  sentiment_score?: number;
+  sentiment?: string;
+  updated_at?: string;
+}
+export interface FiiDiiSector {
+  name: string;
+  aumPct: number;
+  fortnightCr: number;
+  oneYearCr: number;
+  fiiOwn: number;
+  alpha: number;
 }
 export interface Filing {
   id: string;
@@ -167,6 +183,9 @@ export const useFiiDii = () =>
 export const useFiiDiiToday = () =>
   useQuery({ queryKey: ["market", "fii-dii-today"], queryFn: () => api.get<FiiDiiRow>("/market/fii-dii/today"), staleTime: 60 * 1000 });
 
+export const useFiiDiiSectors = () =>
+  useQuery({ queryKey: ["market", "fii-dii-sectors"], queryFn: () => api.get<FiiDiiSector[]>("/market/fii-dii/sectors"), staleTime: 60 * 60 * 1000 });
+
 export const useFilings = (limit = 15) =>
   useQuery({ queryKey: ["market", "filings", limit], queryFn: () => api.get<Filing[]>(`/market/filings?limit=${limit}`), staleTime: 2 * 60 * 1000, refetchInterval: 2 * 60 * 1000 });
 
@@ -206,15 +225,18 @@ export interface ScreenerResponse {
   universe_size: number;
 }
 
+type ScreenerStrategy = "vcp" | "ipo_base" | "rocket_base" | "breakout" | "rsi_reversal" | "golden_cross";
+
 export const useScreener = (
-  strategy: "vcp" | "ipo_base" | "rocket_base",
+  strategy: ScreenerStrategy,
   minConfidence: number,
   minPrice: number,
   maxPrice: number,
   symbol: string,
+  universe: "nifty500" | "full" = "nifty500",
 ) =>
   useQuery<ScreenerResponse>({
-    queryKey: ["screener", strategy, minConfidence, minPrice, maxPrice, symbol],
+    queryKey: ["screener", strategy, minConfidence, minPrice, maxPrice, symbol, universe],
     queryFn: () => {
       const params = new URLSearchParams({
         strategy,
@@ -222,6 +244,7 @@ export const useScreener = (
         min_price: String(minPrice),
         max_price: String(maxPrice),
         symbol,
+        universe,
       });
       return api.get<ScreenerResponse>(`/screener/results?${params}`);
     },
@@ -230,8 +253,8 @@ export const useScreener = (
   });
 
 export const useTriggerScan = () => {
-  const triggerScan = async (strategy: "vcp" | "ipo_base" | "rocket_base") => {
-    await api.post(`/screener/scan?strategy=${strategy}`);
+  const triggerScan = async (strategy: ScreenerStrategy, universe: "nifty500" | "full" = "nifty500") => {
+    await api.post(`/screener/scan?strategy=${strategy}&universe=${universe}`);
   };
   return triggerScan;
 };

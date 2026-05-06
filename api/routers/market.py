@@ -869,9 +869,45 @@ async def get_watchlist():
 @router.get("/fii-dii")
 @_cached("fii_dii", ttl=300)
 async def get_fii_dii():
-    """FII/DII net trading activity — fetches from NSE, falls back to generated sample."""
-    loop = asyncio.get_event_loop()
+    """Rich FII/DII data from fii-dii-data repository + NSE live."""
+    import json as _json
+    from pathlib import Path
 
+    data_dir = Path(__file__).parent.parent / "fii_dii_data"
+
+    # Try local rich history first (69 rows with futures + sentiment)
+    try:
+        history_path = data_dir / "history.json"
+        if history_path.exists():
+            with open(history_path) as f:
+                file_data = _json.load(f)
+            rows = []
+            for row in file_data:
+                if isinstance(row, dict) and row.get('fii_buy', 0) > 0:
+                    rows.append({
+                        "date": row.get("date", ""),
+                        "fii_buy": float(row.get("fii_buy", 0)),
+                        "fii_sell": float(row.get("fii_sell", 0)),
+                        "fii_net": float(row.get("fii_net", 0)),
+                        "dii_buy": float(row.get("dii_buy", 0)),
+                        "dii_sell": float(row.get("dii_sell", 0)),
+                        "dii_net": float(row.get("dii_net", 0)),
+                        "fii_idx_fut_net": float(row.get("fii_idx_fut_net", 0)),
+                        "fii_stk_fut_net": float(row.get("fii_stk_fut_net", 0)),
+                        "fii_idx_call_net": float(row.get("fii_idx_call_net", 0)),
+                        "fii_idx_put_net": float(row.get("fii_idx_put_net", 0)),
+                        "pcr": float(row.get("pcr", 0)),
+                        "sentiment_score": float(row.get("sentiment_score", 50)),
+                        "sentiment": row.get("_fao_summary", {}).get("sentiment", "Neutral"),
+                        "updated_at": row.get("_updated_at", ""),
+                    })
+            if rows:
+                return rows[-60:]  # last 60 trading days
+    except Exception:
+        pass
+
+    # Then try NSE API
+    loop = asyncio.get_event_loop()
     if _NSE_AVAILABLE:
         try:
             def _fetch_fii_dii():
@@ -887,29 +923,35 @@ async def get_fii_dii():
                         "dii_buy": _sf(row.get("buySell_DII_buy", 0)),
                         "dii_sell": _sf(row.get("buySell_DII_sell", 0)),
                         "dii_net": _sf(row.get("buySell_DII_net", 0)),
+                        "fii_idx_fut_net": 0,
+                        "fii_stk_fut_net": 0,
+                        "fii_idx_call_net": 0,
+                        "fii_idx_put_net": 0,
+                        "pcr": 0,
+                        "sentiment_score": 50,
+                        "sentiment": "Neutral",
+                        "updated_at": "",
                     })
                 return results[-30:] if results else []
             result = await loop.run_in_executor(_executor, _fetch_fii_dii)
-            # Only use real data if it has non-zero values (NSE returns 0 after hours)
             valid = [r for r in result if abs(r.get("fii_net", 0)) > 0 or abs(r.get("dii_net", 0)) > 0]
             if valid:
                 return result
         except Exception:
             pass
 
-    # Fallback: return 30 days of representative FII/DII data
+    # Final fallback: deterministic mock
     import random
     from datetime import timedelta
-    rng = random.Random(42)  # deterministic seed so it looks consistent
+    rng = random.Random(42)
     today = datetime.now(IST).date()
     rows = []
     for i in range(30, 0, -1):
         d = today - timedelta(days=i)
         if d.weekday() >= 5:
             continue
-        # Simulate realistic FII/DII with some correlation
         fii_net = rng.uniform(-4500, 4500)
-        dii_net = rng.uniform(-fii_net * 0.3, abs(fii_net) * 0.8)  # DII often counter FII
+        dii_net = rng.uniform(-fii_net * 0.3, abs(fii_net) * 0.8)
         fii_buy = abs(fii_net) + rng.uniform(4000, 12000)
         fii_sell = fii_buy - fii_net
         dii_buy = abs(dii_net) + rng.uniform(2000, 8000)
@@ -922,15 +964,60 @@ async def get_fii_dii():
             "dii_buy": round(dii_buy, 2),
             "dii_sell": round(dii_sell, 2),
             "dii_net": round(dii_net, 2),
+            "fii_idx_fut_net": 0,
+            "fii_stk_fut_net": 0,
+            "fii_idx_call_net": 0,
+            "fii_idx_put_net": 0,
+            "pcr": 0,
+            "sentiment_score": 50,
+            "sentiment": "Neutral",
+            "updated_at": "",
         })
     return rows
 
 
 @router.get("/fii-dii/today")
 async def get_fii_dii_today():
-    """Today's FII/DII provisional figures."""
-    data = await get_fii_dii()
-    return data[-1] if data else {}
+    """Today's FII/DII with full FAO data from fii-dii-data."""
+    import json as _json
+    from pathlib import Path
+    data_dir = Path(__file__).parent.parent / "fii_dii_data"
+    try:
+        with open(data_dir / "latest.json") as f:
+            d = _json.load(f)
+        return {
+            "date": d.get("date"),
+            "fii_buy": d.get("fii_buy", 0),
+            "fii_sell": d.get("fii_sell", 0),
+            "fii_net": d.get("fii_net", 0),
+            "dii_buy": d.get("dii_buy", 0),
+            "dii_sell": d.get("dii_sell", 0),
+            "dii_net": d.get("dii_net", 0),
+            "fii_idx_fut_net": d.get("fii_idx_fut_net", 0),
+            "fii_stk_fut_net": d.get("fii_stk_fut_net", 0),
+            "fii_idx_call_net": d.get("fii_idx_call_net", 0),
+            "fii_idx_put_net": d.get("fii_idx_put_net", 0),
+            "pcr": d.get("pcr", 0),
+            "sentiment_score": d.get("sentiment_score", 50),
+            "sentiment": d.get("_fao_summary", {}).get("sentiment", "Neutral"),
+            "updated_at": d.get("_updated_at", ""),
+        }
+    except Exception:
+        data = await get_fii_dii()
+        return data[-1] if data else {}
+
+
+@router.get("/fii-dii/sectors")
+@_cached("fii_sectors", ttl=3600)
+async def get_fii_sectors():
+    """FII ownership by sector from fii-dii-data repo."""
+    import json as _json
+    from pathlib import Path
+    try:
+        with open(Path(__file__).parent.parent / "fii_dii_data" / "sectors.json") as f:
+            return _json.load(f)
+    except Exception:
+        return []
 
 
 @router.get("/filings")

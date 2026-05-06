@@ -44,6 +44,9 @@ function timeAgo(dt: string): string {
 }
 
 // ── Card wrapper ───────────────────────────────────────────────────────────────
+// borderRadius: 12px (between Chakra xl=12px and 2xl=16px — sits at xl)
+// borderTop: 3px solid accent
+// header: padding 11px 16px, fontSize 11px, letterSpacing 0.07em
 function Card({
   title, icon, accent = "var(--blue)", children, headerRight, style,
 }: {
@@ -55,38 +58,53 @@ function Card({
     <div style={{
       background: "var(--surface)",
       border: "1px solid var(--border)",
-      borderRadius: 14,
+      borderRadius: 12,              /* Chakra xl */
       borderTop: `3px solid ${accent}`,
       display: "flex", flexDirection: "column",
       overflow: "hidden",
       ...style,
     }}>
+      {/* Card header: 11px 16px padding, 11px uppercase labels, 0.07em tracking */}
       <div style={{
         display: "flex", alignItems: "center", gap: 8,
-        padding: "10px 14px", borderBottom: "1px solid var(--border)",
+        padding: "11px 16px",          /* Chakra space-4 */
+        borderBottom: "1px solid var(--border)",
         background: "var(--surface-2)", flexShrink: 0,
       }}>
-        {icon && <span style={{ color: accent, display: "flex", alignItems: "center" }}>{icon}</span>}
+        {icon && (
+          <span style={{ color: accent, display: "flex", alignItems: "center" }}>
+            {icon}
+          </span>
+        )}
         <span style={{
-          fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 700,
-          color: "var(--text-1)", letterSpacing: "0.06em", textTransform: "uppercase",
+          fontFamily: "var(--font-body)",
+          fontSize: 11,                /* Chakra xs */
+          fontWeight: 700,
+          color: "var(--text-1)",
+          letterSpacing: "0.07em",     /* Chakra tracking */
+          textTransform: "uppercase",
         }}>
           {title}
         </span>
         {headerRight && <div style={{ marginLeft: "auto" }}>{headerRight}</div>}
       </div>
+      {/* Panel body */}
       <div style={{ flex: 1, overflow: "hidden" }}>{children}</div>
     </div>
   );
 }
 
 // ── Index chip ─────────────────────────────────────────────────────────────────
+// padding: 10px 16px (Chakra space-5/space-4), borderRadius: 8px (Chakra lg)
 function IndexChip({ label, data }: { label: string; data?: IndexData }) {
   if (!data) {
     return (
       <div style={{
-        padding: "10px 16px", background: "var(--surface)", border: "1px solid var(--border)",
-        borderRadius: 10, flexShrink: 0, minWidth: 120,
+        padding: "10px 16px",          /* Chakra space-4 */
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: 8,               /* Chakra lg */
+        flexShrink: 0, minWidth: 120,
       }}>
         <div className="skeleton" style={{ height: 9, width: 64, marginBottom: 6, borderRadius: 3 }} />
         <div className="skeleton" style={{ height: 14, width: 90, borderRadius: 3 }} />
@@ -97,22 +115,40 @@ function IndexChip({ label, data }: { label: string; data?: IndexData }) {
   const color = up ? "var(--green)" : "var(--red)";
   return (
     <div style={{
-      padding: "10px 16px", background: "var(--surface)",
+      padding: "10px 16px",            /* Chakra space-4 */
+      background: "var(--surface)",
       border: `1px solid var(--border)`,
       borderLeft: `3px solid ${color}`,
-      borderRadius: 10, flexShrink: 0, minWidth: 130,
-      transition: "box-shadow 150ms",
+      borderRadius: 8,                 /* Chakra lg */
+      flexShrink: 0, minWidth: 130,
+      transition: "box-shadow 150ms ease",
     }}
       onMouseEnter={e => (e.currentTarget.style.boxShadow = `0 0 0 1px ${color}40`)}
       onMouseLeave={e => (e.currentTarget.style.boxShadow = "none")}
     >
-      <div style={{ fontSize: 9, fontFamily: "var(--font-body)", fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>
+      {/* Label: uppercase, 9px, tracking-widest */}
+      <div style={{
+        fontSize: 9,
+        fontFamily: "var(--font-body)", fontWeight: 700,
+        color: "var(--text-3)",
+        textTransform: "uppercase", letterSpacing: "0.12em",
+        marginBottom: 4,
+      }}>
         {label}
       </div>
-      <div style={{ fontSize: 14, fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text-1)", lineHeight: 1, marginBottom: 3 }}>
+      {/* Value: 14px semibold mono */}
+      <div style={{
+        fontSize: 14,
+        fontFamily: "var(--font-mono)", fontWeight: 700,
+        color: "var(--text-1)", lineHeight: 1, marginBottom: 3,
+      }}>
         {data.price.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 2, fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 700, color }}>
+      {/* Change: 11px semibold mono */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 2,
+        fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 700, color,
+      }}>
         {up ? <ArrowUpRight style={{ width: 10, height: 10 }} /> : <ArrowDownRight style={{ width: 10, height: 10 }} />}
         {Math.abs(data.change_pct).toFixed(2)}%
       </div>
@@ -143,22 +179,32 @@ function FilingsPanel() {
           <span style={{
             width: 7, height: 7, borderRadius: "50%", background: "var(--green)",
             display: "inline-block", boxShadow: "0 0 6px var(--green)",
-            animation: "pulse 2s infinite",
+            animation: "pulse-dot 2s infinite",
           }} />
-          <span style={{ fontSize: 10, fontFamily: "var(--font-body)", fontWeight: 600, color: "var(--text-3)" }}>
+          {/* Label: uppercase 10px tracking */}
+          <span style={{
+            fontSize: 10, fontFamily: "var(--font-body)", fontWeight: 600,
+            color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.07em",
+          }}>
             BSE · NSE Real-Time
           </span>
           {filings && filings.length > 0 && (
             <span style={{
               fontSize: 10, background: "var(--green-dim)", color: "var(--green)",
-              padding: "1px 7px", borderRadius: 99, fontWeight: 700,
+              padding: "1px 7px", borderRadius: 9999, fontWeight: 700,
               border: "1px solid var(--border-green)",
             }}>
               {filings.length}
             </span>
           )}
         </div>
-        <button onClick={() => refetch()} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", padding: 4, borderRadius: 6 }}>
+        <button
+          onClick={() => refetch()}
+          style={{
+            background: "none", border: "none", cursor: "pointer",
+            color: "var(--text-3)", padding: 4, borderRadius: 6,
+          }}
+        >
           <RefreshCw style={{ width: 12, height: 12, animation: isFetching ? "spin 1s linear infinite" : "none" }} />
         </button>
       </div>
@@ -173,10 +219,11 @@ function FilingsPanel() {
             </div>
           ))
         ) : !filings || filings.length === 0 ? (
+          /* Empty state: icon 36px, text 13px weight 500 */
           <div style={{ padding: 32, textAlign: "center" }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>📋</div>
-            <div style={{ fontSize: 12, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>No filings data</div>
-            <div style={{ fontSize: 11, color: "var(--text-4)", marginTop: 4, fontFamily: "var(--font-body)" }}>BSE API may be rate-limited</div>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>📋</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>No filings data</div>
+            <div style={{ fontSize: 12, color: "var(--text-4)", marginTop: 4, fontFamily: "var(--font-body)" }}>BSE API may be rate-limited</div>
           </div>
         ) : (
           filings.map((f: Filing, i: number) => {
@@ -188,23 +235,37 @@ function FilingsPanel() {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.03 }}
                 style={{
-                  padding: "10px 14px", borderBottom: "1px solid var(--border-2)",
-                  cursor: "pointer", borderLeft: "2px solid transparent", transition: "all 100ms",
+                  padding: "10px 14px",
+                  borderBottom: "1px solid var(--border-2)",
+                  cursor: "pointer",
+                  borderLeft: "2px solid transparent",
+                  transition: "all 100ms ease",
                 }}
-                onMouseEnter={e => { e.currentTarget.style.background = "var(--card-hover)"; e.currentTarget.style.borderLeftColor = color; }}
-                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderLeftColor = "transparent"; }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = "var(--card-hover)";
+                  e.currentTarget.style.borderLeftColor = color;
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = "transparent";
+                  e.currentTarget.style.borderLeftColor = "transparent";
+                }}
               >
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 8, justifyContent: "space-between" }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3, flexWrap: "wrap" }}>
-                      <span style={{ fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 700, color: "var(--text-1)" }}>{f.company}</span>
+                      {/* Company: 12px semibold */}
+                      <span style={{ fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 700, color: "var(--text-1)" }}>
+                        {f.company}
+                      </span>
+                      {/* Category badge */}
                       <span style={{
-                        fontSize: 9, padding: "1px 7px", borderRadius: 99, fontWeight: 700,
+                        fontSize: 9, padding: "1px 7px", borderRadius: 9999, fontWeight: 700,
                         background: `${color}18`, color, border: `1px solid ${color}35`,
                         letterSpacing: "0.04em", whiteSpace: "nowrap",
                       }}>
                         {f.category}
                       </span>
+                      {/* Exchange badge */}
                       <span style={{
                         fontSize: 9, padding: "1px 5px", borderRadius: 4,
                         background: "var(--surface-3)", color: "var(--text-3)",
@@ -213,23 +274,28 @@ function FilingsPanel() {
                         {f.exchange}
                       </span>
                     </div>
+                    {/* Headline: 11-12px text-2 */}
                     <div style={{
-                      fontSize: 11.5, color: "var(--text-2)", fontFamily: "var(--font-body)",
+                      fontSize: 11, color: "var(--text-2)", fontFamily: "var(--font-body)",
                       lineHeight: 1.45, overflow: "hidden", textOverflow: "ellipsis",
-                      display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as React.CSSProperties["WebkitBoxOrient"],
+                      display: "-webkit-box", WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical" as React.CSSProperties["WebkitBoxOrient"],
                     }}>
                       {f.headline}
                     </div>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
+                    {/* Time: 10px text-4 */}
                     <div style={{ display: "flex", alignItems: "center", gap: 3, color: "var(--text-4)", fontSize: 10 }}>
                       <Clock style={{ width: 9, height: 9 }} />
                       <span style={{ fontFamily: "var(--font-mono)" }}>{timeAgo(f.dt)}</span>
                     </div>
                     {f.has_pdf && (
-                      <a href={f.pdf_url} target="_blank" rel="noopener noreferrer"
+                      <a
+                        href={f.pdf_url} target="_blank" rel="noopener noreferrer"
                         onClick={e => e.stopPropagation()}
-                        style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 9, color, fontWeight: 700, textDecoration: "none" }}>
+                        style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 9, color, fontWeight: 700, textDecoration: "none" }}
+                      >
                         <FileText style={{ width: 9, height: 9 }} /> PDF
                       </a>
                     )}
@@ -256,8 +322,9 @@ function FiiDiiPanel() {
   }));
 
   return (
-    <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 12 }}>
-      {/* Today's snapshot */}
+    /* Panel body padding: 14px */
+    <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* Today snapshot: 2-col grid, gap 8px (Chakra space-2) */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
         {[
           { label: "FII Net Today", val: today?.fii_net ?? 0, buy: today?.fii_buy ?? 0, sell: today?.fii_sell ?? 0 },
@@ -272,12 +339,22 @@ function FiiDiiPanel() {
               padding: "10px 12px", background: bg,
               border: `1px solid ${border}`, borderRadius: 10,
             }}>
-              <div style={{ fontSize: 9, fontFamily: "var(--font-body)", fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.08em", marginBottom: 6 }}>
+              {/* Label: uppercase 9px tracking */}
+              <div style={{
+                fontSize: 9, fontFamily: "var(--font-body)", fontWeight: 700,
+                color: "var(--text-3)", letterSpacing: "0.1em",
+                textTransform: "uppercase", marginBottom: 6,
+              }}>
                 {item.label}
               </div>
-              <div style={{ fontFamily: "var(--font-mono)", fontWeight: 800, fontSize: 16, color: col, lineHeight: 1, marginBottom: 4 }}>
+              {/* Value: 15px semibold mono (Chakra md) */}
+              <div style={{
+                fontFamily: "var(--font-mono)", fontWeight: 800,
+                fontSize: 15, color: col, lineHeight: 1, marginBottom: 4,
+              }}>
                 {fmtCr(item.val)}
               </div>
+              {/* Buy/Sell: 9px mono */}
               <div style={{ display: "flex", gap: 8 }}>
                 <span style={{ fontSize: 9, color: "var(--green)", fontFamily: "var(--font-mono)" }}>B: {fmtCr(item.buy)}</span>
                 <span style={{ fontSize: 9, color: "var(--red)", fontFamily: "var(--font-mono)" }}>S: {fmtCr(item.sell)}</span>
@@ -287,14 +364,64 @@ function FiiDiiPanel() {
         })}
       </div>
 
-      {/* Chart label */}
+      {/* FAO Sentiment + PCR row */}
+      {today && (today.pcr !== undefined || today.sentiment) && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+          {today.pcr !== undefined && (
+            <div style={{
+              padding: "8px 10px", background: "var(--surface-2)",
+              border: "1px solid var(--border)", borderRadius: 8,
+            }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>PCR</div>
+              <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 14, color: today.pcr > 1.2 ? "var(--green)" : today.pcr < 0.8 ? "var(--red)" : "var(--text-1)" }}>
+                {today.pcr.toFixed(2)}
+              </div>
+              <div style={{ fontSize: 9, color: "var(--text-3)", marginTop: 2 }}>{today.pcr > 1.2 ? "Bullish" : today.pcr < 0.8 ? "Bearish" : "Neutral"}</div>
+            </div>
+          )}
+          {today.fii_idx_fut_net !== undefined && (
+            <div style={{
+              padding: "8px 10px", background: "var(--surface-2)",
+              border: "1px solid var(--border)", borderRadius: 8,
+            }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>FII Idx Fut</div>
+              <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 13, color: (today.fii_idx_fut_net ?? 0) >= 0 ? "var(--green)" : "var(--red)" }}>
+                {fmtCr(today.fii_idx_fut_net ?? 0)}
+              </div>
+            </div>
+          )}
+          {today.sentiment && (
+            <div style={{
+              padding: "8px 10px", background: today.sentiment === "Bullish" ? "var(--green-dim)" : today.sentiment === "Bearish" ? "var(--red-dim)" : "var(--surface-2)",
+              border: `1px solid ${today.sentiment === "Bullish" ? "rgba(34,197,94,0.3)" : today.sentiment === "Bearish" ? "rgba(239,68,68,0.3)" : "var(--border)"}`,
+              borderRadius: 8,
+            }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>Sentiment</div>
+              <div style={{ fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 12, color: today.sentiment === "Bullish" ? "var(--green)" : today.sentiment === "Bearish" ? "var(--red)" : "var(--text-2)" }}>
+                {today.sentiment}
+              </div>
+              {today.sentiment_score !== undefined && (
+                <div style={{ fontSize: 9, color: "var(--text-3)", fontFamily: "var(--font-mono)", marginTop: 2 }}>Score: {today.sentiment_score}</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Chart legend: label uppercase 10px tracking */}
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <span style={{ fontSize: 10, fontFamily: "var(--font-body)", fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+        <span style={{
+          fontSize: 10, fontFamily: "var(--font-body)", fontWeight: 700,
+          color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.08em",
+        }}>
           30-Day Flows
         </span>
         {[{ label: "FII", color: "var(--blue)" }, { label: "DII", color: "var(--green)" }].map(l => (
-          <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>
-            <span style={{ width: 12, height: 3, borderRadius: 99, background: l.color, display: "inline-block" }} />
+          <div key={l.label} style={{
+            display: "flex", alignItems: "center", gap: 4,
+            fontSize: 10, color: "var(--text-3)", fontFamily: "var(--font-body)",
+          }}>
+            <span style={{ width: 12, height: 3, borderRadius: 9999, background: l.color, display: "inline-block" }} />
             {l.label}
           </div>
         ))}
@@ -304,22 +431,34 @@ function FiiDiiPanel() {
       {isLoading ? (
         <div className="skeleton" style={{ height: 130, borderRadius: 8 }} />
       ) : chartData.length === 0 ? (
+        /* Empty state: icon 36px, text 13px weight 500 */
         <div style={{ height: 130, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface-2)", borderRadius: 8 }}>
           <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 22, marginBottom: 6 }}>📊</div>
-            <div style={{ fontSize: 11, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>No flow data yet</div>
+            <div style={{ fontSize: 36, marginBottom: 6 }}>📊</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>No flow data yet</div>
           </div>
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={130}>
           <BarChart data={chartData} barGap={1} margin={{ top: 0, right: 4, left: -20, bottom: 0 }}>
-            <XAxis dataKey="date" tick={{ fontSize: 8, fill: "var(--text-4)", fontFamily: "var(--font-mono)" }} axisLine={false} tickLine={false} interval={4} />
-            <YAxis tick={{ fontSize: 8, fill: "var(--text-4)", fontFamily: "var(--font-mono)" }} axisLine={false} tickLine={false} tickFormatter={v => `${(v / 1000).toFixed(0)}K`} />
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 8, fill: "var(--text-4)", fontFamily: "var(--font-mono)" }}
+              axisLine={false} tickLine={false} interval={4}
+            />
+            <YAxis
+              tick={{ fontSize: 8, fill: "var(--text-4)", fontFamily: "var(--font-mono)" }}
+              axisLine={false} tickLine={false}
+              tickFormatter={v => `${(v / 1000).toFixed(0)}K`}
+            />
             <Tooltip
-              contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-1)" }}
+              contentStyle={{
+                background: "var(--surface-2)", border: "1px solid var(--border)",
+                borderRadius: 8, fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-1)",
+              }}
               formatter={(v: number, name: string) => [fmtCr(v), name === "fii" ? "FII Net" : "DII Net"]}
             />
-            <ReferenceLine y={0} stroke="var(--border-strong)" strokeDasharray="3 3" />
+            <ReferenceLine y={0} stroke="var(--border-2)" strokeDasharray="3 3" />
             <Bar dataKey="fii" radius={[2, 2, 0, 0]} maxBarSize={8}>
               {chartData.map((d, i) => <Cell key={i} fill={d.fii >= 0 ? "var(--blue)" : "var(--red)"} fillOpacity={0.85} />)}
             </Bar>
@@ -342,24 +481,39 @@ function BreadthPanel() {
   const total = ad?.total ?? 1;
 
   return (
-    <div style={{ padding: "14px 14px" }}>
-      <div style={{ fontSize: 10, fontFamily: "var(--font-body)", fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>
+    /* Panel body padding: 14px */
+    <div style={{ padding: 14 }}>
+      {/* Label: uppercase 10px tracking-widest */}
+      <div style={{
+        fontSize: 10, fontFamily: "var(--font-body)", fontWeight: 700,
+        color: "var(--text-3)", letterSpacing: "0.1em",
+        textTransform: "uppercase", marginBottom: 10,
+      }}>
         Market Breadth · Nifty 500
       </div>
       {isLoading ? (
         <div className="skeleton" style={{ height: 60, borderRadius: 8 }} />
       ) : (
         <>
-          {/* Bar */}
-          <div style={{ display: "flex", height: 8, borderRadius: 99, overflow: "hidden", gap: 1, marginBottom: 10 }}>
-            <motion.div initial={{ width: 0 }} animate={{ width: `${(adv / total) * 100}%` }} transition={{ duration: 0.8 }}
-              style={{ background: "var(--green)", borderRadius: "99px 0 0 99px" }} />
-            <motion.div initial={{ width: 0 }} animate={{ width: `${(unch / total) * 100}%` }} transition={{ duration: 0.8 }}
-              style={{ background: "var(--border-strong)" }} />
-            <motion.div initial={{ width: 0 }} animate={{ width: `${(dec / total) * 100}%` }} transition={{ duration: 0.8 }}
-              style={{ background: "var(--red)", borderRadius: "0 99px 99px 0" }} />
+          {/* Progress bar */}
+          <div style={{ display: "flex", height: 8, borderRadius: 9999, overflow: "hidden", gap: 1, marginBottom: 10 }}>
+            <motion.div
+              initial={{ width: 0 }} animate={{ width: `${(adv / total) * 100}%` }}
+              transition={{ duration: 0.8 }}
+              style={{ background: "var(--green)", borderRadius: "9999px 0 0 9999px" }}
+            />
+            <motion.div
+              initial={{ width: 0 }} animate={{ width: `${(unch / total) * 100}%` }}
+              transition={{ duration: 0.8 }}
+              style={{ background: "var(--border-2)" }}
+            />
+            <motion.div
+              initial={{ width: 0 }} animate={{ width: `${(dec / total) * 100}%` }}
+              transition={{ duration: 0.8 }}
+              style={{ background: "var(--red)", borderRadius: "0 9999px 9999px 0" }}
+            />
           </div>
-          {/* Counters */}
+          {/* Counter grid: gap 8px (Chakra space-2) */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
             {[
               { label: "Advances", val: adv, color: "var(--green)", bg: "var(--green-dim)", border: "var(--border-green)" },
@@ -370,8 +524,17 @@ function BreadthPanel() {
                 textAlign: "center", padding: "8px 4px",
                 background: item.bg, border: `1px solid ${item.border}`, borderRadius: 8,
               }}>
-                <div style={{ fontFamily: "var(--font-mono)", fontWeight: 800, fontSize: 20, color: item.color, lineHeight: 1 }}>{item.val}</div>
-                <div style={{ fontSize: 9, color: item.color, opacity: 0.75, letterSpacing: "0.06em", marginTop: 3, fontFamily: "var(--font-body)", fontWeight: 600 }}>
+                {/* Value: 20px mono */}
+                <div style={{ fontFamily: "var(--font-mono)", fontWeight: 800, fontSize: 20, color: item.color, lineHeight: 1 }}>
+                  {item.val}
+                </div>
+                {/* Label: 9px uppercase */}
+                <div style={{
+                  fontSize: 9, color: item.color, opacity: 0.75,
+                  letterSpacing: "0.07em", marginTop: 3,
+                  fontFamily: "var(--font-body)", fontWeight: 600,
+                  textTransform: "uppercase",
+                }}>
                   {item.label}
                 </div>
               </div>
@@ -401,24 +564,37 @@ function SectorPanel({ data, isLoading }: { data: { sector: string; change_pct: 
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: i * 0.04 }}
           style={{
-            display: "flex", alignItems: "center", gap: 10, padding: "8px 14px",
-            borderBottom: "1px solid var(--border-2)", transition: "background 100ms",
+            display: "flex", alignItems: "center",
+            /* 8px gap between items (Chakra space-2) */
+            gap: 8, padding: "8px 14px",
+            borderBottom: "1px solid var(--border-2)",
+            transition: "background 100ms ease",
           }}
           onMouseEnter={e => (e.currentTarget.style.background = "var(--card-hover)")}
           onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
         >
-          <div style={{ fontSize: 11.5, fontFamily: "var(--font-body)", fontWeight: 500, color: "var(--text-2)", width: 100, flexShrink: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {/* Sector name: 11px text-2 */}
+          <div style={{
+            fontSize: 11, fontFamily: "var(--font-body)", fontWeight: 500,
+            color: "var(--text-2)", width: 100, flexShrink: 0,
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+          }}>
             {d.sector}
           </div>
-          <div style={{ flex: 1, height: 5, background: "var(--surface-3)", borderRadius: 99, overflow: "hidden" }}>
+          {/* Progress bar */}
+          <div style={{ flex: 1, height: 5, background: "var(--surface-3)", borderRadius: 9999, overflow: "hidden" }}>
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${(Math.abs(d.change_pct) / max) * 100}%` }}
               transition={{ duration: 0.6, delay: i * 0.04 }}
-              style={{ height: "100%", borderRadius: 99, background: d.change_pct >= 0 ? "var(--green)" : "var(--red)" }}
+              style={{ height: "100%", borderRadius: 9999, background: d.change_pct >= 0 ? "var(--green)" : "var(--red)" }}
             />
           </div>
-          <div style={{ fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 700, color: numColor(d.change_pct), width: 52, textAlign: "right", flexShrink: 0 }}>
+          {/* Value: 11px semibold mono */}
+          <div style={{
+            fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 700,
+            color: numColor(d.change_pct), width: 52, textAlign: "right", flexShrink: 0,
+          }}>
             {upDn(d.change_pct)}{Math.abs(d.change_pct).toFixed(2)}%
           </div>
         </motion.div>
@@ -437,12 +613,18 @@ function TopMoversPanel() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div style={{ display: "flex", gap: 6, padding: "8px 14px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
+      {/* Tab row */}
+      <div style={{
+        display: "flex", gap: 6, padding: "8px 14px",
+        borderBottom: "1px solid var(--border)", flexShrink: 0,
+      }}>
         {([["gainers", "var(--green)"], ["losers", "var(--red)"]] as const).map(([key, color]) => (
           <button key={key} onClick={() => setTab(key as MoverTab)} style={{
-            fontSize: 10, fontFamily: "var(--font-body)", fontWeight: 700, letterSpacing: "0.06em",
-            padding: "4px 12px", borderRadius: 99, border: "1px solid",
-            cursor: "pointer", transition: "all 120ms", textTransform: "uppercase",
+            fontSize: 10, fontFamily: "var(--font-body)", fontWeight: 700,
+            letterSpacing: "0.07em",
+            padding: "4px 12px", borderRadius: 9999, border: "1px solid",
+            cursor: "pointer", transition: "all 120ms ease",
+            textTransform: "uppercase",
             background: tab === key ? color : "transparent",
             color: tab === key ? "#fff" : "var(--text-3)",
             borderColor: tab === key ? color : "var(--border)",
@@ -451,6 +633,7 @@ function TopMoversPanel() {
           </button>
         ))}
       </div>
+      {/* List */}
       <div style={{ flex: 1, overflowY: "auto" }}>
         {isLoading ? (
           Array.from({ length: 8 }).map((_, i) => (
@@ -460,7 +643,12 @@ function TopMoversPanel() {
             </div>
           ))
         ) : rows.length === 0 ? (
-          <div style={{ padding: 24, textAlign: "center", fontSize: 11, color: "var(--text-4)", fontFamily: "var(--font-body)" }}>
+          /* Empty state: 13px weight 500 */
+          <div style={{
+            padding: 24, textAlign: "center",
+            fontSize: 13, fontWeight: 500,
+            color: "var(--text-4)", fontFamily: "var(--font-body)",
+          }}>
             No data
           </div>
         ) : rows.map((m, i) => {
@@ -469,18 +657,37 @@ function TopMoversPanel() {
           return (
             <div key={m.ticker} style={{
               display: "flex", alignItems: "center", padding: "9px 14px",
-              borderBottom: "1px solid var(--border-2)", gap: 10, transition: "background 80ms", cursor: "default",
+              /* 8px gap (Chakra space-2) */
+              borderBottom: "1px solid var(--border-2)", gap: 8,
+              transition: "background 80ms ease", cursor: "default",
             }}
               onMouseEnter={e => (e.currentTarget.style.background = "var(--card-hover)")}
               onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
             >
-              <span style={{ fontSize: 10, color: "var(--text-4)", fontFamily: "var(--font-mono)", width: 16, flexShrink: 0 }}>{i + 1}</span>
-              <div style={{ width: 22, height: 22, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, background: up ? "var(--green-dim)" : "var(--red-dim)", border: `1px solid ${up ? "var(--border-green)" : "var(--border-red)"}` }}>
-                {up ? <ArrowUpRight style={{ width: 11, height: 11, color: "var(--green)" }} /> : <ArrowDownRight style={{ width: 11, height: 11, color: "var(--red)" }} />}
+              {/* Rank: 10px text-4 mono */}
+              <span style={{ fontSize: 10, color: "var(--text-4)", fontFamily: "var(--font-mono)", width: 16, flexShrink: 0 }}>
+                {i + 1}
+              </span>
+              {/* Direction icon */}
+              <div style={{
+                width: 22, height: 22, borderRadius: 6,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0,
+                background: up ? "var(--green-dim)" : "var(--red-dim)",
+                border: `1px solid ${up ? "var(--border-green)" : "var(--border-red)"}`,
+              }}>
+                {up
+                  ? <ArrowUpRight style={{ width: 11, height: 11, color: "var(--green)" }} />
+                  : <ArrowDownRight style={{ width: 11, height: 11, color: "var(--red)" }} />
+                }
               </div>
+              {/* Ticker: 12px semibold mono */}
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 12, fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text-1)" }}>{m.ticker}</div>
+                <div style={{ fontSize: 12, fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text-1)" }}>
+                  {m.ticker}
+                </div>
               </div>
+              {/* Price + change: 12px / 11px mono */}
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--text-1)", fontWeight: 500 }}>
                   ₹{m.price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
@@ -515,31 +722,44 @@ function CorporateActionsPanel() {
           </div>
         ))
       ) : !data || data.length === 0 ? (
+        /* Empty state: icon 36px, text 13px weight 500 */
         <div style={{ padding: 24, textAlign: "center" }}>
-          <div style={{ fontSize: 22, marginBottom: 6 }}>📅</div>
-          <div style={{ fontSize: 11, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>No upcoming corporate actions</div>
+          <div style={{ fontSize: 36, marginBottom: 6 }}>📅</div>
+          <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>
+            No upcoming corporate actions
+          </div>
         </div>
       ) : data.map((ca: CorporateAction, i: number) => {
         const color = ACTION_COLOR[ca.action] || "var(--text-3)";
         return (
           <div key={i} style={{
-            display: "flex", alignItems: "center", gap: 10, padding: "9px 14px",
-            borderBottom: "1px solid var(--border-2)", transition: "background 80ms",
+            display: "flex", alignItems: "center",
+            /* 8px gap (Chakra space-2) */
+            gap: 8, padding: "9px 14px",
+            borderBottom: "1px solid var(--border-2)", transition: "background 80ms ease",
           }}
             onMouseEnter={e => (e.currentTarget.style.background = "var(--card-hover)")}
             onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
           >
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontFamily: "var(--font-body)", fontWeight: 700, color: "var(--text-1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 2 }}>
+              {/* Company: 12px semibold */}
+              <div style={{
+                fontSize: 12, fontFamily: "var(--font-body)", fontWeight: 700,
+                color: "var(--text-1)", overflow: "hidden", textOverflow: "ellipsis",
+                whiteSpace: "nowrap", marginBottom: 2,
+              }}>
                 {ca.company}
               </div>
+              {/* Ex-date: 10px text-3 mono */}
               <div style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-3)" }}>
                 Ex: {fmtDate(ca.ex_date)}
               </div>
             </div>
+            {/* Action badge */}
             <span style={{
-              fontSize: 9, padding: "2px 8px", borderRadius: 99, fontFamily: "var(--font-body)",
-              fontWeight: 700, letterSpacing: "0.06em", background: `${color}18`, color, border: `1px solid ${color}35`,
+              fontSize: 9, padding: "2px 8px", borderRadius: 9999, fontFamily: "var(--font-body)",
+              fontWeight: 700, letterSpacing: "0.06em",
+              background: `${color}18`, color, border: `1px solid ${color}35`,
             }}>
               {ca.action}
             </span>
@@ -568,42 +788,65 @@ function ResultsCalendarPanel() {
           </div>
         ))
       ) : !data || data.length === 0 ? (
+        /* Empty state: icon 36px, text 13px weight 500 */
         <div style={{ padding: 24, textAlign: "center" }}>
-          <div style={{ fontSize: 22, marginBottom: 6 }}>📆</div>
-          <div style={{ fontSize: 11, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>No upcoming results</div>
+          <div style={{ fontSize: 36, marginBottom: 6 }}>📆</div>
+          <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>
+            No upcoming results
+          </div>
         </div>
       ) : data.map((r: ResultsMeeting, i: number) => {
         const color = PURPOSE_COLOR[r.purpose] || "var(--text-3)";
         const dt = new Date(r.meeting_date);
         return (
           <div key={i} style={{
-            display: "flex", alignItems: "center", gap: 10, padding: "9px 14px",
-            borderBottom: "1px solid var(--border-2)", transition: "background 80ms",
+            display: "flex", alignItems: "center",
+            /* 8px gap (Chakra space-2) */
+            gap: 8, padding: "9px 14px",
+            borderBottom: "1px solid var(--border-2)", transition: "background 80ms ease",
           }}
             onMouseEnter={e => (e.currentTarget.style.background = "var(--card-hover)")}
             onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
           >
+            {/* Date badge */}
             <div style={{
               flexShrink: 0, width: 38, textAlign: "center",
               background: "var(--surface-2)", border: "1px solid var(--border)",
               borderRadius: 8, padding: "4px 0",
             }}>
-              <div style={{ fontSize: 15, fontFamily: "var(--font-mono)", fontWeight: 800, color: "var(--text-1)", lineHeight: 1 }}>
+              {/* Day: 15px mono bold */}
+              <div style={{
+                fontSize: 15, fontFamily: "var(--font-mono)", fontWeight: 800,
+                color: "var(--text-1)", lineHeight: 1,
+              }}>
                 {dt.getDate()}
               </div>
-              <div style={{ fontSize: 8, fontFamily: "var(--font-body)", fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              {/* Month: 8px uppercase */}
+              <div style={{
+                fontSize: 8, fontFamily: "var(--font-body)", fontWeight: 700,
+                color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.07em",
+              }}>
                 {dt.toLocaleString("en-IN", { month: "short" })}
               </div>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontFamily: "var(--font-body)", fontWeight: 700, color: "var(--text-1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {/* Company: 12px semibold */}
+              <div style={{
+                fontSize: 12, fontFamily: "var(--font-body)", fontWeight: 700,
+                color: "var(--text-1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>
                 {r.company}
               </div>
-              <div style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-3)" }}>{r.symbol}</div>
+              {/* Symbol: 10px text-3 mono */}
+              <div style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-3)" }}>
+                {r.symbol}
+              </div>
             </div>
+            {/* Purpose badge */}
             <span style={{
-              fontSize: 9, padding: "2px 8px", borderRadius: 99, fontFamily: "var(--font-body)",
-              fontWeight: 700, letterSpacing: "0.04em", background: `${color}18`, color, border: `1px solid ${color}35`, flexShrink: 0,
+              fontSize: 9, padding: "2px 8px", borderRadius: 9999, fontFamily: "var(--font-body)",
+              fontWeight: 700, letterSpacing: "0.04em",
+              background: `${color}18`, color, border: `1px solid ${color}35`, flexShrink: 0,
             }}>
               {r.purpose}
             </span>
@@ -631,10 +874,23 @@ export function MarketPage() {
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: "var(--bg)" }}>
       <Header title="Market" subtitle="NSE · BSE · Real-Time Intelligence" />
 
-      <div style={{ flex: 1, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 14, overflowY: "auto" }}>
+      {/*
+        Page wrapper:
+          - paddingTop: 20px (Chakra space-5)
+          - paddingLeft/Right: 24px (Chakra space-6)
+          - paddingBottom: 24px
+      */}
+      <div style={{
+        flex: 1,
+        padding: "20px 24px 24px",
+        display: "flex", flexDirection: "column",
+        /* Main grid gap: 16px (Chakra space-4) */
+        gap: 16,
+        overflowY: "auto",
+      }}>
 
-        {/* ── Index chips row ── */}
-        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 2 }}>
+        {/* ── Index chips row ── gap: 12px, marginBottom implicit via gap */}
+        <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 2 }}>
           {INDEX_KEYS.map(({ key, label }, idx) => (
             <motion.div key={key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.06 }}>
               <IndexChip
@@ -645,8 +901,13 @@ export function MarketPage() {
           ))}
         </div>
 
-        {/* ── Main grid: 3 columns ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr 0.9fr", gap: 12, flex: 1 }}>
+        {/* ── Main grid: 3 columns, gap 16px (Chakra space-4) ── */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "1.1fr 1fr 0.9fr",
+          gap: 16,               /* Chakra space-4 */
+          flex: 1,
+        }}>
 
           {/* LEFT — Live Filings */}
           <Card
@@ -658,8 +919,8 @@ export function MarketPage() {
             <FilingsPanel />
           </Card>
 
-          {/* MIDDLE — FII/DII + Breadth */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {/* MIDDLE — FII/DII + Breadth, inner gap 16px */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <Card
               title="FII / DII Flows"
               icon={<Globe2 style={{ width: 12, height: 12 }} />}
@@ -678,8 +939,8 @@ export function MarketPage() {
             </Card>
           </div>
 
-          {/* RIGHT — Sectors + Movers */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {/* RIGHT — Sectors + Movers, inner gap 16px */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <Card
               title="Sector Performance"
               icon={<Filter style={{ width: 12, height: 12 }} />}
@@ -700,8 +961,12 @@ export function MarketPage() {
           </div>
         </div>
 
-        {/* ── Bottom row: Corporate Actions + Results Calendar ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        {/* ── Bottom row: Corporate Actions + Results Calendar, gap 16px ── */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 16,               /* Chakra space-4 */
+        }}>
           <Card
             title="Corporate Actions"
             icon={<Calendar style={{ width: 12, height: 12 }} />}

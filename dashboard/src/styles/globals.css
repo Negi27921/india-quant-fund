@@ -1,195 +1,234 @@
-/* ─── Fonts ─────────────────────────────────────────────────────────────── */
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,300;1,9..144,400&family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap");
+/* ─── Fonts ──────────────────────────────────────────────────────────────────── */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Dark Theme (default) ───────────────────────────────────────────────── */
+/* ─── Chakra UI Design Tokens ────────────────────────────────────────────────── */
+/*
+  Gray:   50=#fafafa  100=#f4f4f5  200=#e4e4e7  300=#d4d4d8  400=#a1a1aa
+          500=#71717a  600=#52525b  700=#3f3f46  800=#27272a  900=#18181b  950=#09090b
+  Green:  300=#86efac  400=#4ade80  500=#22c55e  600=#16a34a
+  Red:    400=#f87171  500=#ef4444  600=#dc2626
+  Blue:   400=#60a5fa  500=#3b82f6  600=#2563eb  700=#1d4ed8
+  Orange: 400=#fb923c  500=#f97316
+  Teal:   400=#2dd4bf  500=#14b8a6
+  Radii:  sm=4px  md=6px  lg=8px  xl=12px  2xl=16px  3xl=24px  full=9999px
+  Space:  1=4px  2=8px  3=12px  4=16px  5=20px  6=24px  8=32px
+  Font:   2xs=10px  xs=11px  sm=13px  md=15px  lg=18px  xl=20px  2xl=24px  3xl=28px  4xl=36px
+*/
+
+/* ─── Dark Theme ─────────────────────────────────────────────────────────────── */
 :root,
 :root[data-theme="dark"] {
-  /* Surfaces */
-  --bg:          #000000;
-  --surface:     #09090f;
-  --surface-2:   #0f0f18;
-  --surface-3:   #16161f;
-  --overlay:     rgba(0,0,0,0.97);
+  /* Surfaces — Chakra gray scale (dark end) */
+  --bg:        #09090b;   /* gray.950 */
+  --surface:   #111111;   /* just above black */
+  --surface-2: #18181b;   /* gray.900 */
+  --surface-3: #27272a;   /* gray.800 */
 
   /* Borders */
-  --border:        rgba(255,255,255,0.07);
-  --border-2:      rgba(255,255,255,0.04);
-  --border-strong: rgba(255,255,255,0.14);
-  --border-blue:   rgba(91,127,255,0.45);
-  --border-green:  rgba(6,214,160,0.4);
-  --border-red:    rgba(255,71,87,0.4);
-  --border-amber:  rgba(255,176,23,0.35);
+  --border:        #27272a;   /* gray.800 */
+  --border-2:      #3f3f46;   /* gray.700 */
+  --border-strong: #3f3f46;   /* gray.700 */
+  --border-blue:   rgba(59,130,246,0.3);
+  --border-green:  rgba(34,197,94,0.3);
+  --border-red:    rgba(239,68,68,0.3);
+  --border-amber:  rgba(249,115,22,0.3);
 
-  /* Brand / interactive */
-  --blue:        #5B7FFF;
-  --blue-dim:    rgba(91,127,255,0.1);
-  --blue-glow:   rgba(91,127,255,0.25);
+  /* Brand / interactive — Chakra blue.500 */
+  --blue:        #3b82f6;
+  --blue-dim:    rgba(59,130,246,0.12);
+  --blue-glow:   rgba(59,130,246,0.15);
 
-  --violet:      #8B5CF6;
-  --violet-dim:  rgba(139,92,246,0.1);
+  /* Semantic up/down — Chakra green.500 / red.500 */
+  --green:       #22c55e;
+  --green-dim:   rgba(34,197,94,0.12);
+  --green-glow:  rgba(34,197,94,0.18);
 
-  /* Semantic up/down */
-  --green:       #06D6A0;
-  --green-dim:   rgba(6,214,160,0.1);
-  --green-glow:  rgba(6,214,160,0.28);
+  --red:         #ef4444;
+  --red-dim:     rgba(239,68,68,0.12);
+  --red-glow:    rgba(239,68,68,0.18);
 
-  --red:         #FF4757;
-  --red-dim:     rgba(255,71,87,0.1);
-  --red-glow:    rgba(255,71,87,0.25);
+  /* Amber — Chakra orange.500 */
+  --amber:       #f97316;
+  --amber-dim:   rgba(249,115,22,0.12);
 
-  --amber:       #FFB017;
-  --amber-dim:   rgba(255,176,23,0.1);
+  /* Accent */
+  --violet:      #8b5cf6;
+  --violet-dim:  rgba(139,92,246,0.12);
+  --teal:        #14b8a6;   /* teal.500 */
 
-  /* Typography */
-  --text-1:    #FFFFFF;
-  --text-2:    #9898B8;
-  --text-3:    #55557A;
-  --text-4:    #2A2A40;
+  /* Typography — Chakra gray scale */
+  --text-1:    #fafafa;   /* gray.50 */
+  --text-2:    #d4d4d8;   /* gray.300 */
+  --text-3:    #71717a;   /* gray.500 */
+  --text-4:    #52525b;   /* gray.600 */
 
   /* Font roles */
   --font-heading: "Inter", system-ui, sans-serif;
   --font-body:    "Inter", system-ui, sans-serif;
-  --font-mono:    "JetBrains Mono", "Fira Code", Consolas, monospace;
+  --font-mono:    "JetBrains Mono", "Fira Code", monospace;
 
   /* Sidebar */
-  --sidebar-bg:     rgba(0,0,0,0.88);
-  --sidebar-border: rgba(255,255,255,0.055);
+  --sidebar-bg:     #111111;
+  --sidebar-border: #27272a;   /* gray.800 */
 
   /* Cards */
-  --card-bg:    rgba(255,255,255,0.025);
-  --card-hover: rgba(255,255,255,0.04);
+  --card-bg:    #18181b;   /* gray.900 */
+  --card-hover: rgba(255,255,255,0.03);
 
   /* Inputs */
-  --input-bg:     rgba(255,255,255,0.04);
-  --input-border: rgba(255,255,255,0.1);
+  --input-bg:     #18181b;
+  --input-border: #3f3f46;   /* gray.700 */
 
-  /* Scrollbar */
-  --scrollbar-w:     2px;
-  --scrollbar-track: var(--bg);
-  --scrollbar-thumb: rgba(91,127,255,0.25);
-  --scrollbar-hover: rgba(91,127,255,0.5);
-
-  /* Radii */
-  --r-xs:  4px;
-  --r-sm:  8px;
-  --r-md:  12px;
-  --r-lg:  16px;
-  --r-xl:  20px;
-  --r-pill: 99px;
+  /* Radii — Chakra token set */
+  --r-xs:   4px;    /* sm */
+  --r-sm:   6px;    /* md */
+  --r-md:   8px;    /* lg */
+  --r-lg:   12px;   /* xl */
+  --r-xl:   16px;   /* 2xl */
+  --r-2xl:  24px;   /* 3xl */
+  --r-pill: 9999px; /* full */
 }
 
-/* ─── Light Theme — PW K8 design system ─────────────────────────────────── */
+/* ─── Light Theme ────────────────────────────────────────────────────────────── */
 :root[data-theme="light"] {
-  /* Surfaces — warm cream palette */
-  --bg:          #FAF9F5;
-  --surface:     #FFFFFF;
-  --surface-2:   #F5F3EE;
-  --surface-3:   #ECEADF;
-  --overlay:     rgba(250,249,245,0.97);
+  /* Surfaces — Chakra gray scale (light end) */
+  --bg:        #fafafa;   /* gray.50 */
+  --surface:   #ffffff;
+  --surface-2: #f4f4f5;   /* gray.100 */
+  --surface-3: #e4e4e7;   /* gray.200 */
 
-  /* Borders — warm beige */
-  --border:        #ECE9DF;
-  --border-2:      rgba(236,233,223,0.6);
-  --border-strong: #D4CFBE;
-  --border-blue:   rgba(93,117,80,0.45);
-  --border-green:  rgba(93,117,80,0.45);
-  --border-red:    rgba(193,95,62,0.45);
-  --border-amber:  rgba(148,110,18,0.4);
+  /* Borders */
+  --border:        #e4e4e7;   /* gray.200 */
+  --border-2:      #d4d4d8;   /* gray.300 */
+  --border-strong: #d4d4d8;   /* gray.300 */
+  --border-blue:   rgba(37,99,235,0.25);
+  --border-green:  rgba(22,163,74,0.25);
+  --border-red:    rgba(220,38,38,0.25);
+  --border-amber:  rgba(217,119,6,0.25);
 
-  /* Brand / interactive — olive green */
-  --blue:        #5D7550;
-  --blue-dim:    rgba(93,117,80,0.09);
-  --blue-glow:   rgba(93,117,80,0.2);
+  /* Brand / interactive — Chakra blue.600 */
+  --blue:        #2563eb;
+  --blue-dim:    rgba(37,99,235,0.08);
+  --blue-glow:   rgba(37,99,235,0.1);
 
-  --violet:      #946E12;
-  --violet-dim:  rgba(148,110,18,0.08);
+  /* Semantic up/down — Chakra green.600 / red.600 */
+  --green:       #16a34a;
+  --green-dim:   rgba(22,163,74,0.08);
+  --green-glow:  rgba(22,163,74,0.12);
 
-  /* Semantic up/down */
-  --green:       #5D7550;
-  --green-dim:   rgba(93,117,80,0.09);
-  --green-glow:  rgba(93,117,80,0.2);
+  --red:         #dc2626;
+  --red-dim:     rgba(220,38,38,0.08);
+  --red-glow:    rgba(220,38,38,0.12);
 
-  --red:         #C15F3E;
-  --red-dim:     rgba(193,95,62,0.09);
-  --red-glow:    rgba(193,95,62,0.2);
+  /* Amber */
+  --amber:       #d97706;
+  --amber-dim:   rgba(217,119,6,0.08);
 
-  --amber:       #946E12;
-  --amber-dim:   rgba(148,110,18,0.08);
+  /* Accent */
+  --violet:      #7c3aed;
+  --violet-dim:  rgba(124,58,237,0.08);
+  --teal:        #0d9488;
 
-  /* Typography — warm dark */
-  --text-1:    #1A1A1A;
-  --text-2:    #4A4845;
-  --text-3:    #8A867C;
-  --text-4:    #BCB9B0;
+  /* Typography — Chakra gray scale */
+  --text-1:    #09090b;   /* gray.950 */
+  --text-2:    #3f3f46;   /* gray.700 */
+  --text-3:    #71717a;   /* gray.500 */
+  --text-4:    #a1a1aa;   /* gray.400 */
 
-  /* Font roles — Fraunces headings */
-  --font-heading: "Fraunces", Georgia, serif;
+  /* Font roles */
+  --font-heading: "Inter", system-ui, sans-serif;
   --font-body:    "Inter", system-ui, sans-serif;
-  --font-mono:    "JetBrains Mono", "Fira Code", Consolas, monospace;
+  --font-mono:    "JetBrains Mono", "Fira Code", monospace;
 
-  /* Sidebar — warm white glass */
-  --sidebar-bg:     rgba(255,255,255,0.92);
-  --sidebar-border: #ECE9DF;
+  /* Sidebar */
+  --sidebar-bg:     #ffffff;
+  --sidebar-border: #e4e4e7;   /* gray.200 */
 
   /* Cards */
-  --card-bg:    #FFFFFF;
-  --card-hover: rgba(93,117,80,0.04);
+  --card-bg:    #ffffff;
+  --card-hover: rgba(0,0,0,0.02);
 
   /* Inputs */
-  --input-bg:     #FFFFFF;
-  --input-border: #ECE9DF;
+  --input-bg:     #ffffff;
+  --input-border: #d4d4d8;   /* gray.300 */
 
-  /* Scrollbar */
-  --scrollbar-w:     2px;
-  --scrollbar-track: var(--bg);
-  --scrollbar-thumb: rgba(93,117,80,0.25);
-  --scrollbar-hover: rgba(93,117,80,0.5);
-
-  /* Radii — same grid */
-  --r-xs:  4px;
-  --r-sm:  8px;
-  --r-md:  12px;
-  --r-lg:  16px;
-  --r-xl:  20px;
-  --r-pill: 99px;
+  /* Radii — same Chakra token set */
+  --r-xs:   4px;
+  --r-sm:   6px;
+  --r-md:   8px;
+  --r-lg:   12px;
+  --r-xl:   16px;
+  --r-2xl:  24px;
+  --r-pill: 9999px;
 }
 
-/* ─── Base ───────────────────────────────────────────────────────────────── */
-@layer base {
-  * { box-sizing: border-box; }
-
-  *::-webkit-scrollbar            { width: var(--scrollbar-w); height: var(--scrollbar-w); }
-  *::-webkit-scrollbar-track      { background: var(--scrollbar-track); }
-  *::-webkit-scrollbar-thumb      { background: var(--scrollbar-thumb); border-radius: 99px; }
-  *::-webkit-scrollbar-thumb:hover{ background: var(--scrollbar-hover); }
-  * { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); }
-
-  html, body {
-    background: var(--bg);
-    color: var(--text-1);
-    font-family: var(--font-body);
-    font-size: 14px;
-    line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    font-feature-settings: "cv02","cv03","cv04","ss01","ss02";
-    transition: background 220ms ease, color 220ms ease;
-  }
-
-  ::selection { background: var(--blue-glow); color: var(--text-1); }
+/* ─── Base Reset ─────────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-/* ─── Typography Scale ───────────────────────────────────────────────────── */
+html, body {
+  background: var(--bg);
+  color: var(--text-1);
+  font-family: var(--font-body);
+  font-size: 15px;   /* Chakra md */
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv02", "cv03", "cv04", "ss01", "ss02";
+  scroll-behavior: smooth;
+  /* Theme transition */
+  transition: background 200ms ease, color 200ms ease;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--surface-2);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-2);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-4);
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-2) var(--surface-2);
+}
+
+/* ─── Selection ──────────────────────────────────────────────────────────────── */
+::selection {
+  background: var(--blue-glow);
+  color: var(--text-1);
+}
+
+/* ─── Sidebar glass ──────────────────────────────────────────────────────────── */
+.sidebar-glass {
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  transition: background 200ms ease, border-color 200ms ease;
+}
+
+/* ─── Typography Scale ───────────────────────────────────────────────────────── */
 @layer components {
 
   /* Display — KPI big numbers */
   .t-display {
     font-family: var(--font-body);
-    font-size: 30px;
+    font-size: 28px;    /* Chakra 3xl */
     font-weight: 700;
     letter-spacing: -0.03em;
     color: var(--text-1);
@@ -197,10 +236,10 @@
     font-feature-settings: "tnum";
   }
 
-  /* Heading — section titles, uses brand serif in light mode */
+  /* Heading */
   .t-heading {
     font-family: var(--font-heading);
-    font-size: 18px;
+    font-size: 18px;    /* Chakra lg */
     font-weight: 600;
     letter-spacing: -0.01em;
     color: var(--text-1);
@@ -210,7 +249,7 @@
   /* Subheading */
   .t-sub {
     font-family: var(--font-body);
-    font-size: 15px;
+    font-size: 15px;    /* Chakra md */
     font-weight: 600;
     letter-spacing: -0.01em;
     color: var(--text-1);
@@ -219,7 +258,7 @@
   /* Body */
   .t-body {
     font-family: var(--font-body);
-    font-size: 14px;
+    font-size: 15px;    /* Chakra md */
     font-weight: 400;
     color: var(--text-2);
     line-height: 1.6;
@@ -228,7 +267,7 @@
   /* Body small */
   .t-sm {
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: 13px;    /* Chakra sm */
     font-weight: 400;
     color: var(--text-2);
     line-height: 1.5;
@@ -237,7 +276,7 @@
   /* Label — column headers, tab labels */
   .t-label {
     font-family: var(--font-body);
-    font-size: 10px;
+    font-size: 10px;    /* Chakra 2xs */
     font-weight: 700;
     letter-spacing: 0.09em;
     text-transform: uppercase;
@@ -247,7 +286,7 @@
   /* Micro — tiny caps */
   .t-micro {
     font-family: var(--font-body);
-    font-size: 10px;
+    font-size: 10px;    /* Chakra 2xs */
     font-weight: 700;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -257,14 +296,14 @@
   /* Mono values */
   .t-mono {
     font-family: var(--font-mono);
-    font-size: 13px;
+    font-size: 13px;    /* Chakra sm */
     font-weight: 500;
     font-feature-settings: "tnum";
     color: var(--text-1);
   }
   .t-mono-lg {
     font-family: var(--font-mono);
-    font-size: 16px;
+    font-size: 15px;    /* Chakra md */
     font-weight: 600;
     font-feature-settings: "tnum";
     letter-spacing: -0.01em;
@@ -274,25 +313,25 @@
   /* Legacy compat */
   .stat-label { @apply t-micro; }
   .stat-value { @apply t-display; }
-  .font-mono  { font-family: var(--font-mono); font-feature-settings: "liga" 1,"calt" 1,"tnum" 1,"zero" 1; }
+  .font-mono  { font-family: var(--font-mono); font-feature-settings: "liga" 1, "calt" 1, "tnum" 1, "zero" 1; }
 
-  /* ─── Panel / Card System ────────────────────────────────────────────── */
+  /* ─── Panel / Card System ────────────────────────────────────────────────── */
   .panel {
     background: var(--card-bg);
     border: 1px solid var(--border);
-    border-radius: var(--r-lg);
+    border-radius: var(--r-lg);   /* 12px — Chakra xl */
     position: relative;
     overflow: hidden;
-    transition: background 220ms, border-color 220ms;
+    transition: background 200ms ease, border-color 200ms ease;
   }
 
-  /* Dark: subtle inner highlight */
+  /* Dark: subtle inner gradient highlight */
   :root[data-theme="dark"] .panel::before,
   :root:not([data-theme]) .panel::before {
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, rgba(255,255,255,0.025) 0%, transparent 50%);
+    background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, transparent 50%);
     pointer-events: none;
     border-radius: inherit;
   }
@@ -300,58 +339,44 @@
   .panel-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 12px 16px;
+    gap: 8px;   /* Chakra space-2 */
+    padding: 11px 16px;   /* Chakra space-4 horizontal */
     border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
   }
 
-  /* In dark mode panel-header gets a subtle bg tint */
   :root[data-theme="dark"] .panel-header,
   :root:not([data-theme]) .panel-header {
     background: rgba(255,255,255,0.02);
   }
 
+  :root[data-theme="light"] .panel-header {
+    background: var(--surface-2);
+  }
+
   .panel-title {
-    font-family: var(--font-heading);
-    font-size: 11px;
+    font-family: var(--font-body);
+    font-size: 11px;    /* Chakra xs */
     font-weight: 700;
     color: var(--blue);
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-  }
-
-  /* Light: panel-title italic Fraunces */
-  :root[data-theme="light"] .panel-title {
-    font-size: 12px;
-    letter-spacing: 0.04em;
-    font-style: italic;
-    text-transform: none;
-    font-weight: 600;
+    letter-spacing: 0.07em;
   }
 
   .card       { @apply panel; }
   .card-hover {
     @apply panel;
-    transition: border-color 200ms, box-shadow 200ms, transform 150ms, background 220ms;
+    transition: border-color 200ms ease, box-shadow 200ms ease, transform 150ms ease, background 200ms ease;
     cursor: pointer;
   }
   .card-hover:hover {
     border-color: var(--border-blue);
-    box-shadow: 0 0 0 1px var(--blue-dim), 0 8px 32px rgba(0,0,0,0.1);
+    box-shadow: 0 0 0 1px var(--blue-dim), 0 8px 24px rgba(0,0,0,0.08);
     transform: translateY(-1px);
   }
   .card-hover:active { transform: translateY(0); }
 
-  /* ─── Sidebar glass ──────────────────────────────────────────────────── */
-  .sidebar-glass {
-    background: var(--sidebar-bg);
-    border-right: 1px solid var(--sidebar-border);
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
-    transition: background 220ms, border-color 220ms;
-  }
-
-  /* ─── Table ──────────────────────────────────────────────────────────── */
+  /* ─── Table ──────────────────────────────────────────────────────────────── */
   .tbl { width: 100%; border-collapse: collapse; }
 
   .tbl thead tr {
@@ -369,20 +394,20 @@
 
   .tbl-th {
     font-family: var(--font-body);
-    font-size: 10px;
+    font-size: 10px;    /* Chakra 2xs */
     font-weight: 700;
     color: var(--text-3);
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    padding: 10px 16px;
+    letter-spacing: 0.09em;
+    padding: 10px 16px;   /* Chakra space-4 */
     text-align: left;
     white-space: nowrap;
   }
   .tbl-th-r { @apply tbl-th; text-align: right; }
 
   .tbl-row {
-    border-bottom: 1px solid var(--border-2);
-    transition: background 80ms;
+    border-bottom: 1px solid var(--border);
+    transition: background 80ms ease;
     border-left: 2px solid transparent;
   }
   .tbl-row:hover {
@@ -390,16 +415,15 @@
     border-left-color: var(--blue);
   }
 
-  /* CRITICAL: row-actions — opacity only, never pointer-events: none */
   .row-actions {
     opacity: 0;
-    transition: opacity 150ms;
+    transition: opacity 150ms ease;
   }
   .tbl-row:hover .row-actions { opacity: 1; }
 
   .tbl-cell {
     font-family: var(--font-mono);
-    font-size: 12.5px;
+    font-size: 13px;    /* Chakra sm */
     font-weight: 400;
     color: var(--text-1);
     padding: 10px 16px;
@@ -414,15 +438,15 @@
   .table-row    { @apply tbl-row; }
   .table-cell   { @apply tbl-cell; }
 
-  /* ─── Badges / Pills ─────────────────────────────────────────────────── */
+  /* ─── Badges / Pills ─────────────────────────────────────────────────────── */
   .badge {
     display: inline-flex;
     align-items: center;
     gap: 4px;
     font-family: var(--font-body);
-    font-size: 10px;
+    font-size: 10px;    /* Chakra 2xs */
     font-weight: 600;
-    padding: 2px 8px;
+    padding: 2px 8px;   /* Chakra space-2 */
     border-radius: var(--r-pill);
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -441,47 +465,46 @@
   .badge-sector   { @apply badge; background: var(--violet-dim); color: var(--violet); border: 1px solid var(--border-amber); font-size: 9px; }
   .badge-cyan     { @apply badge-primary; }
 
-  /* ─── Buttons ────────────────────────────────────────────────────────── */
+  /* ─── Buttons ────────────────────────────────────────────────────────────── */
   .btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: 13px;    /* Chakra sm */
     font-weight: 600;
-    padding: 8px 16px;
-    border-radius: var(--r-sm);
+    padding: 8px 16px;   /* Chakra space-2 / space-4 */
+    border-radius: var(--r-md);   /* 8px — Chakra lg */
     border: 1px solid transparent;
     cursor: pointer;
-    transition: all 150ms;
+    transition: all 150ms ease;
     white-space: nowrap;
     letter-spacing: -0.01em;
   }
 
-  /* Dark primary: blue gradient / Light primary: near-black pill */
   :root[data-theme="dark"] .btn-primary,
   :root:not([data-theme]) .btn-primary {
     @apply btn;
-    background: linear-gradient(135deg, var(--blue), #4A6CF7);
+    background: var(--blue);
     color: #fff;
-    box-shadow: 0 4px 16px var(--blue-glow);
+    box-shadow: 0 4px 12px var(--blue-glow);
   }
   :root[data-theme="dark"] .btn-primary:hover,
   :root:not([data-theme]) .btn-primary:hover {
-    background: linear-gradient(135deg, #6B8FFF, #5A7CF7);
-    box-shadow: 0 6px 24px var(--blue-glow);
+    background: #60a5fa;   /* blue.400 */
+    box-shadow: 0 6px 20px var(--blue-glow);
     transform: translateY(-1px);
   }
 
   :root[data-theme="light"] .btn-primary {
     @apply btn;
-    background: #1A1A1A;
-    color: #FAF9F5;
+    background: #1d4ed8;   /* blue.700 */
+    color: #fff;
     box-shadow: none;
   }
   :root[data-theme="light"] .btn-primary:hover {
-    background: #2E2E2E;
+    background: #2563eb;   /* blue.600 */
     transform: translateY(-1px);
   }
 
@@ -495,7 +518,7 @@
   }
   .btn-secondary:hover {
     background: var(--card-hover);
-    border-color: var(--border-strong);
+    border-color: var(--border-2);
     color: var(--text-1);
   }
 
@@ -514,19 +537,19 @@
   }
   .btn-danger:hover { filter: brightness(1.1); }
 
-  /* ─── Inputs ─────────────────────────────────────────────────────────── */
+  /* ─── Inputs ─────────────────────────────────────────────────────────────── */
   .input {
     width: 100%;
     background: var(--input-bg);
     border: 1px solid var(--input-border);
-    border-radius: var(--r-sm);
-    padding: 9px 12px;
+    border-radius: var(--r-md);   /* 8px — Chakra lg */
+    padding: 9px 12px;    /* Chakra space-3 */
     color: var(--text-1);
     font-family: var(--font-body);
-    font-size: 13px;
+    font-size: 13px;    /* Chakra sm */
     font-weight: 400;
     outline: none;
-    transition: border-color 150ms, box-shadow 150ms;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
     -webkit-appearance: none;
   }
   .input::placeholder { color: var(--text-3); }
@@ -535,7 +558,26 @@
     box-shadow: 0 0 0 3px var(--blue-dim);
   }
 
-  /* ─── Ticker strip ───────────────────────────────────────────────────── */
+  /* ─── Index chip ─────────────────────────────────────────────────────────── */
+  .index-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;   /* Chakra space-2 */
+    padding: 10px 16px;   /* Chakra space-5 / space-4 */
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);   /* 8px — Chakra lg */
+    cursor: pointer;
+    transition: all 150ms ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .index-chip:hover {
+    border-color: var(--border-blue);
+    background: var(--card-hover);
+  }
+
+  /* ─── Ticker strip ───────────────────────────────────────────────────────── */
   .ticker-wrap {
     overflow: hidden;
     position: relative;
@@ -550,26 +592,7 @@
   }
   .ticker-inner:hover { animation-play-state: paused; }
 
-  /* ─── Index chip (Tickertape-style) ─────────────────────────────────── */
-  .index-chip {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 14px;
-    background: var(--card-bg);
-    border: 1px solid var(--border);
-    border-radius: var(--r-md);
-    cursor: pointer;
-    transition: all 150ms;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-  .index-chip:hover {
-    border-color: var(--border-blue);
-    background: var(--card-hover);
-  }
-
-  /* ─── Glow utilities ─────────────────────────────────────────────────── */
+  /* ─── Glow utilities ─────────────────────────────────────────────────────── */
   .glow-blue   { box-shadow: 0 0 20px var(--blue-glow); }
   .glow-green  { box-shadow: 0 0 20px var(--green-glow); }
   .glow-red    { box-shadow: 0 0 20px var(--red-glow); }
@@ -578,14 +601,14 @@
   .text-down { color: var(--red)   !important; }
   .text-flat { color: var(--text-3) !important; }
 
-  /* ─── Stat card animation ────────────────────────────────────────────── */
-  .stat-enter                    { animation: statSlideUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
-  .stat-enter:nth-child(1)       { animation-delay: 0ms; }
-  .stat-enter:nth-child(2)       { animation-delay: 50ms; }
-  .stat-enter:nth-child(3)       { animation-delay: 100ms; }
-  .stat-enter:nth-child(4)       { animation-delay: 150ms; }
+  /* ─── Stat card animations ───────────────────────────────────────────────── */
+  .stat-enter                 { animation: statSlideUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+  .stat-enter:nth-child(1)    { animation-delay: 0ms; }
+  .stat-enter:nth-child(2)    { animation-delay: 50ms; }
+  .stat-enter:nth-child(3)    { animation-delay: 100ms; }
+  .stat-enter:nth-child(4)    { animation-delay: 150ms; }
 
-  /* ─── Loading skeleton ───────────────────────────────────────────────── */
+  /* ─── Loading skeleton ───────────────────────────────────────────────────── */
   .skeleton {
     background: linear-gradient(
       90deg,
@@ -595,11 +618,20 @@
     );
     background-size: 400% 100%;
     animation: shimmer 1.8s ease-in-out infinite;
-    border-radius: var(--r-sm);
+    border-radius: var(--r-sm);   /* 6px — Chakra md */
   }
 }
 
-/* ─── Keyframes ──────────────────────────────────────────────────────────── */
+/* ─── Keyframes ──────────────────────────────────────────────────────────────── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
 @keyframes ticker {
   0%   { transform: translateX(0); }
   100% { transform: translateX(-50%); }
@@ -612,7 +644,7 @@
 
 @keyframes statSlideUp {
   from { opacity: 0; transform: translateY(14px) scale(0.98); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
 
 @keyframes numFlipIn {
@@ -621,11 +653,14 @@
   100% { transform: translateY(0);   opacity: 1; }
 }
 
-@keyframes fadeIn    { from { opacity: 0; }              to { opacity: 1; } }
-@keyframes slideUp   { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes glowPulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
-@keyframes pulse     { 0%, 100% { opacity: 1; }   50% { opacity: 0.4; } }
-@keyframes spin      { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes fadeIn  { from { opacity: 0; }                            to { opacity: 1; } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pulse   { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+@keyframes glowPulse {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 1; }
+}
 
 @keyframes cardGlowPulse {
   0%, 100% { box-shadow: 0 0 0 1px var(--border-blue), 0 0 20px var(--blue-dim); }
