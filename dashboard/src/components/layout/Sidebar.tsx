@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LineChart, LayoutDashboard, Activity, History,
   Shield, BarChart3, Settings2, ChevronLeft,
-  CalendarDays, Sun, Moon, ScanSearch,
+  CalendarDays, Sun, Moon, ScanSearch, LogOut,
 } from "lucide-react";
+import { AUTH_KEY } from "@/pages/Login";
 import { useUIStore } from "@/store/ui";
 import { useLiveStore } from "@/store/live";
 import { useTheme } from "@/hooks/useTheme";
@@ -273,6 +274,29 @@ export function Sidebar() {
                 style={{ fontSize: 11, fontFamily: "Inter, sans-serif", fontWeight: 500 }}
               >
                 {theme === "dark" ? "Light Mode" : "Dark Mode"}
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </button>
+
+        {/* Logout */}
+        <button
+          onClick={() => { localStorage.removeItem(AUTH_KEY); window.location.reload(); }}
+          title="Lock terminal"
+          style={{
+            display: "flex", alignItems: "center", justifyContent: sidebarCollapsed ? "center" : "flex-start",
+            gap: 8, width: "100%", padding: "6px 6px", borderRadius: 8, border: "none",
+            background: "transparent", color: "var(--text-4)", cursor: "pointer", transition: "color 150ms",
+          }}
+          onMouseEnter={e => (e.currentTarget.style.color = "var(--red)")}
+          onMouseLeave={e => (e.currentTarget.style.color = "var(--text-4)")}
+        >
+          <LogOut style={{ width: 13, height: 13 }} />
+          <AnimatePresence>
+            {!sidebarCollapsed && (
+              <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                style={{ fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 500 }}>
+                Lock Terminal
               </motion.span>
             )}
           </AnimatePresence>
