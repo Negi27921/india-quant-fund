@@ -267,11 +267,37 @@ function PositionsTable() {
   );
 }
 
+// ── Date range helpers ────────────────────────────────────────────────────────
+function monthStart(year: number, m: number): string {
+  return `${year}-${String(m).padStart(2, "0")}-01`;
+}
+
+function monthEnd(year: number, m: number): string {
+  const last = new Date(year, m, 0).getDate();
+  return `${year}-${String(m).padStart(2, "0")}-${String(last).padStart(2, "0")}`;
+}
+
+const DATE_INPUT_STYLE: React.CSSProperties = {
+  background: "rgba(0,255,65,0.04)",
+  border: "1px solid rgba(0,255,65,0.3)",
+  color: "var(--text-1)",
+  fontFamily: "var(--font-mono)",
+  borderRadius: 4,
+  padding: "6px 10px",
+  outline: "none",
+  fontSize: 11,
+  cursor: "pointer",
+};
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 export function PnLPage() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
+
+  // Date range filter — default to current month
+  const [rangeStart, setRangeStart] = useState<string>(monthStart(now.getFullYear(), now.getMonth() + 1));
+  const [rangeEnd, setRangeEnd]     = useState<string>(monthEnd(now.getFullYear(), now.getMonth() + 1));
 
   const { data: calData = [] } = usePnLCalendar(year, month);
   const { data: stats }        = usePnLStats();
@@ -288,13 +314,26 @@ export function PnLPage() {
     else setMonth((m) => m + 1);
   };
 
-  // Monthly P&L for the selected month
-  const monthPnL = calData.reduce((s, d) => s + d.pnl, 0);
-  const monthPnLPct = calData.length > 0
-    ? calData.reduce((s, d) => s + d.pnl_pct, 0)
+  // Apply date range filter to calendar data
+  const filteredCalData = calData.filter((d) => {
+    const date = d.date.slice(0, 10);
+    return date >= rangeStart && date <= rangeEnd;
+  });
+
+  // Quick-select a month
+  const selectQuickMonth = (m: number) => {
+    setMonth(m);
+    setRangeStart(monthStart(year, m));
+    setRangeEnd(monthEnd(year, m));
+  };
+
+  // P&L stats computed from filtered range
+  const monthPnL = filteredCalData.reduce((s, d) => s + d.pnl, 0);
+  const monthPnLPct = filteredCalData.length > 0
+    ? filteredCalData.reduce((s, d) => s + d.pnl_pct, 0)
     : 0;
-  const monthWins  = calData.filter((d) => d.pnl > 0).length;
-  const monthLoss  = calData.filter((d) => d.pnl < 0).length;
+  const monthWins  = filteredCalData.filter((d) => d.pnl > 0).length;
+  const monthLoss  = filteredCalData.filter((d) => d.pnl < 0).length;
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -377,8 +416,60 @@ export function PnLPage() {
                 </button>
               </div>
             </div>
+
+            {/* Date range filter */}
+            <div style={{ padding: "10px 16px 0", borderBottom: "1px solid #111" }}>
+              {/* Month quick-select buttons */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
+                {MONTHS.map((label, idx) => {
+                  const m = idx + 1;
+                  const isActive = m === month;
+                  return (
+                    <button
+                      key={label}
+                      onClick={() => selectQuickMonth(m)}
+                      style={{
+                        fontSize: 9,
+                        fontFamily: "var(--font-mono)",
+                        padding: "3px 7px",
+                        borderRadius: 3,
+                        border: isActive ? "1px solid rgba(0,255,65,0.6)" : "1px solid rgba(0,255,65,0.2)",
+                        background: isActive ? "rgba(0,255,65,0.15)" : "rgba(0,255,65,0.03)",
+                        color: isActive ? "#00FF41" : "#555",
+                        cursor: "pointer",
+                        transition: "all 80ms",
+                        letterSpacing: "0.04em",
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Date range inputs */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 10 }}>
+                <span style={{ fontSize: 9, color: "#555", fontFamily: "var(--font-mono)", letterSpacing: "0.06em" }}>FROM</span>
+                <input
+                  type="date"
+                  value={rangeStart}
+                  onChange={(e) => setRangeStart(e.target.value)}
+                  style={DATE_INPUT_STYLE}
+                />
+                <span style={{ fontSize: 9, color: "#555", fontFamily: "var(--font-mono)", letterSpacing: "0.06em" }}>TO</span>
+                <input
+                  type="date"
+                  value={rangeEnd}
+                  onChange={(e) => setRangeEnd(e.target.value)}
+                  style={DATE_INPUT_STYLE}
+                />
+                <span style={{ fontSize: 9, color: "#444", fontFamily: "var(--font-mono)", marginLeft: 4 }}>
+                  {filteredCalData.length} trading day{filteredCalData.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+            </div>
+
             <div className="p-4">
-              <CalendarHeatmap year={year} month={month} data={calData} />
+              <CalendarHeatmap year={year} month={month} data={filteredCalData} />
               {/* Month stats below calendar */}
               <div className="flex items-center justify-between mt-4 pt-3" style={{ borderTop: "1px solid #111" }}>
                 {[

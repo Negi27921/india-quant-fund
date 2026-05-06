@@ -35,3 +35,4 @@ dashboard/.vercel/
 
 # macOS
 .DS_Store
+.vercel

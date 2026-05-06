@@ -1,25 +1,26 @@
-"""AI Chat endpoint — stock research assistant powered by DeepSeek/Anthropic."""
+"""AI Chat endpoint — stock research assistant powered by Groq."""
 from __future__ import annotations
 
 import os
-import time
-from datetime import datetime
-from typing import Any
 from zoneinfo import ZoneInfo
 
+import httpx
 from fastapi import APIRouter
 from pydantic import BaseModel
 
 router = APIRouter()
 IST = ZoneInfo("Asia/Kolkata")
 
-_chat_cache: dict[str, tuple[float, str]] = {}
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL = "llama-3.1-70b-versatile"
 
 
 class ChatMessage(BaseModel):
     message: str
     symbol: str | None = None
     history: list[dict] | None = None  # [{"role": "user"|"assistant", "content": "..."}]
+    pdf_text: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -67,80 +68,6 @@ Sector: {info.get('sector', 'N/A')} | Industry: {info.get('industry', 'N/A')}
         return f"Stock: {symbol.upper()} (NSE) - Live data unavailable"
 
 
-def _get_bse_filings_context(symbol: str) -> str:
-    """Fetch recent BSE filings for context."""
-    try:
-        import urllib.request
-        import json
-        # Try to get BSE scrip code first via NSE search
-        url = f"https://api.bseindia.com/BseIndiaAPI/api/AnnSubCategoryGetData/w?pageno=1&strCat=-1&strPrevDate=&strScrip=&strSearch=P&strToDate=&strType=C&subcategory=-1"
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.bseindia.com/"})
-        with urllib.request.urlopen(req, timeout=6) as r:
-            data = json.loads(r.read())
-
-        items = data.get("Table", [])
-        relevant = [i for i in items if symbol.upper() in i.get("SLONGNAME", "").upper() or symbol.upper() in str(i.get("SCRIP_CD", ""))][:5]
-
-        if not relevant:
-            return ""
-
-        context = f"\nRecent BSE Filings for {symbol.upper()}:\n"
-        for item in relevant:
-            context += f"- [{item.get('CATEGORYNAME','')}] {item.get('HEADLINE','')} ({item.get('NEWS_DT','')[:10]})\n"
-        return context
-    except Exception:
-        return ""
-
-
-def _call_llm(messages: list[dict], system: str) -> str:
-    """Call LLM — tries DeepSeek first, falls back to Anthropic."""
-    # Try DeepSeek
-    deepseek_key = os.getenv("DEEPSEEK_API_KEY", "")
-    if deepseek_key:
-        try:
-            import httpx
-            resp = httpx.post(
-                "https://api.deepseek.com/chat/completions",
-                headers={"Authorization": f"Bearer {deepseek_key}", "Content-Type": "application/json"},
-                json={
-                    "model": "deepseek-chat",
-                    "messages": [{"role": "system", "content": system}] + messages,
-                    "max_tokens": 800,
-                    "temperature": 0.3,
-                },
-                timeout=20,
-            )
-            resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
-        except Exception:
-            pass
-
-    # Try Anthropic
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if anthropic_key:
-        try:
-            import httpx
-            resp = httpx.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={"x-api-key": anthropic_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"},
-                json={
-                    "model": "claude-haiku-4-5-20251001",
-                    "system": system,
-                    "messages": messages,
-                    "max_tokens": 800,
-                },
-                timeout=20,
-            )
-            resp.raise_for_status()
-            return resp.json()["content"][0]["text"]
-        except Exception:
-            pass
-
-    # No LLM available — intelligent fallback
-    last_msg = messages[-1]["content"] if messages else ""
-    return f"I'm your IQF Market Assistant. You asked: '{last_msg[:100]}...'\n\nI need an API key (DEEPSEEK_API_KEY or ANTHROPIC_API_KEY) to provide AI-powered analysis. Please set one in your environment.\n\nFor now, use the market data panels on the left for live indices, FII/DII flows, and filings."
-
-
 SYSTEM_PROMPT = """You are the IQF Market Intelligence Assistant — a world-class AI analyst specialising in Indian stock markets (NSE & BSE).
 
 You help users with:
@@ -169,9 +96,21 @@ Rules:
 async def chat_message(body: ChatMessage):
     """Process a chat message and return AI analysis."""
     import asyncio
-    loop = asyncio.get_event_loop()
     from concurrent.futures import ThreadPoolExecutor
+    loop = asyncio.get_event_loop()
     executor = ThreadPoolExecutor(max_workers=2)
+
+    # No API key — return helpful fallback immediately
+    if not GROQ_API_KEY:
+        return ChatResponse(
+            response=(
+                "I'm your IQF Market Assistant. To enable AI-powered analysis, "
+                "please set the GROQ_API_KEY environment variable (free at console.groq.com).\n\n"
+                "For now, use the market data panels for live indices, FII/DII flows, and filings."
+            ),
+            sources=["IQF Market Intelligence"],
+            symbol=None,
+        )
 
     symbol = (body.symbol or "").strip().upper().replace(".NS", "").replace(".BO", "")
     user_msg = body.message.strip()
@@ -183,7 +122,6 @@ async def chat_message(body: ChatMessage):
     # Try to extract symbol from message if not provided
     if not symbol:
         import re
-        # Look for NSE symbols in the message (all-caps 2-10 char words)
         candidates = re.findall(r'\b([A-Z]{2,10})\b', user_msg.upper())
         common_stops = {"THE", "AND", "FOR", "ARE", "YOU", "NSE", "BSE", "FII", "DII", "IPO", "AGM", "EPS", "ROE", "PAT", "NII", "NIM", "AUM", "SEBI"}
         for c in candidates:
@@ -192,26 +130,25 @@ async def chat_message(body: ChatMessage):
                 break
 
     if symbol:
-        # Fetch stock context in parallel with filing context
         def _get_ctx():
-            stock_ctx = _get_stock_context(symbol)
-            filing_ctx = _get_bse_filings_context(symbol)
-            return stock_ctx, filing_ctx
+            return _get_stock_context(symbol)
 
         try:
-            stock_context, filing_context = await loop.run_in_executor(executor, _get_ctx)
+            stock_context = await loop.run_in_executor(executor, _get_ctx)
             if stock_context:
                 context_parts.append(stock_context)
                 sources.append(f"NSE Live Data: {symbol}")
-            if filing_context:
-                context_parts.append(filing_context)
-                sources.append("BSE Filings Feed")
         except Exception:
             pass
 
+    # Prepend PDF document context if provided
+    if body.pdf_text:
+        context_parts.insert(0, f"Document context:\n{body.pdf_text[:4000]}")
+        sources.append("Uploaded Document")
+
     # Build message history
     history = body.history or []
-    messages = []
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     for h in history[-6:]:  # Last 6 turns for context
         if h.get("role") in ("user", "assistant") and h.get("content"):
             messages.append({"role": h["role"], "content": h["content"]})
@@ -223,16 +160,37 @@ async def chat_message(body: ChatMessage):
 
     messages.append({"role": "user", "content": full_msg})
 
-    # Call LLM
-    def _call():
-        return _call_llm(messages, SYSTEM_PROMPT)
-
-    response_text = await loop.run_in_executor(executor, _call)
+    # Call Groq API
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                GROQ_URL,
+                headers={
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": GROQ_MODEL,
+                    "messages": messages,
+                    "max_tokens": 1200,
+                    "temperature": 0.3,
+                },
+            )
+            data = resp.json()
+            reply = data["choices"][0]["message"]["content"]
+    except Exception as e:
+        reply = (
+            f"I encountered a temporary issue connecting to the AI service. "
+            f"Please try again in a moment.\n\n"
+            f"_(Error: {type(e).__name__})_\n\n"
+            f"In the meantime, the live market panels on this page have indices, "
+            f"FII/DII flows, filings, and corporate actions."
+        )
 
     if not sources:
         sources = ["IQF Market Intelligence"]
 
-    return ChatResponse(response=response_text, sources=sources, symbol=symbol or None)
+    return ChatResponse(response=reply, sources=sources, symbol=symbol or None)
 
 
 @router.get("/suggestions")

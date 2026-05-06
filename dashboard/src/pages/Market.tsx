@@ -166,7 +166,25 @@ const FILING_COLORS: Record<string, string> = {
 };
 
 function FilingsPanel() {
-  const { data: filings, isLoading, refetch, isFetching } = useFilings(20);
+  const { data: filings, isLoading, refetch, isFetching } = useFilings(50);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [catFilter, setCatFilter] = useState("ALL");
+
+  const categories = ["ALL", ...Array.from(new Set((filings ?? []).map((f: Filing) => f.category).filter(Boolean)))];
+  const filtered = (filings ?? []).filter((f: Filing) => {
+    if (catFilter !== "ALL" && f.category !== catFilter) return false;
+    if (fromDate && f.dt && f.dt < fromDate) return false;
+    if (toDate && f.dt && f.dt.slice(0, 10) > toDate) return false;
+    return true;
+  });
+
+  const inputStyle: React.CSSProperties = {
+    background: "var(--surface-2)", border: "1px solid var(--border)",
+    borderRadius: 4, padding: "3px 7px", color: "var(--text-1)",
+    fontFamily: "var(--font-mono)", fontSize: 10, outline: "none",
+    colorScheme: "dark",
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -181,20 +199,19 @@ function FilingsPanel() {
             display: "inline-block", boxShadow: "0 0 6px var(--green)",
             animation: "pulse-dot 2s infinite",
           }} />
-          {/* Label: uppercase 10px tracking */}
           <span style={{
             fontSize: 10, fontFamily: "var(--font-body)", fontWeight: 600,
             color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.07em",
           }}>
             BSE · NSE Real-Time
           </span>
-          {filings && filings.length > 0 && (
+          {filtered.length > 0 && (
             <span style={{
               fontSize: 10, background: "var(--green-dim)", color: "var(--green)",
               padding: "1px 7px", borderRadius: 9999, fontWeight: 700,
               border: "1px solid var(--border-green)",
             }}>
-              {filings.length}
+              {filtered.length}
             </span>
           )}
         </div>
@@ -209,6 +226,36 @@ function FilingsPanel() {
         </button>
       </div>
 
+      {/* Date + category filter row */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
+        padding: "6px 14px", borderBottom: "1px solid var(--border-2)", flexShrink: 0,
+        background: "var(--surface-2)",
+      }}>
+        <Filter style={{ width: 10, height: 10, color: "var(--text-4)", flexShrink: 0 }} />
+        <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} style={inputStyle} title="From date" />
+        <span style={{ fontSize: 10, color: "var(--text-4)" }}>→</span>
+        <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} style={inputStyle} title="To date" />
+        {(fromDate || toDate) && (
+          <button onClick={() => { setFromDate(""); setToDate(""); }}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-4)", fontSize: 10, padding: 0 }}>
+            ✕
+          </button>
+        )}
+        <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+          {categories.slice(0, 6).map(cat => (
+            <button key={cat} onClick={() => setCatFilter(cat)} style={{
+              padding: "2px 7px", borderRadius: 9999, fontSize: 9, fontWeight: 700,
+              fontFamily: "var(--font-body)", cursor: "pointer", border: "1px solid",
+              background: catFilter === cat ? "var(--blue-dim)" : "transparent",
+              borderColor: catFilter === cat ? "var(--border-blue)" : "var(--border)",
+              color: catFilter === cat ? "var(--blue)" : "var(--text-4)",
+              transition: "all 120ms",
+            }}>{cat === "ALL" ? "All" : cat.slice(0, 6)}</button>
+          ))}
+        </div>
+      </div>
+
       {/* List */}
       <div style={{ flex: 1, overflowY: "auto" }}>
         {isLoading ? (
@@ -219,14 +266,13 @@ function FilingsPanel() {
             </div>
           ))
         ) : !filings || filings.length === 0 ? (
-          /* Empty state: icon 36px, text 13px weight 500 */
           <div style={{ padding: 32, textAlign: "center" }}>
             <div style={{ fontSize: 36, marginBottom: 8 }}>📋</div>
             <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>No filings data</div>
             <div style={{ fontSize: 12, color: "var(--text-4)", marginTop: 4, fontFamily: "var(--font-body)" }}>BSE API may be rate-limited</div>
           </div>
         ) : (
-          filings.map((f: Filing, i: number) => {
+          filtered.map((f: Filing, i: number) => {
             const color = FILING_COLORS[f.category] || "var(--text-3)";
             return (
               <motion.div
@@ -742,13 +788,29 @@ function CorporateActionsPanel() {
             onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
           >
             <div style={{ flex: 1, minWidth: 0 }}>
-              {/* Company: 12px semibold */}
-              <div style={{
-                fontSize: 12, fontFamily: "var(--font-body)", fontWeight: 700,
-                color: "var(--text-1)", overflow: "hidden", textOverflow: "ellipsis",
-                whiteSpace: "nowrap", marginBottom: 2,
-              }}>
-                {ca.company}
+              {/* Company + symbol badge */}
+              <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 2, flexWrap: "wrap" }}>
+                <div style={{
+                  fontSize: 12, fontFamily: "var(--font-body)", fontWeight: 700,
+                  color: "var(--text-1)", overflow: "hidden", textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}>
+                  {ca.company}
+                </div>
+                {ca.symbol && (
+                  <span style={{
+                    background: "var(--surface-3)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 3,
+                    padding: "1px 6px",
+                    fontSize: 9,
+                    fontFamily: "monospace",
+                    color: "var(--text-2)",
+                    flexShrink: 0,
+                  }}>
+                    {ca.symbol}
+                  </span>
+                )}
               </div>
               {/* Ex-date: 10px text-3 mono */}
               <div style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-3)" }}>
@@ -866,6 +928,80 @@ const INDEX_KEYS: { key: string; label: string }[] = [
   { key: "niftyit",    label: "NIFTY IT" },
 ];
 
+function IndexTable({ indices, loading }: { indices: unknown; loading: boolean }) {
+  const idxMap = indices as Record<string, IndexData> | undefined;
+  return (
+    <div style={{
+      background: "var(--surface)", border: "1px solid var(--border)",
+      borderRadius: 8, overflow: "hidden",
+    }}>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead>
+          <tr style={{ borderBottom: "1px solid var(--border)" }}>
+            {["Index", "Price", "Chg %", "Chg Pts", "Prev Close", "Day High", "Day Low"].map(h => (
+              <th key={h} style={{
+                padding: "7px 14px", textAlign: h === "Index" ? "left" : "right",
+                fontSize: 8.5, fontWeight: 700, color: "var(--text-3)",
+                letterSpacing: "0.12em", textTransform: "uppercase",
+                fontFamily: "var(--font-body)", background: "var(--surface-2)",
+              }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {INDEX_KEYS.map(({ key, label }) => {
+            const d = idxMap?.[key];
+            const up = (d?.change_pct ?? 0) >= 0;
+            const col = up ? "var(--green)" : "var(--red)";
+            const chgPts = d ? (d.price * d.change_pct / (100 + d.change_pct)).toFixed(2) : "—";
+            return (
+              <tr key={key} style={{ borderBottom: "1px solid var(--border-2)", transition: "background 80ms" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--card-hover)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+              >
+                <td style={{ padding: "8px 14px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                    <span style={{ width: 3, height: 18, borderRadius: 9999, background: col, flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-body)" }}>{label}</span>
+                  </div>
+                </td>
+                {loading || !d ? (
+                  [0,1,2,3,4,5].map(i => (
+                    <td key={i} style={{ padding: "8px 14px", textAlign: "right" }}>
+                      <div className="skeleton" style={{ height: 10, width: 55, borderRadius: 3, marginLeft: "auto" }} />
+                    </td>
+                  ))
+                ) : (
+                  <>
+                    <td style={{ padding: "8px 14px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--text-1)" }}>
+                      {d.price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </td>
+                    <td style={{ padding: "8px 14px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: col }}>
+                      {up ? "+" : ""}{d.change_pct.toFixed(2)}%
+                    </td>
+                    <td style={{ padding: "8px 14px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 11, color: col }}>
+                      {up ? "+" : ""}{chgPts}
+                    </td>
+                    <td style={{ padding: "8px 14px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--text-3)" }}>
+                      {d.prev_close ? d.prev_close.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "—"}
+                    </td>
+                    <td style={{ padding: "8px 14px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--green)" }}>
+                      {d.day_high ? d.day_high.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "—"}
+                    </td>
+                    <td style={{ padding: "8px 14px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--red)" }}>
+                      {d.day_low ? d.day_low.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "—"}
+                    </td>
+                  </>
+                )}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function MarketPage() {
   const { data: indices, isLoading: idxLoading } = useMarketIndices();
   const { data: sectors, isLoading: sectorsLoading } = useMarketSectors();
@@ -889,7 +1025,7 @@ export function MarketPage() {
         overflowY: "auto",
       }}>
 
-        {/* ── Index chips row ── gap: 12px, marginBottom implicit via gap */}
+        {/* ── Index chips row ── gap: 12px */}
         <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 2 }}>
           {INDEX_KEYS.map(({ key, label }, idx) => (
             <motion.div key={key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.06 }}>
@@ -900,6 +1036,11 @@ export function MarketPage() {
             </motion.div>
           ))}
         </div>
+
+        {/* ── Index detail table ── */}
+        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+          <IndexTable indices={indices} loading={idxLoading} />
+        </motion.div>
 
         {/* ── Main grid: 3 columns, gap 16px (Chakra space-4) ── */}
         <div style={{

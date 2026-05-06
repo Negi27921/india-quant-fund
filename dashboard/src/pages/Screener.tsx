@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ScanSearch, RefreshCw, CheckCircle2, XCircle, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Filter, Loader2, Rocket, Layers, Zap, ArrowUpRight, GitMerge, BarChart3, Globe } from "lucide-react";
+import { ScanSearch, RefreshCw, CheckCircle2, XCircle, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Filter, Loader2, Rocket, Layers, Zap, ArrowUpRight, GitMerge, BarChart3, Globe, ExternalLink } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { useScreener, useTriggerScan, type ScreenerResult } from "@/api/market-queries";
 import { useQueryClient } from "@tanstack/react-query";
@@ -160,8 +160,35 @@ function StockRow({ r, strategy }: { r: ScreenerResult; strategy: Strategy }) {
           </div>
         </td>
 
+        {/* Chart / TradingView */}
+        <td style={{ padding: "10px 12px", textAlign: "right" }} onClick={e => e.stopPropagation()}>
+          <a
+            href={`https://www.tradingview.com/chart/?symbol=NSE:${r.symbol}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 4,
+              padding: "4px 9px", borderRadius: 5,
+              background: "var(--blue-dim)", border: "1px solid var(--border-blue)",
+              color: "var(--blue)", fontSize: 9.5, fontWeight: 700,
+              fontFamily: "var(--font-body)", textDecoration: "none",
+              letterSpacing: "0.05em",
+              transition: "all 120ms",
+            }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLAnchorElement).style.background = "rgba(0,229,53,0.18)";
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLAnchorElement).style.background = "var(--blue-dim)";
+            }}
+          >
+            <ExternalLink style={{ width: 10, height: 10 }} />
+            TV
+          </a>
+        </td>
+
         {/* Expand */}
-        <td style={{ padding: "10px 14px", textAlign: "right" }}>
+        <td style={{ padding: "10px 10px", textAlign: "right" }}>
           {expanded ? <ChevronUp style={{ width: 14, height: 14, color: "var(--text-3)" }} /> : <ChevronDown style={{ width: 14, height: 14, color: "var(--text-4)" }} />}
         </td>
       </tr>
@@ -307,8 +334,15 @@ export function ScreenerPage() {
               <ScanSearch style={{ width: 24, height: 24, color: "var(--blue)" }} />
               Stock Screener
             </h1>
-            <div style={{ fontSize: 12, color: "var(--text-3)", fontFamily: "var(--font-body)", marginTop: 4 }}>
-              {data?.universe_size ?? 140}+ NSE stocks · SwingAlgo SEPA framework · {data?.last_scan ? `Last scan: ${data.last_scan}` : "Cache warming..."}
+            <div style={{ fontSize: 11.5, color: "var(--text-3)", fontFamily: "var(--font-body)", marginTop: 4 }}>
+              Scanning <span style={{ color: "var(--blue)", fontWeight: 700 }}>{data?.universe_size ?? "—"}</span> stocks
+              {data ? (
+                <> · <span style={{ color: "var(--green)", fontWeight: 600 }}>{strong.length} Strong</span>
+                  {" · "}<span style={{ color: "var(--amber)", fontWeight: 600 }}>{moderate.length} Moderate</span>
+                  {" · "}{results.length - strong.length - moderate.length} Weak matched
+                </>
+              ) : null}
+              {data?.last_scan ? <> · Last scan: {data.last_scan}</> : " · Cache warming..."}
             </div>
           </div>
 

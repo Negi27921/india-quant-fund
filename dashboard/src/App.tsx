@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { Layout } from "@/components/layout/Layout";
@@ -11,6 +11,7 @@ import { RiskPage } from "@/pages/Risk";
 import { StrategiesPage } from "@/pages/Strategies";
 import { SettingsPage } from "@/pages/Settings";
 import { ScreenerPage } from "@/pages/Screener";
+import { LoginPage, AUTH_KEY } from "@/pages/Login";
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -28,22 +29,26 @@ class ErrorBoundary extends React.Component<
       return (
         <div style={{
           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          height: "100vh", background: "#000", color: "#fff", gap: 16,
-          fontFamily: "Inter, sans-serif", padding: 32, textAlign: "center",
+          height: "100vh", background: "#000", color: "#00ff41", gap: 16,
+          fontFamily: '"JetBrains Mono", monospace', padding: 32, textAlign: "center",
         }}>
-          <div style={{ fontSize: 48, marginBottom: 8 }}>⚠️</div>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>Something went wrong</div>
-          <div style={{ fontSize: 13, color: "#888", maxWidth: 480, lineHeight: 1.6 }}>
+          <pre style={{ color: "#ff2244", fontSize: 32, margin: 0 }}>// ERROR</pre>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#00ff41" }}>SYSTEM EXCEPTION</div>
+          <div style={{ fontSize: 11, color: "#00aa28", maxWidth: 480, lineHeight: 1.6 }}>
             {this.state.error.message}
           </div>
           <button
             onClick={() => { this.setState({ error: null }); window.location.href = "/"; }}
             style={{
-              marginTop: 8, padding: "10px 24px", background: "#5B7FFF", color: "#fff",
-              border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600,
+              marginTop: 8, padding: "10px 24px",
+              background: "transparent", color: "#00ff41",
+              border: "1px solid #00ff41", borderRadius: 2,
+              cursor: "pointer", fontSize: 11, fontWeight: 700,
+              fontFamily: '"JetBrains Mono", monospace',
+              letterSpacing: "0.15em",
             }}
           >
-            Reload Dashboard
+            [ RESTART ]
           </button>
         </div>
       );
@@ -53,6 +58,12 @@ class ErrorBoundary extends React.Component<
 }
 
 export default function App() {
+  const [authed, setAuthed] = useState(() => !!localStorage.getItem(AUTH_KEY));
+
+  if (!authed) {
+    return <LoginPage onAuth={() => setAuthed(true)} />;
+  }
+
   return (
     <ErrorBoundary>
       <BrowserRouter>
