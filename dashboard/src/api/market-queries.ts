@@ -178,3 +178,60 @@ export const useAdvancesDeclines = () =>
 
 export const useResultsCalendar = () =>
   useQuery({ queryKey: ["market", "results-calendar"], queryFn: () => api.get<ResultsMeeting[]>("/market/results-calendar"), staleTime: 30 * 60 * 1000 });
+
+// ── Screener ──────────────────────────────────────────────────────────────────
+export interface ScreenerResult {
+  symbol: string;
+  ticker: string;
+  ltp: number;
+  change_pct: number;
+  rsi: number;
+  ema_10: number;
+  ema_20: number;
+  confidence: number;
+  matched_conditions: string[];
+  failed_conditions: string[];
+  sl: number;
+  sl_pct: number;
+  tp1: number;
+  tp2: number;
+}
+
+export interface ScreenerResponse {
+  results: ScreenerResult[];
+  total: number;
+  strategy: string;
+  is_scanning: boolean;
+  last_scan: string | null;
+  universe_size: number;
+}
+
+export const useScreener = (
+  strategy: "vcp" | "ipo_base" | "rocket_base",
+  minConfidence: number,
+  minPrice: number,
+  maxPrice: number,
+  symbol: string,
+) =>
+  useQuery<ScreenerResponse>({
+    queryKey: ["screener", strategy, minConfidence, minPrice, maxPrice, symbol],
+    queryFn: () => {
+      const params = new URLSearchParams({
+        strategy,
+        min_confidence: String(minConfidence),
+        min_price: String(minPrice),
+        max_price: String(maxPrice),
+        symbol,
+      });
+      return api.get<ScreenerResponse>(`/screener/results?${params}`);
+    },
+    staleTime: 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
+  });
+
+export const useTriggerScan = () => {
+  const triggerScan = async (strategy: "vcp" | "ipo_base" | "rocket_base") => {
+    await api.post(`/screener/scan?strategy=${strategy}`);
+  };
+  return triggerScan;
+};

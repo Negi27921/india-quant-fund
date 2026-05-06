@@ -10,6 +10,7 @@ import { TradesPage } from "@/pages/Trades";
 import { RiskPage } from "@/pages/Risk";
 import { StrategiesPage } from "@/pages/Strategies";
 import { SettingsPage } from "@/pages/Settings";
+import { ScreenerPage } from "@/pages/Screener";
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -59,6 +60,7 @@ export default function App() {
           <Routes>
             <Route element={<Layout />}>
               <Route index element={<MarketPage />} />
+              <Route path="/screener" element={<ScreenerPage />} />
               <Route path="/portfolio" element={<PortfolioPage />} />
               <Route path="/pnl" element={<PnLPage />} />
               <Route path="/live" element={<LivePnLPage />} />

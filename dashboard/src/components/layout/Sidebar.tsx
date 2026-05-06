@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LineChart, LayoutDashboard, Activity, History,
   Shield, BarChart3, Settings2, ChevronLeft,
-  CalendarDays, Sun, Moon,
+  CalendarDays, Sun, Moon, ScanSearch,
 } from "lucide-react";
 import { useUIStore } from "@/store/ui";
 import { useLiveStore } from "@/store/live";
@@ -11,6 +11,7 @@ import { useTheme } from "@/hooks/useTheme";
 
 const NAV = [
   { to: "/",           icon: LineChart,       label: "Market",     end: true },
+  { to: "/screener",   icon: ScanSearch,      label: "Screener",   end: false },
   { to: "/portfolio",  icon: LayoutDashboard, label: "Portfolio",  end: false },
   { to: "/pnl",        icon: CalendarDays,    label: "P&L",        end: false },
   { to: "/live",       icon: Activity,        label: "Live Feed",  end: false },
