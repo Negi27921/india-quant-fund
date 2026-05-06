@@ -22,43 +22,16 @@ const NAV = [
   { to: "/settings",   icon: Settings2,       label: "Settings",   end: false },
 ];
 
-/* ─── Logo SVG — theme-aware ─────────────────────────────────────────────── */
-function Logo({ size = 38, theme = "dark" }: { size?: number; theme?: string }) {
-  const isDark = theme !== "light";
-  const g1a = isDark ? "#7B9FFF" : "#8FA87E";
-  const g1b = isDark ? "#5B7FFF" : "#5D7550";
-  const g1c = isDark ? "#8B5CF6" : "#946E12";
-  const bgA = isDark ? "#09090F" : "#FAF9F5";
-  const bgAOp = isDark ? "0.95" : "1";
-  const bgB = isDark ? "#161625" : "#F0EEE6";
-  const bgBOp = isDark ? "0.9" : "1";
-  const id = isDark ? "dark" : "light";
-
+/* ─── Logo — favicon.svg ─────────────────────────────────────────────────── */
+function Logo({ size = 38 }: { size?: number; theme?: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id={`logo-g1-${id}`} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%"   stopColor={g1a} />
-          <stop offset="50%"  stopColor={g1b} />
-          <stop offset="100%" stopColor={g1c} />
-        </linearGradient>
-        <linearGradient id={`logo-g2-${id}`} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%"   stopColor={bgA} stopOpacity={bgAOp} />
-          <stop offset="100%" stopColor={bgB} stopOpacity={bgBOp} />
-        </linearGradient>
-        <filter id={`logo-glow-${id}`}>
-          <feGaussianBlur stdDeviation="1.5" result="blur" />
-          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-      </defs>
-      <path d="M18 2 L34 18 L18 34 L2 18 Z" fill={`url(#logo-g2-${id})`} stroke={`url(#logo-g1-${id})`} strokeWidth="1.4"/>
-      <path d="M18 8 L28 18 L18 28 L8 18 Z" fill="none" stroke={`url(#logo-g1-${id})`} strokeWidth="0.6" strokeOpacity="0.4"/>
-      <text x="18" y="22" textAnchor="middle"
-        fontFamily="Inter, sans-serif" fontWeight="800" fontSize="11"
-        fill={`url(#logo-g1-${id})`} letterSpacing="-0.5"
-        filter={`url(#logo-glow-${id})`}
-      >OP</text>
-    </svg>
+    <img
+      src="/favicon.svg"
+      width={size}
+      height={size}
+      alt="IQF"
+      style={{ display: "block", flexShrink: 0 }}
+    />
   );
 }
 
