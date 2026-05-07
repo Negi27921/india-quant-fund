@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: india-quant-fund-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: ENV
+        value: production
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: PAPER_TRADING
+        value: "true"
