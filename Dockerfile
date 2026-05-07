@@ -2,7 +2,6 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system deps needed by lxml / pandas
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ libxml2-dev libxslt-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -19,8 +18,8 @@ COPY strategies/ ./strategies/
 COPY agents/ ./agents/
 
 ENV PYTHONPATH=/app
-ENV PORT=8000
+ENV PORT=7860
 
-EXPOSE 8000
+EXPOSE 7860
 
-CMD uvicorn api.main:app --host 0.0.0.0 --port ${PORT}
+CMD uvicorn api.main:app --host 0.0.0.0 --port 7860

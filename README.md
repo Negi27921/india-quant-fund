@@ -1,3 +1,13 @@
+---
+title: India Quant Fund API
+emoji: 📈
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: true
+app_port: 7860
+---
+
 # India Quant Fund — System Architecture
 
 > Production-grade automated hedge fund for Indian equity markets. Full-stack FastAPI + React/TypeScript system with real-time data feeds, multi-strategy screener, risk management, and AI-assisted trade analysis.
