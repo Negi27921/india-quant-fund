@@ -324,7 +324,7 @@ export function ScreenerPage() {
 
   return (
     <div style={{ background: "var(--bg)", minHeight: "100vh" }}>
-      <Header title="Screener" subtitle="SwingAlgo SEPA · VCP · IPO Base · Rocket Base" />
+      <Header title="Screener" />
 
       <div style={{ padding: "20px 24px", maxWidth: 1400, margin: "0 auto" }}>
         {/* Page header */}

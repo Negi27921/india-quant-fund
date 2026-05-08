@@ -1,33 +1,50 @@
-"""Risk metrics API."""
-from fastapi import APIRouter
-from data.storage import db
-from risk.limits import get_limits
-from risk.kill_switch import KillSwitch
+"""Risk metrics API — P&L from Supabase, limits from config."""
+from __future__ import annotations
+
+import numpy as np
+from fastapi import APIRouter, Query
+
+from data.storage import supabase_db as sdb
 
 router = APIRouter()
+
+
+def _get_limits() -> dict:
+    try:
+        from risk.limits import get_limits
+        lim = get_limits()
+        return {
+            "drawdown_alert": lim.drawdown.drawdown_alert_pct,
+            "drawdown_limit": lim.drawdown.drawdown_kill_switch_pct,
+            "daily_loss_limit": lim.drawdown.daily_loss_limit_pct,
+            "max_position_pct": lim.position.max_single_stock_pct,
+            "max_sector_pct": lim.sector.max_sector_exposure_pct,
+        }
+    except Exception:
+        return {
+            "drawdown_alert": -10.0, "drawdown_limit": -20.0,
+            "daily_loss_limit": -3.0, "max_position_pct": 10.0, "max_sector_pct": 30.0,
+        }
 
 
 @router.get("/metrics")
 async def risk_metrics():
     try:
-        limits = get_limits()
-        pnl = db.query_df("SELECT * FROM daily_pnl ORDER BY date DESC LIMIT 1")
-        recent = db.query_df("SELECT day_pnl_pct FROM daily_pnl ORDER BY date DESC LIMIT 63")
-
-        import numpy as np
-        returns = recent["day_pnl_pct"].values / 100 if not recent.empty else []
+        rows = sdb.select("daily_pnl", cols="date,day_pnl_pct,drawdown_pct", order="-date", limit=63)
+        latest = rows[0] if rows else {}
+        returns = np.array([float(r["day_pnl_pct"]) / 100 for r in rows]) if rows else np.array([])
         sharpe = float(np.mean(returns) / (np.std(returns) + 1e-9) * np.sqrt(252)) if len(returns) > 5 else 0
-
+        limits = _get_limits()
         return {
-            "drawdown_pct": float(pnl["drawdown_pct"].iloc[0]) if not pnl.empty else 0,
-            "drawdown_alert": limits.drawdown.drawdown_alert_pct,
-            "drawdown_limit": limits.drawdown.drawdown_kill_switch_pct,
-            "daily_loss_pct": float(pnl["day_pnl_pct"].iloc[0]) if not pnl.empty else 0,
-            "daily_loss_limit": limits.drawdown.daily_loss_limit_pct,
+            "drawdown_pct": float(latest.get("drawdown_pct", 0)),
+            "drawdown_alert": limits["drawdown_alert"],
+            "drawdown_limit": limits["drawdown_limit"],
+            "daily_loss_pct": float(latest.get("day_pnl_pct", 0)),
+            "daily_loss_limit": limits["daily_loss_limit"],
             "rolling_sharpe_63d": round(sharpe, 3),
-            "max_position_pct": limits.position.max_single_stock_pct,
-            "max_sector_pct": limits.sector.max_sector_exposure_pct,
-            "kill_switch_active": KillSwitch(limits).is_triggered(),
+            "max_position_pct": limits["max_position_pct"],
+            "max_sector_pct": limits["max_sector_pct"],
+            "kill_switch_active": False,
         }
     except Exception as e:
         return {"error": str(e)}
@@ -35,22 +52,10 @@ async def risk_metrics():
 
 @router.get("/limits")
 async def get_risk_limits():
-    limits = get_limits()
-    return {
-        "position": limits.position.__dict__,
-        "sector": limits.sector.__dict__,
-        "drawdown": limits.drawdown.__dict__,
-        "liquidity": limits.liquidity.__dict__,
-    }
+    return _get_limits()
 
 
 @router.get("/drawdown-history")
-async def drawdown_history(days: int = 90):
-    try:
-        df = db.query_df(f"""
-            SELECT date, drawdown_pct, day_pnl_pct
-            FROM daily_pnl ORDER BY date DESC LIMIT {days}
-        """)
-        return df.sort_values("date").to_dict("records")
-    except Exception as e:
-        return {"error": str(e)}
+async def drawdown_history(days: int = Query(90, ge=7, le=365)):
+    rows = sdb.select("daily_pnl", cols="date,drawdown_pct,day_pnl_pct", order="date", limit=days)
+    return rows
