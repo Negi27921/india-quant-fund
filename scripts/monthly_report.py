@@ -30,11 +30,19 @@ RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "90"))  # 3 months
 # ── Data helpers ───────────────────────────────────────────────────────────────
 
 def fetch_pnl_rows() -> list[dict]:
-    return sdb.select("daily_pnl", cols="date,day_pnl,day_pnl_pct,portfolio_value", order="date", limit=1000)
+    try:
+        return sdb.select("daily_pnl", cols="date,day_pnl,day_pnl_pct,portfolio_value", order="date", limit=1000)
+    except Exception as e:
+        print(f"  daily_pnl not available: {e}")
+        return []
 
 
 def fetch_trade_rows() -> list[dict]:
-    return sdb.select("trades", order="trade_date", limit=2000)
+    try:
+        return sdb.select("trades", order="trade_date", limit=2000)
+    except Exception as e:
+        print(f"  trades not available: {e}")
+        return []
 
 
 def compute_stats(pnl_rows: list[dict], trade_rows: list[dict]) -> dict:
@@ -177,12 +185,14 @@ def send_email(stats: dict) -> bool:
 def purge_old_data() -> dict:
     cutoff = (date.today() - timedelta(days=RETENTION_DAYS)).isoformat()
     print(f"Purging records before {cutoff} (>{RETENTION_DAYS} days)...")
-    deleted = {
-        "daily_pnl": sdb.delete_before("daily_pnl", "date", cutoff),
-        "trades":    sdb.delete_before("trades", "trade_date", cutoff),
-    }
-    print(f"  daily_pnl: {deleted['daily_pnl']} rows deleted")
-    print(f"  trades:    {deleted['trades']} rows deleted")
+    deleted = {}
+    for table, col in [("daily_pnl", "date"), ("trades", "trade_date")]:
+        try:
+            deleted[table] = sdb.delete_before(table, col, cutoff)
+            print(f"  {table}: {deleted[table]} rows deleted")
+        except Exception as e:
+            deleted[table] = 0
+            print(f"  {table}: skipped ({e})")
     return deleted
 
 
