@@ -1,14 +1,24 @@
 {
   "version": 2,
-  "functions": {
-    "api/index.py": {
-      "runtime": "python3.11",
-      "memory": 1024,
-      "maxDuration": 30,
-      "includeFiles": "data/**|risk/**|monitoring/**|config/**|strategies/**|agents/**"
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "50mb",
+        "includeFiles": [
+          "data/**",
+          "risk/**",
+          "monitoring/**",
+          "config/**",
+          "strategies/**",
+          "agents/**",
+          "api/**"
+        ]
+      }
     }
-  },
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/api/index.py" }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "/api/index.py" }
   ]
 }
