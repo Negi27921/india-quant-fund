@@ -7,13 +7,12 @@
       "config": {
         "maxLambdaSize": "50mb",
         "includeFiles": [
-          "data/**",
-          "risk/**",
-          "monitoring/**",
-          "config/**",
-          "strategies/**",
-          "agents/**",
-          "api/**"
+          "api/**",
+          "data/storage/supabase_db.py",
+          "risk/limits.py",
+          "risk/kill_switch.py",
+          "risk/__init__.py",
+          "config/**"
         ]
       }
     }
