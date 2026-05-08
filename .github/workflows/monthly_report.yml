@@ -23,10 +23,7 @@ jobs:
         env:
           SUPABASE_URL:   ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY:   ${{ secrets.SUPABASE_KEY }}
-          SMTP_USER:      ${{ secrets.SMTP_USER }}
-          SMTP_PASSWORD:  ${{ secrets.SMTP_PASSWORD }}
-          SMTP_HOST:      smtp.gmail.com
-          SMTP_PORT:      "587"
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           REPORT_EMAIL:   ${{ secrets.REPORT_EMAIL }}
           RETENTION_DAYS: "90"
         run: python scripts/monthly_report.py

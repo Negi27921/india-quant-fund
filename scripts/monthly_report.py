@@ -7,11 +7,10 @@ from __future__ import annotations
 
 import os
 import sys
-import smtplib
 import json
+import urllib.request
+import urllib.error
 from datetime import date, timedelta
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from pathlib import Path
 
 # Allow running from repo root
@@ -19,11 +18,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from data.storage import supabase_db as sdb
 
-SMTP_HOST     = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT     = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER     = os.getenv("SMTP_USER", "")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-REPORT_EMAIL  = os.getenv("REPORT_EMAIL", "wealth279210@gmail.com")
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+REPORT_EMAIL   = os.getenv("REPORT_EMAIL", "wealth279210@gmail.com")
 RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "90"))  # 3 months
 
 
@@ -160,22 +156,32 @@ def build_html(stats: dict) -> str:
 
 
 def send_email(stats: dict) -> bool:
-    if not SMTP_USER or not SMTP_PASSWORD:
-        print("⚠ SMTP credentials not set — skipping email. Set SMTP_USER and SMTP_PASSWORD.")
+    if not RESEND_API_KEY:
+        print("⚠ RESEND_API_KEY not set — skipping email.")
         return False
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"📈 IQF Monthly Report — {stats['report_month']}"
-        msg["From"]    = SMTP_USER
-        msg["To"]      = REPORT_EMAIL
-        msg.attach(MIMEText(build_html(stats), "html"))
-        import ssl
-        ctx = ssl.create_default_context()
-        with smtplib.SMTP_SSL(SMTP_HOST, 465, context=ctx) as s:
-            s.login(SMTP_USER, SMTP_PASSWORD)
-            s.sendmail(SMTP_USER, REPORT_EMAIL, msg.as_string())
-        print(f"✓ Report emailed to {REPORT_EMAIL}")
+        payload = json.dumps({
+            "from": "IQF Reports <onboarding@resend.dev>",
+            "to": [REPORT_EMAIL],
+            "subject": f"📈 IQF Monthly Report — {stats['report_month']}",
+            "html": build_html(stats),
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.resend.com/emails",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req) as resp:
+            result = json.loads(resp.read())
+        print(f"✓ Report emailed to {REPORT_EMAIL} (id={result.get('id')})")
         return True
+    except urllib.error.HTTPError as e:
+        print(f"✗ Email failed: {e.code} {e.read().decode()}")
+        return False
     except Exception as e:
         print(f"✗ Email failed: {e}")
         return False
