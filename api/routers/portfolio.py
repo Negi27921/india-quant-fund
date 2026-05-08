@@ -223,8 +223,11 @@ def _normalize_ticker(t: str) -> str:
 
 @router.get("/paper-positions")
 async def paper_positions():
-    rows = sdb.select("paper_positions", order="-created_at")
-    return _enrich_positions(rows)
+    try:
+        rows = sdb.select("paper_positions", order="-created_at")
+        return _enrich_positions(rows)
+    except Exception:
+        return []
 
 
 @router.post("/paper-positions")
@@ -272,8 +275,11 @@ async def exit_paper_position(ticker: str, req: ExitRequest):
 
 @router.get("/live-positions")
 async def live_positions():
-    rows = sdb.select("live_positions", order="-created_at")
-    return _enrich_positions(rows)
+    try:
+        rows = sdb.select("live_positions", order="-created_at")
+        return _enrich_positions(rows)
+    except Exception:
+        return []
 
 
 @router.post("/live-positions")

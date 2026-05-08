@@ -27,9 +27,12 @@ class TradeRequest(BaseModel):
 
 @router.get("/recent")
 async def recent_trades(days: int = Query(30, ge=1, le=90)):
-    cutoff = (date.today() - timedelta(days=days)).isoformat()
-    rows = sdb.select("trades", order="-trade_date", limit=200)
-    return [r for r in rows if str(r.get("trade_date", "")) >= cutoff]
+    try:
+        cutoff = (date.today() - timedelta(days=days)).isoformat()
+        rows = sdb.select("trades", order="-trade_date", limit=200)
+        return [r for r in rows if str(r.get("trade_date", "")) >= cutoff]
+    except Exception:
+        return []
 
 
 @router.get("/all")
