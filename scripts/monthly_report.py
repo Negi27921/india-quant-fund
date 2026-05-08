@@ -23,7 +23,7 @@ SMTP_HOST     = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT     = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER     = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-REPORT_EMAIL  = os.getenv("REPORT_EMAIL", "shabnas281093@gmail.com")
+REPORT_EMAIL  = os.getenv("REPORT_EMAIL", "wealth279210@gmail.com")
 RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "90"))  # 3 months
 
 
