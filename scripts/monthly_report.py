@@ -169,8 +169,9 @@ def send_email(stats: dict) -> bool:
         msg["From"]    = SMTP_USER
         msg["To"]      = REPORT_EMAIL
         msg.attach(MIMEText(build_html(stats), "html"))
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
-            s.starttls()
+        import ssl
+        ctx = ssl.create_default_context()
+        with smtplib.SMTP_SSL(SMTP_HOST, 465, context=ctx) as s:
             s.login(SMTP_USER, SMTP_PASSWORD)
             s.sendmail(SMTP_USER, REPORT_EMAIL, msg.as_string())
         print(f"✓ Report emailed to {REPORT_EMAIL}")
