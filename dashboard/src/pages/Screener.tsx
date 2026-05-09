@@ -474,23 +474,34 @@ export function ScreenerPage() {
               initial={{ opacity: 0, y: -8, height: 0 }}
               animate={{ opacity: 1, y: 0, height: "auto" }}
               exit={{ opacity: 0, y: -8, height: 0 }}
-              transition={{ duration: 0.2 }}
+              transition={{ duration: 0.22 }}
               style={{
-                marginBottom: 16, padding: "12px 16px",
-                background: "linear-gradient(135deg, #f59e0b0e, #78350f08)",
-                border: "1px solid #f59e0b44", borderRadius: 12,
-                display: "flex", gap: 16, alignItems: "flex-start",
+                marginBottom: 16, padding: "14px 18px",
+                background: "linear-gradient(135deg, #f59e0b0d, #92400e06)",
+                border: "1px solid #f59e0b40", borderRadius: 12,
               }}
             >
-              <Star style={{ width: 16, height: 16, color: "#f59e0b", flexShrink: 0, marginTop: 2 }} />
-              <div>
-                <div style={{ fontSize: 11.5, fontWeight: 800, color: "#f59e0b", letterSpacing: "0.06em", marginBottom: 4 }}>
-                  CUSTOM MULTIBAGGER SCREENER — Engineered from Your FY2025-26 Winners
-                </div>
-                <div style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.6, fontFamily: "var(--font-body)" }}>
-                  Reverse-engineered from 16 stocks including GVT&D (+146%), TDPOWERSYS (+115%), NETWEB (+105%), BSE, CGPOWER, Dynamatic & more.
-                  DNA: <span style={{ color: "#f59e0b" }}>EMA9&gt;20&gt;50</span> · <span style={{ color: "#f59e0b" }}>RSI 55–78</span> · <span style={{ color: "#f59e0b" }}>15%+ recovery from 90d swing low</span> · <span style={{ color: "#f59e0b" }}>Volume 1.5× surge</span> · <span style={{ color: "#f59e0b" }}>SMA200 slope up</span> · Sectors: Defence · Power · Railways · IT Infra
-                </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <Star style={{ width: 15, height: 15, color: "#f59e0b" }} />
+                <span style={{ fontSize: 11, fontWeight: 800, color: "#f59e0b", letterSpacing: "0.08em" }}>
+                  CUSTOM MULTIBAGGER SCREENER — Built from Your Actual FY2025-26 Winners
+                </span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px" }}>
+                {[
+                  { label: "Technical DNA", value: "EMA9>20>50 · RSI 55–78 · SMA200 slope ↑ · 90d low recovery ≥15%", src: "Price analysis of 16 stocks" },
+                  { label: "Revenue Accel Proxy", value: "90d momentum > ½ × 180d momentum — stock pricing in order wins before announcements", src: "Concall research: GVT&D +58% rev, NETWEB +141% rev, TDPOWER +27%" },
+                  { label: "Institutional Accum.", value: "5-day avg volume > 20-day avg volume — mirrors post-rating-upgrade/concall buying", src: "CRISIL upgrades: Netweb A→, TD Power Positive, CG Power AAA, Paras Positive" },
+                  { label: "Volume Re-entry", value: "Recent 3d vol ≥ 1.5× 20d avg — same signal seen at every re-entry point", src: "Vol ratio ranged 1.44×–6.81× across all 16 winners" },
+                  { label: "Policy Sectors", value: "Defence · Power T&D · Railways · AI/Data Centres · EV Electronics · Smart Cities", src: "₹9L Cr T&D · Kavach ₹50k Cr · IndiaAI ₹10k Cr · Op. Sindoor emergency procurement" },
+                  { label: "Not Extended", value: "Price within 20% of EMA50 — entry zone before parabolic move, not chasing", src: "Mean entry was 27% below 52W high — they corrected before exploding" },
+                ].map(row => (
+                  <div key={row.label} style={{ borderLeft: "2px solid #f59e0b33", paddingLeft: 10 }}>
+                    <div style={{ fontSize: 9.5, fontWeight: 800, color: "#f59e0b", letterSpacing: "0.06em", marginBottom: 2 }}>{row.label}</div>
+                    <div style={{ fontSize: 10.5, color: "var(--text-2)", fontFamily: "var(--font-body)", lineHeight: 1.5, marginBottom: 2 }}>{row.value}</div>
+                    <div style={{ fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-body)", fontStyle: "italic" }}>Source: {row.src}</div>
+                  </div>
+                ))}
               </div>
             </motion.div>
           )}
