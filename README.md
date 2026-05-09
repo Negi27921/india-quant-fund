@@ -10,11 +10,26 @@ app_port: 7860
 
 # India Quant Fund — System Architecture
 
-> Production-grade automated hedge fund for Indian equity markets. Full-stack FastAPI + React/TypeScript system with real-time data feeds, multi-strategy screener, risk management, and AI-assisted trade analysis.
+> Production-grade automated hedge fund for Indian equity markets. Full-stack FastAPI + React/TypeScript system with real-time data feeds, AI-powered multibagger screener, automated alerts, risk management, and a paper/live auto-trader agent.
 
 **Live Dashboard:** https://dashboard-two-plum-91.vercel.app  
 **Backend (tunnel):** https://thoughts-ourselves-scheduling-dna.trycloudflare.com  
 **GitHub:** https://github.com/Negi27921/india-quant-fund
+
+---
+
+## What's New (May 2026)
+
+| Feature | Details |
+|---------|---------|
+| **Multibagger Screener** | 11-condition screener modelled on 16 actual FY25-26 multibaggers |
+| **3× Daily Auto-Alerts** | GitHub Actions at 10:30 AM / 2:00 PM / 10:00 PM IST, Mon–Fri |
+| **Full 2,137-stock Universe** | Alert agent scans all NSE EQ stocks (not just Nifty 500) |
+| **Telegram + Email** | Results sent to negi2950@gmail.com **and** Telegram bot simultaneously |
+| **BSE Credit Rating Check** | Fetches credit upgrade announcements from BSE API (last 6 months) |
+| **Supabase Screener Cache** | Scan results persist in Supabase — tab-switching never re-triggers a scan |
+| **Auto-Trader Agent** | `scripts/auto_trader.py` places risk-sized orders via Dhan API |
+| **AI Chat Bot** | Groq-powered stock research assistant (Llama 3.3 70B) |
 
 ---
 
@@ -25,12 +40,15 @@ app_port: 7860
 3. [Backend API](#backend-api)
 4. [Frontend Dashboard](#frontend-dashboard)
 5. [Stock Screener](#stock-screener)
-6. [FII / DII Data Pipeline](#fii--dii-data-pipeline)
-7. [Market Data Layer](#market-data-layer)
-8. [Strategy Engine](#strategy-engine)
-9. [Risk Management](#risk-management)
-10. [Deployment](#deployment)
-11. [Data Sources](#data-sources)
+6. [Automated Alert Agent](#automated-alert-agent)
+7. [Auto-Trader Agent](#auto-trader-agent)
+8. [FII / DII Data Pipeline](#fii--dii-data-pipeline)
+9. [Market Data Layer](#market-data-layer)
+10. [Strategy Engine](#strategy-engine)
+11. [Risk Management](#risk-management)
+12. [Deployment](#deployment)
+13. [GitHub Secrets Required](#github-secrets-required)
+14. [Data Sources](#data-sources)
 
 ---
 
@@ -339,11 +357,150 @@ POST /api/screener/scan?strategy=vcp&universe=nifty500
 GET  /api/screener/status
 ```
 
-### Cache
+#### 7. Multibagger (Custom — reverse-engineered from 16 FY25-26 winners)
 
-- Per strategy+universe combination (e.g. `vcp_nifty500`, `golden_cross_full`)
-- 1-hour TTL
-- Background scan triggered on cache miss; returns cached data immediately
+The flagship strategy. Modelled by analysing CGPOWER, HAL, BEL, GRSE, COCHINSHIP, RVNL, IREDA, SOLARINDS, KAYNES, KPITTECH, DIXON, DATAPATTNS, TBOTEK, TIINDIA, WAAREEENER, TRITURBINE.
+
+**11 conditions (need ≥95% pass for alert, ≥50% for screener display):**
+
+| # | Condition | Threshold |
+|---|-----------|-----------|
+| 1 | EMA Stack | EMA9 > EMA20 > EMA50 |
+| 2 | Above SMA200 | Price > 200-day SMA |
+| 3 | SMA200 Slope | Trending up > 0.3% / 30d |
+| 4 | RSI zone | 55–78 (momentum, not extended) |
+| 5 | Recovery from 90d low | ≥ 15% |
+| 6 | Near 52W high | Within 40% |
+| 7 | Base forming | 20d range < 30% of 52W range |
+| 8 | Institutional accumulation | 5d avg vol > 20d avg vol × 1.1 |
+| 9 | Volume re-entry | 3d avg vol ≥ 20d avg vol × 1.5 |
+| 10 | Not extended | Within 20% of EMA50 |
+| 11 | Liquidity | Avg volume > 75,000 shares/day |
+
+**Screener.in query** (paste at screener.in/screens/new):
+```
+YOY Quarterly sales growth > 20 AND Sales growth > 20 AND OPM > 12 AND
+OPM last year < OPM AND Debt to equity < 0.5 AND Return on equity > 15 AND
+Market Capitalization > 500 AND Market Capitalization < 30000 AND
+Cash from operations last year > 0 AND Promoter holding > 30 AND
+Change in promoter holding > -5 AND PEG Ratio < 1.5 AND Current ratio > 1.5
+```
+
+**ChartInk scanner** (chartink.com/screener):
+```
+( [EMA(Close,9)] > [EMA(Close,20)] ) AND ( [EMA(Close,20)] > [EMA(Close,50)] ) AND
+( [EMA(Close,50)] > [SMA(Close,200)] ) AND ( [RSI(14)] > 55 ) AND ( [RSI(14)] < 78 ) AND
+( [Volume] > 1.5 * [20 day average volume] ) AND ( [Close] > [20 day high] ) AND
+( [Market cap] > 500 )
+```
+
+### Confidence Scoring
+
+```python
+confidence = (matched_conditions / total_conditions) * 100
+```
+
+| Score | Badge |
+|-------|-------|
+| ≥ 95% | Elite — included in daily email alerts |
+| ≥ 70% | Strong (green) |
+| 45–69% | Moderate (amber) |
+| < 45% | Weak (gray) |
+
+### Cache (Supabase-backed)
+
+Scan results persist in Supabase `screener_cache` table — tab-switching NEVER re-triggers a scan.
+
+```
+Priority: In-process dict (fastest) → Supabase (survives serverless restarts) → Fresh scan
+TTL: 4 hours
+```
+
+API endpoints:
+```
+GET  /api/screener/results?strategy=multibagger&universe=nifty500&min_confidence=50
+POST /api/screener/scan?strategy=multibagger&universe=full    # force fresh scan
+GET  /api/screener/status
+```
+
+---
+
+## Automated Alert Agent
+
+### Schedule
+
+| Time | UTC cron | Notes |
+|------|---------|-------|
+| 10:30 AM IST | `0 5 * * 1-5` | Pre-market / opening |
+| 2:00 PM IST  | `30 8 * * 1-5` | Mid-session |
+| 10:00 PM IST | `30 16 * * 1-5` | Post-market review |
+
+### What it does
+
+1. **BSE Credit Rating Check** — fetches announcements tagged "Credit Rating" from BSE API for the last 6 months; filters for upgrade/positive outlook keywords
+2. **Multibagger Technical Scan** — screens all 2,137 NSE stocks (full universe) with the 11-condition logic above; keeps only ≥95% confidence
+3. **Cross-reference** — highlights stocks that pass both technical AND have a credit rating upgrade (highest conviction)
+4. **Supabase cache** — stores results so the dashboard reads fresh data without scanning again
+5. **Notifications** — sends HTML email to negi2950@gmail.com via Resend + Telegram message to the configured bot
+
+### Email body includes
+
+- All candidates with LTP, confidence %, RSI, stop-loss, TP1/TP2, top signals
+- BSE credit upgrade table (last 6 months)
+- Embedded Screener.in + ChartInk queries for manual fundamental validation
+- ⭐ stars on stocks that appear in both screens
+
+### Script
+
+```bash
+python scripts/multibagger_alert.py
+```
+
+**Environment variables:**
+
+| Variable | Description |
+|----------|-------------|
+| `RESEND_API_KEY` | Resend.com API key (free at resend.com) |
+| `REPORT_EMAIL` | Recipient email (default: negi2950@gmail.com) |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token |
+| `TELEGRAM_CHAT_ID` | Telegram chat/user ID |
+| `SUPABASE_URL` / `SUPABASE_KEY` | Supabase for result caching |
+| `MIN_CONFIDENCE` | Minimum % to include (default: 95) |
+
+---
+
+## Auto-Trader Agent
+
+Places orders automatically based on screener results from Supabase. Uses risk-based position sizing.
+
+### Modes
+
+```bash
+python scripts/auto_trader.py --dry-run    # show what would be traded (safe)
+python scripts/auto_trader.py --paper      # paper trade (logs to Supabase)
+python scripts/auto_trader.py --live       # REAL orders via Dhan API (requires CONFIRM_LIVE_TRADING=YES_I_AM_SURE)
+```
+
+### Position Sizing
+
+```
+risk_amount    = portfolio_value × RISK_PCT_PER_TRADE / 100   (default 2%)
+risk_per_share = entry_price × stop_loss_pct / 100
+quantity       = risk_amount / risk_per_share
+```
+
+Example: ₹5L portfolio, 2% risk, ₹500 stock, 8% SL → risk ₹10,000 / (₹500×8%) = 25 shares = ₹12,500 position.
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PAPER_TRADING` | `true` | Set to `false` for real orders |
+| `RISK_PCT_PER_TRADE` | `2.0` | % of portfolio risked per trade |
+| `MAX_OPEN_POSITIONS` | `5` | Never hold more than N positions |
+| `MIN_CONFIDENCE` | `95` | Only trade ≥95% confidence screener hits |
+| `STRATEGIES` | `multibagger` | Comma-separated strategy list |
+| `CONFIRM_LIVE_TRADING` | _(unset)_ | Must be `YES_I_AM_SURE` for live mode |
 
 ---
 
@@ -556,4 +713,40 @@ requires-python = ">=3.11,<3.13"
 
 ---
 
-*Generated 2026-05-06 — India Quant Fund v1.0*
+## GitHub Secrets Required
+
+Set these in GitHub → Settings → Secrets → Actions:
+
+| Secret | Required | Description |
+|--------|----------|-------------|
+| `SUPABASE_URL` | ✅ | Supabase project URL |
+| `SUPABASE_KEY` | ✅ | Supabase service key |
+| `RESEND_API_KEY` | ✅ | Resend.com API key (sign up free at resend.com) |
+| `REPORT_EMAIL` | ✅ | Alert recipient email |
+| `TELEGRAM_BOT_TOKEN` | ✅ | Telegram bot token from @BotFather |
+| `TELEGRAM_CHAT_ID` | ✅ | Your Telegram user/chat ID |
+
+To get a Resend API key:
+1. Sign up at [resend.com](https://resend.com) (free: 100 emails/day)
+2. Dashboard → API Keys → Create API Key
+3. Add as GitHub secret: `RESEND_API_KEY`
+
+---
+
+## Key Design Decisions
+
+1. **Supabase screener cache**: Scan results are persisted in Supabase `screener_cache`. Vercel serverless functions lose in-memory state on every request — Supabase ensures the 4-hour cache survives restarts and tab-switching.
+
+2. **Dual notification (email + Telegram)**: Email provides full detail; Telegram gives instant push on mobile. Both are triggered after every scheduled scan.
+
+3. **Full 2,137-stock universe for alerts**: The GitHub Actions alert agent runs the full NSE universe (not just Nifty 500) to catch mid/small-cap multibaggers early.
+
+4. **95% confidence threshold for alerts**: The multibagger strategy has 11 conditions. A 95% pass rate means 10+ conditions must be met — this is very strict and ensures only genuine setups are alerted.
+
+5. **Cloudflare tunnel for backend**: The FastAPI backend runs locally and is exposed via Cloudflare's free tunnel. Zero cloud hosting cost for compute-heavy tasks (screener scans, yfinance downloads).
+
+6. **Background scanning with immediate response**: Screener responds instantly from cache. New scan runs in background thread; frontend polls every 5 minutes.
+
+---
+
+*Updated 2026-05-09 — India Quant Fund v1.1*

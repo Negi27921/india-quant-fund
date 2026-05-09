@@ -1,12 +1,13 @@
 """
-Stock screener — VCP, IPO Base, Rocket Base strategies.
-Uses yfinance for historical data. Results cached for 1 hour.
-Adapted from project-neo screener logic.
+Stock screener — VCP, IPO Base, Rocket Base, Multibagger strategies.
+Results are cached in-process AND in Supabase so tab-switching never re-triggers scans.
 """
 from __future__ import annotations
 
 import asyncio
+import json
 import math
+import os
 import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -23,10 +24,63 @@ from fastapi import APIRouter, BackgroundTasks, Query
 router = APIRouter()
 _executor = ThreadPoolExecutor(max_workers=20)
 
-# ── Cache ──────────────────────────────────────────────────────────────────
+# ── In-process cache (warm) ────────────────────────────────────────────────
 _cache: dict[str, tuple[float, list[dict]]] = {}
 _scan_running: set[str] = set()
-CACHE_TTL = 3600  # 1 hour
+CACHE_TTL      = 4 * 3600   # 4 hours in-process
+SB_CACHE_TTL   = 4 * 3600   # 4 hours Supabase cache (seconds)
+
+
+# ── Supabase persistent cache ──────────────────────────────────────────────
+
+def _sb_read(strategy: str, universe: str) -> list[dict] | None:
+    """Return cached results from Supabase if fresh, else None."""
+    try:
+        from data.storage import supabase_db as sdb
+        rows = sdb.select(
+            "screener_cache",
+            cols="results,scanned_at",
+            filters={"strategy": strategy, "universe": universe},
+            limit=1,
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        scanned_at_str = row.get("scanned_at", "")
+        if scanned_at_str:
+            from datetime import timezone
+            scanned_at = datetime.fromisoformat(scanned_at_str.replace("Z", "+00:00"))
+            age = (datetime.now(timezone.utc) - scanned_at).total_seconds()
+            if age > SB_CACHE_TTL:
+                return None
+        results_raw = row.get("results")
+        if isinstance(results_raw, str):
+            return json.loads(results_raw)
+        if isinstance(results_raw, list):
+            return results_raw
+        return None
+    except Exception:
+        return None
+
+
+def _sb_write(strategy: str, universe: str, results: list[dict]) -> None:
+    """Persist scan results to Supabase screener_cache table."""
+    try:
+        from data.storage import supabase_db as sdb
+        from datetime import timezone
+        sdb.upsert(
+            "screener_cache",
+            {
+                "strategy":    strategy,
+                "universe":    universe,
+                "scanned_at":  datetime.now(timezone.utc).isoformat(),
+                "results":     json.dumps(results),
+                "is_scanning": False,
+            },
+            on_conflict="strategy,universe",
+        )
+    except Exception:
+        pass  # Cache write failure is non-fatal
 
 # ── Universe: Full Nifty 500 (503 stocks from NSE EQUITY_L.csv + sharewatch) ────
 SCAN_UNIVERSE = [
@@ -496,19 +550,29 @@ def _run_scan(strategy: str, universe_name: str = "nifty500") -> list[dict]:
 def _get_or_scan(strategy: str, universe_name: str = "nifty500") -> list[dict]:
     cache_key = f"{strategy}_{universe_name}"
     now = time.monotonic()
+
+    # 1. In-process memory cache (fastest)
     if cache_key in _cache:
         ts, data = _cache[cache_key]
         if now - ts < CACHE_TTL:
             return data
 
+    # 2. Supabase persistent cache (survives serverless restarts / tab switches)
+    sb_data = _sb_read(strategy, universe_name)
+    if sb_data is not None:
+        _cache[cache_key] = (now, sb_data)   # warm in-process cache too
+        return sb_data
+
+    # 3. Scan is already in flight — return stale data rather than double-scan
     if cache_key in _scan_running:
-        # Return stale cache or empty while running
         return _cache.get(cache_key, (0, []))[1]
 
+    # 4. Run a fresh scan
     _scan_running.add(cache_key)
     try:
         results = _run_scan(strategy, universe_name)
         _cache[cache_key] = (now, results)
+        _sb_write(strategy, universe_name, results)   # persist for next request
         return results
     finally:
         _scan_running.discard(cache_key)
@@ -577,6 +641,7 @@ async def trigger_scan(
         try:
             results = _run_scan(strategy, universe)
             _cache[cache_key] = (time.monotonic(), results)
+            _sb_write(strategy, universe, results)
         finally:
             _scan_running.discard(cache_key)
 

@@ -1,0 +1,47 @@
+name: Multibagger Alert (3× Daily)
+
+on:
+  schedule:
+    # 10:30 AM IST = 05:00 UTC  Mon–Fri
+    - cron: "0 5 * * 1-5"
+    # 2:00 PM IST  = 08:30 UTC  Mon–Fri
+    - cron: "30 8 * * 1-5"
+    # 10:00 PM IST = 16:30 UTC  Mon–Fri
+    - cron: "30 16 * * 1-5"
+  workflow_dispatch:   # manual trigger from GitHub Actions UI
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-alert-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: ${{ runner.os }}-pip-alert-
+
+      - name: Install dependencies
+        run: pip install yfinance pandas supabase loguru
+
+      - name: Run multibagger alert
+        env:
+          RESEND_API_KEY:    ${{ secrets.RESEND_API_KEY }}
+          REPORT_EMAIL:      ${{ secrets.REPORT_EMAIL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:  ${{ secrets.TELEGRAM_CHAT_ID }}
+          SUPABASE_URL:      ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:      ${{ secrets.SUPABASE_KEY }}
+          MIN_CONFIDENCE:    "95"
+          MIN_PRICE:         "50"
+          MAX_RESULTS:       "30"
+          RATING_DAYS:       "180"
+        run: python scripts/multibagger_alert.py
