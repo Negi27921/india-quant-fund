@@ -1055,12 +1055,12 @@ export function MarketPage() {
           <IndexTable indices={indices} loading={idxLoading} />
         </motion.div>
 
-        {/* ── Main grid: 3 columns, gap 16px ── */}
+        {/* ── Main grid: 3 columns, gap 16px (Chakra space-4) ── */}
         <div style={{
           display: "grid",
           gridTemplateColumns: "1.1fr 1fr 0.9fr",
-          gap: 16,
-          alignItems: "start",
+          gap: 16,               /* Chakra space-4 */
+          flex: 1,
         }}>
 
           {/* LEFT — Live Filings */}
@@ -1068,7 +1068,7 @@ export function MarketPage() {
             title="Live Filings"
             icon={<Zap style={{ width: 12, height: 12 }} />}
             accent="var(--green)"
-            style={{ maxHeight: 620, display: "flex", flexDirection: "column" }}
+            style={{ minHeight: 500 }}
           >
             <FilingsPanel />
           </Card>
@@ -1079,6 +1079,7 @@ export function MarketPage() {
               title="FII / DII Flows"
               icon={<Globe2 style={{ width: 12, height: 12 }} />}
               accent="var(--blue)"
+              style={{ flex: 1 }}
             >
               <FiiDiiPanel />
             </Card>
@@ -1098,6 +1099,7 @@ export function MarketPage() {
               title="Sector Performance"
               icon={<Filter style={{ width: 12, height: 12 }} />}
               accent="var(--amber)"
+              style={{ flex: 1, minHeight: 260 }}
             >
               <SectorPanel data={sectors ?? []} isLoading={sectorsLoading} />
             </Card>
@@ -1106,6 +1108,7 @@ export function MarketPage() {
               title="Top Movers"
               icon={<BarChart2 style={{ width: 12, height: 12 }} />}
               accent="var(--blue)"
+              style={{ flex: 1, minHeight: 200 }}
             >
               <TopMoversPanel />
             </Card>

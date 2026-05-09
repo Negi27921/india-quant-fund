@@ -52,12 +52,12 @@ export function Sidebar() {
         transition: `width 220ms ${ease}`,
       }}
     >
-      {/* Ambient top accent */}
+      {/* Ambient top glow */}
       <div
         aria-hidden
         style={{
-          position: "absolute", top: 0, left: 0, right: 0, height: 100,
-          background: "radial-gradient(ellipse at 50% -10%, rgba(224,123,84,0.08) 0%, transparent 70%)",
+          position: "absolute", top: 0, left: 0, right: 0, height: 120,
+          background: "radial-gradient(ellipse at 50% -10%, rgba(0,255,135,0.12) 0%, transparent 70%)",
           pointerEvents: "none",
         }}
       />
@@ -75,7 +75,7 @@ export function Sidebar() {
           overflow: "hidden",
         }}
       >
-        <div style={{ filter: "drop-shadow(0 0 8px rgba(224,123,84,0.35))", flexShrink: 0 }}>
+        <div style={{ filter: "drop-shadow(0 0 12px rgba(0,255,135,0.4))", flexShrink: 0 }}>
           <Logo />
         </div>
 
@@ -124,8 +124,8 @@ export function Sidebar() {
                     justifyContent: expanded ? "flex-start" : "center",
                     borderRadius: 8,
                     position: "relative",
-                    background: isActive ? "var(--blue-dim)" : "transparent",
-                    border: `1px solid ${isActive ? "var(--border-blue)" : "transparent"}`,
+                    background: isActive ? "rgba(0,255,135,0.08)" : "transparent",
+                    border: `1px solid ${isActive ? "rgba(0,255,135,0.2)" : "transparent"}`,
                     cursor: "pointer",
                     transition: "all 150ms",
                     overflow: "hidden",
@@ -161,7 +161,7 @@ export function Sidebar() {
                     style={{
                       width: 15, height: 15, flexShrink: 0,
                       color: isActive ? "var(--blue)" : "var(--text-3)",
-                      filter: "none",
+                      filter: isActive ? "drop-shadow(0 0 6px rgba(0,255,135,0.5))" : "none",
                       transition: "color 150ms, filter 150ms",
                     }}
                     strokeWidth={isActive ? 2.5 : 1.75}

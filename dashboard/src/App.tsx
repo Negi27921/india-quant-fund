@@ -26,26 +26,27 @@ class ErrorBoundary extends React.Component<
       return (
         <div style={{
           display: "flex", flexDirection: "column", alignItems: "center",
-          justifyContent: "center", height: "100vh", background: "#0E0C0A",
-          color: "#E07B54", gap: 16, fontFamily: '"Inter", system-ui, sans-serif',
+          justifyContent: "center", height: "100vh", background: "#020407",
+          color: "#00ff87", gap: 16, fontFamily: '"JetBrains Mono", monospace',
           padding: 32, textAlign: "center",
         }}>
-          <div style={{ color: "#E0614A", fontSize: 28, fontWeight: 700, margin: 0 }}>Something went wrong</div>
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.12em", color: "#7D6E65", textTransform: "uppercase" }}>Exception caught</div>
-          <div style={{ fontSize: 12, color: "#7D6E65", maxWidth: 480, lineHeight: 1.8, fontFamily: '"JetBrains Mono", monospace' }}>
+          <pre style={{ color: "#f87171", fontSize: 32, margin: 0 }}>// SYSTEM FAULT</pre>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.15em" }}>EXCEPTION CAUGHT</div>
+          <div style={{ fontSize: 11, color: "rgba(0,255,135,0.6)", maxWidth: 480, lineHeight: 1.8 }}>
             {this.state.error.message}
           </div>
           <button
             onClick={() => { this.setState({ error: null }); window.location.href = "/"; }}
             style={{
               marginTop: 8, padding: "10px 28px",
-              background: "rgba(224,123,84,0.12)", color: "#E07B54",
-              border: "1px solid rgba(224,123,84,0.35)", borderRadius: 8,
-              cursor: "pointer", fontSize: 12, fontWeight: 600,
-              letterSpacing: "0.06em", fontFamily: '"Inter", system-ui, sans-serif',
+              background: "transparent", color: "#00ff87",
+              border: "1px solid rgba(0,255,135,0.4)", borderRadius: 6,
+              cursor: "pointer", fontSize: 10, fontWeight: 700,
+              letterSpacing: "0.2em", fontFamily: '"JetBrains Mono", monospace',
+              boxShadow: "0 0 20px rgba(0,255,135,0.1)",
             }}
           >
-            Restart
+            [ RESTART ]
           </button>
         </div>
       );

@@ -34,13 +34,13 @@ export const SECTOR_COLORS: Record<string, string> = {
 };
 
 export const STRATEGY_COLORS: Record<string, string> = {
-  vcp:          "#4BAF84",
-  ipo_base:     "#5BA4CF",
-  rocket_base:  "#E07B54",
-  breakout:     "#9B7EC8",
-  rsi_reversal: "#D4963A",
-  golden_cross: "#3CA98B",
-  multibagger:  "#C5514A",
+  vcp:          "#00ff87",
+  ipo_base:     "#00c8ff",
+  rocket_base:  "#f97316",
+  breakout:     "#a855f7",
+  rsi_reversal: "#fbbf24",
+  golden_cross: "#06d6a0",
+  multibagger:  "#ff4757",
 };
 
 export const STRATEGY_LABELS: Record<string, string> = {
