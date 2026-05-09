@@ -9,7 +9,7 @@ import asyncio
 import math
 import time
 import warnings
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Any
 
@@ -21,7 +21,7 @@ import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Query
 
 router = APIRouter()
-_executor = ThreadPoolExecutor(max_workers=6)
+_executor = ThreadPoolExecutor(max_workers=20)
 
 # ── Cache ──────────────────────────────────────────────────────────────────
 _cache: dict[str, tuple[float, list[dict]]] = {}
@@ -373,51 +373,52 @@ def _evaluate_stock(ticker: str, df: pd.DataFrame, strategy: str) -> dict | None
         return None
 
 
-def _run_scan(strategy: str, universe_name: str = "nifty500") -> list[dict]:
-    """Download historical data and run screener scan."""
+def _fetch_batch(batch: list[str], period: str) -> dict[str, pd.DataFrame]:
+    """Download one batch; returns {ticker: df}."""
     try:
-        # Download in batches of 30 to avoid rate limits
-        batch_size = 30
-        all_results: list[dict] = []
-        universe = FULL_UNIVERSE if universe_name == "full" else SCAN_UNIVERSE
-
-        for i in range(0, len(universe), batch_size):
-            batch = universe[i:i + batch_size]
+        raw = yf.download(
+            batch, period=period, interval="1d",
+            group_by="ticker", auto_adjust=True,
+            progress=False, threads=True,
+        )
+        result: dict[str, pd.DataFrame] = {}
+        for ticker in batch:
             try:
-                raw = yf.download(
-                    batch,
-                    period="150d",
-                    interval="1d",
-                    group_by="ticker",
-                    auto_adjust=True,
-                    progress=False,
-                    threads=True,
-                )
+                df = raw[ticker] if len(batch) > 1 else raw
+                df = df.dropna(subset=["Close"])
+                if len(df) >= 30:
+                    result[ticker] = df
             except Exception:
-                continue
+                pass
+        return result
+    except Exception:
+        return {}
 
-            for ticker in batch:
-                try:
-                    if len(batch) == 1:
-                        df = raw
-                    else:
-                        if ticker not in raw.columns.get_level_values(0):
-                            continue
-                        df = raw[ticker]
 
-                    df = df.dropna(subset=["Close"])
-                    if len(df) < 30:
-                        continue
+def _run_scan(strategy: str, universe_name: str = "nifty500") -> list[dict]:
+    """Download all batches in parallel then evaluate each stock."""
+    universe = FULL_UNIVERSE if universe_name == "full" else SCAN_UNIVERSE
 
+    # Strategies needing 1-year lookback use 260d; others are fine with 120d
+    period = "260d" if strategy in ("breakout", "golden_cross") else "120d"
+
+    batch_size = 50
+    batches = [universe[i:i + batch_size] for i in range(0, len(universe), batch_size)]
+    all_results: list[dict] = []
+
+    with ThreadPoolExecutor(max_workers=min(20, len(batches))) as pool:
+        futures = {pool.submit(_fetch_batch, batch, period): batch for batch in batches}
+        for future in as_completed(futures):
+            try:
+                stock_data = future.result(timeout=90)
+                for ticker, df in stock_data.items():
                     result = _evaluate_stock(ticker, df, strategy)
                     if result:
                         all_results.append(result)
-                except Exception:
-                    continue
+            except Exception:
+                pass
 
-        return sorted(all_results, key=lambda x: -x["confidence"])
-    except Exception:
-        return []
+    return sorted(all_results, key=lambda x: -x["confidence"])
 
 
 def _get_or_scan(strategy: str, universe_name: str = "nifty500") -> list[dict]:

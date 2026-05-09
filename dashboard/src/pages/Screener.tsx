@@ -69,15 +69,27 @@ function ConfBar({ value }: { value: number }) {
   );
 }
 
+const rowVariants = {
+  hidden: { opacity: 0, x: -10 },
+  visible: (i: number) => ({
+    opacity: 1, x: 0,
+    transition: { delay: Math.min(i * 0.04, 0.6), duration: 0.22, ease: "easeOut" },
+  }),
+};
+
 // ── Expandable row ────────────────────────────────────────────────────────────
-function StockRow({ r, strategy }: { r: ScreenerResult; strategy: Strategy }) {
+function StockRow({ r, strategy, index }: { r: ScreenerResult; strategy: Strategy; index: number }) {
   const [expanded, setExpanded] = useState(false);
   const badge = confBadge(r.confidence);
   const meta = STRATEGY_META[strategy];
 
   return (
     <>
-      <tr
+      <motion.tr
+        custom={index}
+        variants={rowVariants}
+        initial="hidden"
+        animate="visible"
         onClick={() => setExpanded(x => !x)}
         style={{
           borderBottom: "1px solid var(--border)",
@@ -85,8 +97,8 @@ function StockRow({ r, strategy }: { r: ScreenerResult; strategy: Strategy }) {
           background: expanded ? "var(--surface-2)" : "transparent",
           transition: "background 120ms",
         }}
-        onMouseEnter={e => !expanded && (e.currentTarget.style.background = "var(--card-hover)")}
-        onMouseLeave={e => !expanded && (e.currentTarget.style.background = "transparent")}
+        onMouseEnter={e => !expanded && ((e.currentTarget as HTMLElement).style.background = "var(--card-hover)")}
+        onMouseLeave={e => !expanded && ((e.currentTarget as HTMLElement).style.background = "transparent")}
       >
         {/* Symbol */}
         <td style={{ padding: "10px 14px" }}>
@@ -191,7 +203,7 @@ function StockRow({ r, strategy }: { r: ScreenerResult; strategy: Strategy }) {
         <td style={{ padding: "10px 10px", textAlign: "right" }}>
           {expanded ? <ChevronUp style={{ width: 14, height: 14, color: "var(--text-3)" }} /> : <ChevronDown style={{ width: 14, height: 14, color: "var(--text-4)" }} />}
         </td>
-      </tr>
+      </motion.tr>
 
       {/* Expanded detail */}
       <AnimatePresence>
@@ -508,14 +520,28 @@ export function ScreenerPage() {
             { label: "Strong Setups", value: String(strong.length), color: "#06D6A0" },
             { label: "Moderate", value: String(moderate.length), color: "#FFB017" },
             { label: "Strategy", value: meta.label, color: meta.color },
-          ].map(stat => (
-            <div key={stat.label} style={{
-              background: "var(--surface)", border: "1px solid var(--border)",
-              borderRadius: 10, padding: "10px 16px", flex: 1, minWidth: 100,
-            }}>
+          ].map((stat, i) => (
+            <motion.div
+              key={stat.label}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.07, duration: 0.25 }}
+              style={{
+                background: "var(--surface)", border: "1px solid var(--border)",
+                borderRadius: 10, padding: "10px 16px", flex: 1, minWidth: 100,
+              }}
+            >
               <div style={{ fontSize: 10, color: "var(--text-3)", fontFamily: "var(--font-body)", letterSpacing: "0.06em", marginBottom: 4 }}>{stat.label}</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: stat.color, fontFamily: "var(--font-mono)" }}>{stat.value}</div>
-            </div>
+              <motion.div
+                key={stat.value}
+                initial={{ opacity: 0, scale: 0.85 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.2 }}
+                style={{ fontSize: 20, fontWeight: 800, color: stat.color, fontFamily: "var(--font-mono)" }}
+              >
+                {stat.value}
+              </motion.div>
+            </motion.div>
           ))}
         </div>
 
@@ -526,13 +552,22 @@ export function ScreenerPage() {
           borderTop: `3px solid ${meta.color}`,
         }}>
           {isLoading ? (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 80, gap: 16 }}>
-              <Loader2 style={{ width: 32, height: 32, color: "var(--blue)", animation: "spin 1s linear infinite" }} />
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 80, gap: 16 }}
+            >
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+              >
+                <Loader2 style={{ width: 32, height: 32, color: "var(--blue)" }} />
+              </motion.div>
               <div style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "var(--text-3)" }}>
-                Scanning {data?.universe_size ?? (universe === "full" ? "2,137" : "503")} stocks for {meta.label} setups... (first scan ~15 min)
+                Scanning {data?.universe_size ?? (universe === "full" ? "2,137" : "503")} stocks for {meta.label} setups...
               </div>
-              <div style={{ fontSize: 11, color: "var(--text-4)" }}>This may take 60–90 seconds on first load</div>
-            </div>
+              <div style={{ fontSize: 11, color: "var(--text-4)" }}>Runs all batches in parallel — usually 20–40 seconds</div>
+            </motion.div>
           ) : results.length === 0 ? (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 80, gap: 12 }}>
               <div style={{ fontSize: 40 }}>🔍</div>
@@ -574,8 +609,8 @@ export function ScreenerPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {results.map(r => (
-                    <StockRow key={r.symbol} r={r} strategy={strategy} />
+                  {results.map((r, i) => (
+                    <StockRow key={r.symbol} r={r} strategy={strategy} index={i} />
                   ))}
                 </tbody>
               </table>
