@@ -32,16 +32,32 @@ jobs:
       - name: Install dependencies
         run: pip install yfinance pandas supabase loguru
 
-      - name: Run multibagger alert
+      - name: Run multibagger alert (email + Telegram + Supabase cache)
         env:
-          RESEND_API_KEY:    ${{ secrets.RESEND_API_KEY }}
-          REPORT_EMAIL:      ${{ secrets.REPORT_EMAIL }}
+          RESEND_API_KEY:     ${{ secrets.RESEND_API_KEY }}
+          REPORT_EMAIL:       ${{ secrets.REPORT_EMAIL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:  ${{ secrets.TELEGRAM_CHAT_ID }}
-          SUPABASE_URL:      ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY:      ${{ secrets.SUPABASE_KEY }}
-          MIN_CONFIDENCE:    "95"
-          MIN_PRICE:         "50"
-          MAX_RESULTS:       "30"
-          RATING_DAYS:       "180"
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:       ${{ secrets.SUPABASE_KEY }}
+          MIN_CONFIDENCE:     "95"
+          MIN_PRICE:          "50"
+          MAX_RESULTS:        "30"
+          RATING_DAYS:        "180"
         run: python scripts/multibagger_alert.py
+
+      # Refresh all other strategy caches via the live API so the Telegram bot
+      # always has fresh data when users request individual strategies.
+      - name: Refresh all strategy caches via API
+        env:
+          SCREENER_API: "https://india-quant-fund.vercel.app"
+        run: |
+          for strategy in vcp ipo_base rocket_base breakout rsi_reversal golden_cross; do
+            echo "  → Triggering scan: $strategy"
+            curl -s -X POST \
+              -H "User-Agent: curl/8.4.0" \
+              "$SCREENER_API/api/screener/scan?strategy=$strategy&universe=nifty500" \
+              || true
+            sleep 2
+          done
+          echo "  All strategy scans triggered."
