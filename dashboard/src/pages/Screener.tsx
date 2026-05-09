@@ -1,15 +1,22 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ScanSearch, RefreshCw, CheckCircle2, XCircle, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Filter, Loader2, Rocket, Layers, Zap, ArrowUpRight, GitMerge, BarChart3, Globe, ExternalLink } from "lucide-react";
+import { ScanSearch, RefreshCw, CheckCircle2, XCircle, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Filter, Loader2, Rocket, Layers, Zap, ArrowUpRight, GitMerge, BarChart3, Globe, ExternalLink, Star } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { useScreener, useTriggerScan, type ScreenerResult } from "@/api/market-queries";
 import { useQueryClient } from "@tanstack/react-query";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type Strategy = "vcp" | "ipo_base" | "rocket_base" | "breakout" | "rsi_reversal" | "golden_cross";
+type Strategy = "vcp" | "ipo_base" | "rocket_base" | "breakout" | "rsi_reversal" | "golden_cross" | "multibagger";
 type Universe = "nifty500" | "full";
 
-const STRATEGY_META: Record<Strategy, { label: string; icon: React.ReactNode; color: string; desc: string }> = {
+const STRATEGY_META: Record<Strategy, { label: string; icon: React.ReactNode; color: string; desc: string; badge?: string }> = {
+  multibagger: {
+    label: "Multibagger",
+    icon: <Star style={{ width: 14, height: 14 }} />,
+    color: "#f59e0b",
+    badge: "⚡ CUSTOM",
+    desc: "Engineered from 16 actual FY25-26 multi-baggers. EMA stack + RSI 55-78 + deep correction re-entry + volume surge + SMA200 slope. Defence · Power · Infra theme.",
+  },
   vcp: {
     label: "VCP",
     icon: <Layers style={{ width: 14, height: 14 }} />,
@@ -383,24 +390,41 @@ export function ScreenerPage() {
           {(Object.keys(STRATEGY_META) as Strategy[]).map(s => {
             const m = STRATEGY_META[s];
             const active = strategy === s;
+            const isMultibagger = s === "multibagger";
             return (
-              <button
+              <motion.button
                 key={s}
                 onClick={() => setStrategy(s)}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
                 style={{
                   display: "flex", alignItems: "center", gap: 7,
-                  padding: "8px 16px", borderRadius: 10,
-                  background: active ? `${m.color}18` : "var(--surface)",
-                  border: `1px solid ${active ? m.color + "55" : "var(--border)"}`,
-                  color: active ? m.color : "var(--text-3)",
+                  padding: isMultibagger ? "8px 18px" : "8px 16px",
+                  borderRadius: 10,
+                  background: active
+                    ? isMultibagger ? `linear-gradient(135deg, #f59e0b28, #d97706 18)` : `${m.color}18`
+                    : isMultibagger ? "linear-gradient(135deg, #f59e0b10, #78350f08)" : "var(--surface)",
+                  border: `1px solid ${active ? m.color + "77" : isMultibagger ? "#f59e0b44" : "var(--border)"}`,
+                  color: active ? m.color : isMultibagger ? "#f59e0b" : "var(--text-3)",
                   cursor: "pointer", fontFamily: "var(--font-body)",
-                  fontSize: 12.5, fontWeight: active ? 700 : 500,
+                  fontSize: 12.5, fontWeight: active || isMultibagger ? 700 : 500,
                   transition: "all 150ms",
+                  boxShadow: active && isMultibagger ? "0 0 16px #f59e0b33" : "none",
+                  position: "relative",
                 }}
               >
                 {m.icon}
                 {m.label}
-              </button>
+                {isMultibagger && (
+                  <span style={{
+                    fontSize: 8, fontWeight: 800, letterSpacing: "0.08em",
+                    background: "linear-gradient(90deg,#f59e0b,#d97706)",
+                    color: "#000", padding: "1px 5px", borderRadius: 4, marginLeft: 2,
+                  }}>
+                    CUSTOM
+                  </span>
+                )}
+              </motion.button>
             );
           })}
 
@@ -442,6 +466,35 @@ export function ScreenerPage() {
             {universe === "full" ? "All NSE · 2,137" : "Nifty 500 · 503"}
           </button>
         </div>
+
+        {/* Multibagger info banner */}
+        <AnimatePresence>
+          {strategy === "multibagger" && (
+            <motion.div
+              initial={{ opacity: 0, y: -8, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: "auto" }}
+              exit={{ opacity: 0, y: -8, height: 0 }}
+              transition={{ duration: 0.2 }}
+              style={{
+                marginBottom: 16, padding: "12px 16px",
+                background: "linear-gradient(135deg, #f59e0b0e, #78350f08)",
+                border: "1px solid #f59e0b44", borderRadius: 12,
+                display: "flex", gap: 16, alignItems: "flex-start",
+              }}
+            >
+              <Star style={{ width: 16, height: 16, color: "#f59e0b", flexShrink: 0, marginTop: 2 }} />
+              <div>
+                <div style={{ fontSize: 11.5, fontWeight: 800, color: "#f59e0b", letterSpacing: "0.06em", marginBottom: 4 }}>
+                  CUSTOM MULTIBAGGER SCREENER — Engineered from Your FY2025-26 Winners
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-3)", lineHeight: 1.6, fontFamily: "var(--font-body)" }}>
+                  Reverse-engineered from 16 stocks including GVT&D (+146%), TDPOWERSYS (+115%), NETWEB (+105%), BSE, CGPOWER, Dynamatic & more.
+                  DNA: <span style={{ color: "#f59e0b" }}>EMA9&gt;20&gt;50</span> · <span style={{ color: "#f59e0b" }}>RSI 55–78</span> · <span style={{ color: "#f59e0b" }}>15%+ recovery from 90d swing low</span> · <span style={{ color: "#f59e0b" }}>Volume 1.5× surge</span> · <span style={{ color: "#f59e0b" }}>SMA200 slope up</span> · Sectors: Defence · Power · Railways · IT Infra
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Filters bar */}
         <div style={{

@@ -338,6 +338,42 @@ def _evaluate_stock(ticker: str, df: pd.DataFrame, strategy: str) -> dict | None
             }
             sl_pct = min((ltp - float(lows.iloc[-15:].min())) / ltp * 100, 8.0)
 
+        elif strategy == "multibagger":
+            # Based on analysis of 16 FY2025-26 multi-bagger NSE stocks
+            # Common DNA: EMA stack, RSI 55-78, deep correction + re-entry, volume surge
+            sma_200 = float(closes.rolling(200).mean().iloc[-1]) if len(closes) >= 200 else float(ema_50)
+            sma_200_10d = float(closes.rolling(200).mean().iloc[-11]) if len(closes) >= 210 else sma_200
+
+            avg_vol_20 = float(vols.iloc[-20:].mean()) if len(vols) >= 20 else float(vols.mean())
+            recent_vol = float(vols.iloc[-3:].mean()) if len(vols) >= 3 else float(vols.iloc[-1])
+
+            low_90 = float(lows.iloc[-90:].min()) if len(lows) >= 90 else float(lows.min())
+            high_52w = float(closes.iloc[-252:].max()) if len(closes) >= 252 else float(closes.max())
+            high_20 = float(highs.iloc[-20:].max()) if len(highs) >= 20 else ltp
+            low_20 = float(lows.iloc[-20:].min()) if len(lows) >= 20 else ltp
+            close_60 = float(closes.iloc[-60]) if len(closes) >= 60 else float(closes.iloc[0])
+
+            pct_from_52wh = (high_52w - ltp) / high_52w * 100 if high_52w > 0 else 100.0
+            pct_from_swing_low = (ltp - low_90) / low_90 * 100 if low_90 > 0 else 0.0
+            base_range_pct = (high_20 - low_20) / low_20 * 100 if low_20 > 0 else 100.0
+            momentum_60d = (ltp - close_60) / close_60 * 100 if close_60 > 0 else 0.0
+
+            conds = {
+                "EMA Stack (9>20>50)":           ema_9 > ema_20 and ema_20 > ema_50,
+                "Price > SMA 200":               ltp > sma_200 if sma_200 > 0 else ltp > ema_50,
+                "RSI Sweet Spot (55–78)":        55 <= rsi_val <= 78,
+                "Volume Re-entry (1.5×)":        avg_vol_20 > 0 and recent_vol >= avg_vol_20 * 1.5,
+                "Recovered ≥15% from Swing Low": pct_from_swing_low >= 15.0,
+                "Within 40% of 52W High":        pct_from_52wh <= 40.0,
+                "SMA200 Slope Positive":         sma_200 > sma_200_10d if sma_200_10d > 0 else True,
+                "Base Forming (<30% 20d range)": base_range_pct <= 30.0,
+                "60d Momentum >10%":             momentum_60d >= 10.0,
+                "Liquidity (>75k avg vol)":      avg_vol_20 >= 75_000,
+            }
+            # SL: below EMA50 or max 15%, TP targets reflect avg 100%+ FY moves
+            sl_ema_pct = (ltp - ema_50) / ltp * 100 if ema_50 > 0 and ltp > 0 else 12.0
+            sl_pct = min(max(sl_ema_pct, 3.0), 15.0)
+
         else:
             return None
 
@@ -400,7 +436,7 @@ def _run_scan(strategy: str, universe_name: str = "nifty500") -> list[dict]:
     universe = FULL_UNIVERSE if universe_name == "full" else SCAN_UNIVERSE
 
     # Strategies needing 1-year lookback use 260d; others are fine with 120d
-    period = "260d" if strategy in ("breakout", "golden_cross") else "120d"
+    period = "260d" if strategy in ("breakout", "golden_cross", "multibagger") else "120d"
 
     batch_size = 50
     batches = [universe[i:i + batch_size] for i in range(0, len(universe), batch_size)]
@@ -446,7 +482,7 @@ def _get_or_scan(strategy: str, universe_name: str = "nifty500") -> list[dict]:
 
 @router.get("/results")
 async def get_screener_results(
-    strategy: str = Query("vcp", pattern="^(vcp|ipo_base|rocket_base|breakout|rsi_reversal|golden_cross)$"),
+    strategy: str = Query("vcp", pattern="^(vcp|ipo_base|rocket_base|breakout|rsi_reversal|golden_cross|multibagger)$"),
     min_confidence: int = Query(0, ge=0, le=100),
     min_price: float = Query(0.0, ge=0),
     max_price: float = Query(0.0, ge=0),
@@ -489,7 +525,7 @@ async def get_screener_results(
 
 @router.post("/scan")
 async def trigger_scan(
-    strategy: str = Query("vcp", pattern="^(vcp|ipo_base|rocket_base|breakout|rsi_reversal|golden_cross)$"),
+    strategy: str = Query("vcp", pattern="^(vcp|ipo_base|rocket_base|breakout|rsi_reversal|golden_cross|multibagger)$"),
     universe: str = Query("nifty500", pattern="^(nifty500|full)$"),
     background_tasks: BackgroundTasks = None,
 ):
@@ -518,7 +554,7 @@ async def screener_status():
     """Check which strategies have cached results and which are running."""
     out = {}
     now = time.monotonic()
-    all_strategies = ["vcp", "ipo_base", "rocket_base", "breakout", "rsi_reversal", "golden_cross"]
+    all_strategies = ["vcp", "ipo_base", "rocket_base", "breakout", "rsi_reversal", "golden_cross", "multibagger"]
     for strategy in all_strategies:
         for universe_name in ["nifty500", "full"]:
             cache_key = f"{strategy}_{universe_name}"

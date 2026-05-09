@@ -225,7 +225,7 @@ export interface ScreenerResponse {
   universe_size: number;
 }
 
-type ScreenerStrategy = "vcp" | "ipo_base" | "rocket_base" | "breakout" | "rsi_reversal" | "golden_cross";
+type ScreenerStrategy = "vcp" | "ipo_base" | "rocket_base" | "breakout" | "rsi_reversal" | "golden_cross" | "multibagger";
 
 export const useScreener = (
   strategy: ScreenerStrategy,
