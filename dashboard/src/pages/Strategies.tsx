@@ -22,26 +22,30 @@ import { useUIStore } from "@/store/ui";
 const SIGNAL_DAYS = [1, 3, 5, 10] as const;
 
 const STRATEGY_DESCRIPTIONS: Record<string, string> = {
-  momentum_st:    "Short-term trend following on price momentum",
-  momentum_mt:    "Medium-term cross-sectional momentum",
-  mean_reversion: "Buy oversold, sell overbought setups",
-  factor:         "Quality factor: high ROCE, low debt companies",
-  event:          "Event-driven: earnings, index changes, M&A",
+  vcp:          "Volatility contraction into tight base — Minervini SEPA",
+  ipo_base:     "First consolidation after IPO listing pop",
+  rocket_base:  "Post-explosive-move base after 60%+ rocket move",
+  breakout:     "52-week high breakout with volume surge confirmation",
+  rsi_reversal: "Oversold bounce with positive divergence signal",
+  golden_cross: "EMA20 crosses above EMA50, fresh cross ≤10 bars",
+  multibagger:  "Reverse-engineered from 16 FY2026 multi-baggers",
 };
 
 const STRATEGY_STOCK_MAP: Record<string, string[]> = {
-  momentum_st:    ["IT", "Banking", "Finance", "Auto", "Energy"],
-  momentum_mt:    ["IT", "Defence", "Industrials", "Healthcare"],
-  mean_reversion: ["FMCG", "Healthcare", "Materials", "Consumer"],
-  factor:         ["IT", "Healthcare", "FMCG", "Finance"],
-  event:          ["Banking", "Metals", "Energy", "Auto"],
+  vcp:          ["IT", "Defence", "Industrials", "Healthcare", "Finance"],
+  ipo_base:     ["IT", "Finance", "Consumer", "Healthcare"],
+  rocket_base:  ["Defence", "Energy", "Industrials", "Metals"],
+  breakout:     ["IT", "Banking", "Finance", "Auto", "Energy"],
+  rsi_reversal: ["FMCG", "Healthcare", "Materials", "Consumer"],
+  golden_cross: ["IT", "Finance", "Banking", "Auto"],
+  multibagger:  ["Defence", "Power", "Railways", "IT", "Finance"],
 };
 
 // Example signals shown in the empty state
 const EXAMPLE_SIGNALS = [
-  { date: "2026-05-02", ticker: "RELIANCE", strategy: "momentum_st",    signal: 1,  approved: true,  rejection_reason: undefined },
-  { date: "2026-05-02", ticker: "INFY",     strategy: "momentum_mt",    signal: -1, approved: false, rejection_reason: "Kill switch active" },
-  { date: "2026-05-01", ticker: "HDFCBANK", strategy: "mean_reversion", signal: 1,  approved: true,  rejection_reason: undefined },
+  { date: "2026-05-02", ticker: "RVNL",     strategy: "vcp",          signal: 1,  approved: true,  rejection_reason: undefined },
+  { date: "2026-05-02", ticker: "INFY",     strategy: "breakout",     signal: 1,  approved: false, rejection_reason: "Kill switch active" },
+  { date: "2026-05-01", ticker: "HDFCBANK", strategy: "golden_cross", signal: 1,  approved: true,  rejection_reason: undefined },
 ];
 
 // ── Strategy Allocation horizontal bar chart ───────────────────────────────────

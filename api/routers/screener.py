@@ -280,117 +280,211 @@ def _wave_avg_ranges(highs: pd.Series, lows: pd.Series, waves: int, wave_size: i
 def _evaluate_stock(ticker: str, df: pd.DataFrame, strategy: str) -> dict | None:
     try:
         closes = df["Close"].astype(float)
-        highs = df["High"].astype(float)
-        lows = df["Low"].astype(float)
-        vols = df["Volume"].astype(float)
+        highs  = df["High"].astype(float)
+        lows   = df["Low"].astype(float)
+        vols   = df["Volume"].astype(float)
 
         if len(closes) < 30:
             return None
 
-        ltp = _sf(closes.iloc[-1])
+        ltp  = _sf(closes.iloc[-1])
         prev = _sf(closes.iloc[-2]) if len(closes) > 1 else ltp
         if ltp == 0:
             return None
 
         chg_pct = round((ltp - prev) / prev * 100, 2) if prev else 0
 
-        ema_9 = _ema_last(closes, 9)
+        # Core indicators (computed once, shared across strategies)
+        ema_9  = _ema_last(closes, 9)
         ema_10 = _ema_last(closes, 10)
         ema_20 = _ema_last(closes, 20)
-        ema_25 = _ema_last(closes, 25)
         ema_50 = _ema_last(closes, 50)
         rsi_val = _rsi(closes)
 
-        if strategy == "vcp":
-            conds = {
-                "EMA Uptrend (10>20)": ema_10 > ema_20,
-                "Price > 10 EMA": ltp > ema_10,
-                "Higher High/Low (40d)": _hhhl(highs, lows, 40),
-                "Volume Contracting (4×15d)": _volume_contracting(vols, 4, 15),
-                "Tight Base <8% (7d)": _tight_base(highs, lows, 7, 8.0),
-                "No Change of Character": not _choc(highs, lows, 5),
-            }
-            # Bonus: wave contraction adds to confidence
-            wave_ranges = _wave_avg_ranges(highs, lows, 4, 15)
-            if wave_ranges:
-                conds["Wave Contraction (4×)"] = all(
-                    wave_ranges[i] > wave_ranges[i + 1] for i in range(len(wave_ranges) - 1)
-                )
+        avg_vol_5  = _sf(vols.iloc[-5:].mean())  if len(vols) >= 5  else _sf(vols.mean())
+        avg_vol_20 = _sf(vols.iloc[-20:].mean()) if len(vols) >= 20 else _sf(vols.mean())
+        avg_vol_3  = _sf(vols.iloc[-3:].mean())  if len(vols) >= 3  else _sf(vols.iloc[-1])
+        liquidity  = avg_vol_20 >= 50_000   # min ~₹50L/day liquidity
 
-            # Risk params
-            pivot_low = float(lows.iloc[-7:].min()) if len(lows) >= 7 else ltp * 0.95
-            sl_pct = min((ltp - pivot_low) / ltp * 100, 7.0) if ltp > 0 else 5.0
+        high_52w   = _sf(closes.iloc[-252:].max() if len(closes) >= 252 else closes.max())
+        low_52w    = _sf(closes.iloc[-252:].min() if len(closes) >= 252 else closes.min())
+        sma_200    = _sf(closes.rolling(200).mean().iloc[-1]) if len(closes) >= 200 else 0.0
+
+        if strategy == "vcp":
+            # Volatility Contraction Pattern — Minervini SEPA methodology
+            # 3+ waves of contraction, tightening range, drying volume, uptrend preserved
+            wave_ranges = _wave_avg_ranges(highs, lows, 4, 15)
+            wave_contracting = (
+                all(wave_ranges[i] > wave_ranges[i + 1] for i in range(len(wave_ranges) - 1))
+                if wave_ranges else False
+            )
+            tight_now   = _tight_base(highs, lows, 7,  8.0)   # current base ≤8%
+            tight_prior = _tight_base(highs, lows, 21, 20.0)  # prior consolidation ≤20%
+            vol_dry     = avg_vol_5 < avg_vol_20 * 0.65       # volume drying up
+            sma_200_ok  = ltp > sma_200 if sma_200 > 0 else ltp > ema_50
+
+            conds = {
+                "EMA Stack (10>20>50)":     ema_10 > ema_20 and ema_20 > ema_50,
+                "Price > SMA 200":          sma_200_ok,
+                "RSI Momentum (45–70)":     45 <= rsi_val <= 70,
+                "Higher High/Low (40d)":    _hhhl(highs, lows, 40),
+                "4-Wave Contraction":        wave_contracting,
+                "Tight Base ≤8% (7d)":      tight_now,
+                "Prior Base ≤20% (21d)":    tight_prior,
+                "Volume Drying (<65% avg)": vol_dry,
+                "No Change of Character":   not _choc(highs, lows, 5),
+                "Liquidity (>50k vol)":     liquidity,
+            }
+            pivot_low = _sf(lows.iloc[-7:].min()) if len(lows) >= 7 else ltp * 0.95
+            sl_pct = min(max((ltp - pivot_low) / ltp * 100, 1.5), 7.0) if ltp > 0 else 5.0
 
         elif strategy == "ipo_base":
+            # IPO Base — first consolidation after listing (typically within 6 months)
+            # Tight flag base with volume dry-up; EMA uptrend preserved from IPO pop
+            listing_days = len(closes)   # proxy for age (≤120d = recent IPO)
+            is_recent_ipo  = listing_days <= 120
+            tight_15d      = _tight_base(highs, lows, 15, 15.0)
+            vol_dry        = avg_vol_5 < avg_vol_20 * 0.55   # sharper dry-up for IPOs
+            near_high      = (high_52w - ltp) / high_52w * 100 <= 12.0  # near recent high
+            ema_ok         = ema_10 > ema_20
+            rsi_ok         = 40 <= rsi_val <= 68
+            no_choc        = not _choc(highs, lows, 10)
+
             conds = {
-                "EMA Uptrend (10>20)": ema_10 > ema_20,
-                "Price > 20 EMA": ltp > ema_20,
-                "Higher High/Low (20d)": _hhhl(highs, lows, 20),
-                "Volume Contracting (3×5d)": _volume_contracting(vols, 3, 5),
-                "Tight Base <15% (15d)": _tight_base(highs, lows, 15, 15.0),
-                "No Change of Character (10d)": not _choc(highs, lows, 10),
+                "Recent IPO (≤120d data)":   is_recent_ipo,
+                "EMA Uptrend (10>20)":        ema_ok,
+                "Price > 20 EMA":             ltp > ema_20,
+                "Near 52W High (≤12%)":       near_high,
+                "RSI Zone (40–68)":           rsi_ok,
+                "Tight Base ≤15% (15d)":      tight_15d,
+                "Volume Dry-Up (<55% avg)":   vol_dry,
+                "HHHL (20d)":                 _hhhl(highs, lows, 20),
+                "No Change of Character":     no_choc,
+                "Liquidity (>50k vol)":       liquidity,
             }
-            pivot_low = float(lows.iloc[-15:].min()) if len(lows) >= 15 else ltp * 0.92
-            sl_pct = min((ltp - pivot_low) / ltp * 100, 8.0) if ltp > 0 else 6.0
+            pivot_low = _sf(lows.iloc[-15:].min()) if len(lows) >= 15 else ltp * 0.92
+            sl_pct = min(max((ltp - pivot_low) / ltp * 100, 2.0), 8.0) if ltp > 0 else 6.0
 
         elif strategy == "rocket_base":
-            correction = _correction_from_peak(closes, 56)
+            # Rocket Base — post-explosive-move consolidation (80%+ move → ≤20% pullback)
+            # Institutional accumulation after a sector/catalyst-driven rocket
+            correction   = _correction_from_peak(closes, 56)
+            rocket_90d   = _rocket_move(closes, 60.0, 90)   # looser: 60% in 90d
+            tight_base   = _tight_base(highs, lows, 14, 18.0)
+            vol_contract = _volume_contracting(vols, 3, 7)
+            sma_200_ok   = ltp > sma_200 if sma_200 > 0 else True
+
+            # Volume signature: high on rocket, now drying (confirms institutional hold)
+            peak_vol   = _sf(vols.iloc[-90:].max()) if len(vols) >= 90 else avg_vol_20
+            vol_dried  = avg_vol_5 < peak_vol * 0.4   # vol < 40% of peak
+
             conds = {
-                "Rocket Move ≥80% (56d)": _rocket_move(closes, 80.0, 56),
+                "Rocket Move ≥60% (90d)":   rocket_90d,
                 "Correction ≤20% from Peak": correction <= 20.0,
                 "Full EMA Stack (9>20>50)": ema_9 > ema_20 and ema_20 > ema_50,
-                "Higher High/Low (30d)": _hhhl(highs, lows, 30),
-                "Volume Contracting (3×7d)": _volume_contracting(vols, 3, 7),
-                "No Change of Character (10d)": not _choc(highs, lows, 10),
+                "Price > SMA 200":          sma_200_ok,
+                "RSI Holding (50–78)":      50 <= rsi_val <= 78,
+                "Base Tightening ≤18%":     tight_base,
+                "Volume Contracting":       vol_contract,
+                "Volume Dried from Peak":   vol_dried,
+                "No Change of Character":   not _choc(highs, lows, 10),
+                "Liquidity (>50k vol)":     liquidity,
             }
-            # SL: 10 EMA or 10% fixed, whichever is tighter
-            sl_ema_pct = (ltp - ema_10) / ltp * 100 if ema_10 > 0 and ltp > 0 else 10.0
-            sl_pct = min(max(sl_ema_pct, 0.5), 10.0)
+            sl_ema = (ltp - ema_10) / ltp * 100 if ema_10 > 0 and ltp > 0 else 10.0
+            sl_pct = min(max(sl_ema, 2.0), 10.0)
 
         elif strategy == "breakout":
-            # 52-week high breakout with volume confirmation
-            high_52w = float(closes.iloc[-252:].max()) if len(closes) >= 252 else float(closes.max())
-            near_high = (high_52w - ltp) / high_52w * 100 < 3.0  # within 3% of 52w high
-            vol_surge = float(vols.iloc[-1]) > float(vols.iloc[-20:].mean()) * 1.8
+            # 52-week high breakout — price entering price discovery with volume
+            # Pre-breakout: tight consolidation + drying volume; breakout: surge
+            near_high   = (high_52w - ltp) / high_52w * 100 < 3.0
+            today_vol   = _sf(vols.iloc[-1])
+            vol_surge   = today_vol > avg_vol_20 * 1.8  # strong volume on breakout bar
+            vol_pre_dry = _sf(vols.iloc[-10:-1].mean()) < avg_vol_20 * 0.8  # pre-breakout dry-up
+            sma_200_ok  = ltp > sma_200 if sma_200 > 0 else ltp > ema_50
+            higher_vol  = today_vol > _sf(vols.iloc[-2])  # today > yesterday (momentum)
+
+            # Range expansion: today's range > 1.2× 10-day avg range
+            range_today = _sf(highs.iloc[-1]) - _sf(lows.iloc[-1])
+            avg_range   = _sf((highs.iloc[-10:] - lows.iloc[-10:]).mean()) if len(highs) >= 10 else range_today
+            range_expand = range_today > avg_range * 1.2
+
             conds = {
-                "Near 52W High (<3%)": near_high,
-                "Volume Surge (1.8x avg)": vol_surge,
-                "EMA Uptrend (20>50)": ema_20 > ema_50,
-                "Price > 20 EMA": ltp > ema_20,
-                "RSI 50-75": 50 <= rsi_val <= 75,
-                "HHHL (20d)": _hhhl(highs, lows, 20),
+                "Near 52W High (<3%)":         near_high,
+                "Price > SMA 200":             sma_200_ok,
+                "Full EMA Stack (9>20>50)":    ema_9 > ema_20 and ema_20 > ema_50,
+                "RSI Momentum (55–80)":        55 <= rsi_val <= 80,
+                "Volume Surge (≥1.8× avg)":    vol_surge,
+                "Pre-Breakout Dry-Up":         vol_pre_dry,
+                "Volume Increasing":           higher_vol,
+                "Range Expansion (>1.2×)":     range_expand,
+                "HHHL (20d)":                  _hhhl(highs, lows, 20),
+                "Liquidity (>50k vol)":        liquidity,
             }
-            sl_pct = min((ltp - float(lows.iloc[-10:].min())) / ltp * 100, 8.0)
+            sl_pct = min(max((ltp - _sf(lows.iloc[-10:].min())) / ltp * 100, 2.0), 8.0)
 
         elif strategy == "rsi_reversal":
-            # RSI oversold recovery with volume surge
-            rsi_prev = _rsi(closes.iloc[:-3])  # RSI 3 bars ago
-            vol_surge = float(vols.iloc[-3:].mean()) > float(vols.iloc[-20:].mean()) * 1.5
+            # RSI Oversold Reversal — deep oversold bounce with price/volume confirmation
+            # Concept: institutional buying at climactic low; divergence from oversold RSI
+            rsi_3d_ago = _rsi(closes.iloc[:-3]) if len(closes) > 17 else rsi_val
+            rsi_7d_ago = _rsi(closes.iloc[:-7]) if len(closes) > 21 else rsi_val
+
+            was_oversold   = rsi_3d_ago < 33 or rsi_7d_ago < 33
+            recovered      = rsi_val > 38 and was_oversold
+            vol_surge      = avg_vol_3 > avg_vol_20 * 1.4
+            price_hold_ema = ltp > ema_20   # price bounced back above 20 EMA
+
+            # Positive divergence proxy: price at similar low but RSI higher than prior dip
+            close_min_10  = _sf(closes.iloc[-10:].min())
+            close_min_30  = _sf(closes.iloc[-30:-10].min() if len(closes) >= 30 else closes.min())
+            rsi_30d_min   = _rsi(closes.iloc[-30:-10]) if len(closes) >= 30 else rsi_val
+            divergence    = (close_min_10 <= close_min_30 * 1.02) and (rsi_val > rsi_30d_min + 5)
+
             conds = {
-                "RSI Recovered (30→50)": rsi_val >= 35 and rsi_prev < 35,
-                "Price > 20 EMA": ltp > ema_20,
-                "Volume Surge (1.5x)": vol_surge,
-                "EMA Uptrend (10>20)": ema_10 > ema_20,
-                "HHHL (20d)": _hhhl(highs, lows, 20),
-                "No CHOC (5d)": not _choc(highs, lows, 5),
+                "Was Oversold (RSI <33)":      was_oversold,
+                "RSI Recovered (>38)":         recovered,
+                "Price > 20 EMA":              price_hold_ema,
+                "EMA Slope Positive (10>20)":  ema_10 > ema_20 * 0.995,
+                "Volume Surge (≥1.4× avg)":    vol_surge,
+                "Positive Divergence Signal":  divergence,
+                "RSI Now in Recovery Zone":    35 <= rsi_val <= 60,
+                "HHHL (15d)":                  _hhhl(highs, lows, 15),
+                "No Breakdown":                not _choc(highs, lows, 5),
+                "Liquidity (>50k vol)":        liquidity,
             }
-            sl_pct = min(abs(ltp - float(lows.iloc[-5:].min())) / ltp * 100, 6.0)
+            sl_pct = min(max(abs(ltp - _sf(lows.iloc[-5:].min())) / ltp * 100, 2.0), 6.0)
 
         elif strategy == "golden_cross":
-            # Golden cross: EMA20>EMA50>SMA200 full stack
-            sma_200 = float(closes.rolling(200).mean().iloc[-1]) if len(closes) >= 200 else 0
-            ema_20_prev = float(_ema_series(closes.iloc[:-5], 20).iloc[-1]) if len(closes) > 25 else ema_20
-            ema_50_prev = float(_ema_series(closes.iloc[:-5], 50).iloc[-1]) if len(closes) > 55 else ema_50
-            fresh_cross = ema_20 > ema_50 and ema_20_prev <= ema_50_prev
+            # Golden Cross — EMA20>EMA50 cross with SMA200 above, confirmed by volume + RSI
+            ema_20_prev5  = float(_ema_series(closes.iloc[:-5], 20).iloc[-1])  if len(closes) > 25 else ema_20
+            ema_50_prev5  = float(_ema_series(closes.iloc[:-5], 50).iloc[-1])  if len(closes) > 55 else ema_50
+            ema_20_prev10 = float(_ema_series(closes.iloc[:-10], 20).iloc[-1]) if len(closes) > 30 else ema_20
+            ema_50_prev10 = float(_ema_series(closes.iloc[:-10], 50).iloc[-1]) if len(closes) > 60 else ema_50
+
+            # Fresh cross: crossed within last 10 days
+            cross_5d  = ema_20 > ema_50 and ema_20_prev5  <= ema_50_prev5
+            cross_10d = ema_20 > ema_50 and ema_20_prev10 <= ema_50_prev10
+            fresh_cross = cross_5d or cross_10d
+
+            sma_200_ok  = ltp > sma_200 if sma_200 > 0 else ltp > ema_50
+            # SMA200 slope: compare to 20 days ago
+            sma_200_20d = _sf(closes.rolling(200).mean().iloc[-21]) if len(closes) >= 220 else sma_200
+            sma_upslope = sma_200 > sma_200_20d * 1.001  # SMA200 trending up
+
+            vol_cross   = avg_vol_5 > avg_vol_20 * 1.15  # volume picking up at cross
+
             conds = {
-                "EMA20 > EMA50 (Golden Cross)": ema_20 > ema_50,
-                "Fresh Cross (<5d)": fresh_cross,
-                "Price > SMA 200": ltp > sma_200 if sma_200 > 0 else ltp > ema_50,
-                "Volume Surge on Cross": float(vols.iloc[-5:].mean()) > float(vols.iloc[-20:].mean()) * 1.2,
-                "RSI 45-70": 45 <= rsi_val <= 70,
-                "Price > EMA20": ltp > ema_20,
+                "EMA20 Crossed Above EMA50":    ema_20 > ema_50,
+                "Fresh Cross (≤10 bars)":        fresh_cross,
+                "Price > SMA 200":              sma_200_ok,
+                "SMA200 Slope ↑":               sma_upslope,
+                "Price > EMA20":                ltp > ema_20,
+                "RSI Momentum (48–72)":         48 <= rsi_val <= 72,
+                "Volume Rising at Cross":       vol_cross,
+                "HHHL (30d)":                   _hhhl(highs, lows, 30),
+                "No Change of Character":       not _choc(highs, lows, 5),
+                "Liquidity (>50k vol)":         liquidity,
             }
-            sl_pct = min((ltp - float(lows.iloc[-15:].min())) / ltp * 100, 8.0)
+            sl_pct = min(max((ltp - _sf(lows.iloc[-15:].min())) / ltp * 100, 2.0), 8.0)
 
         elif strategy == "multibagger":
             # Reverse-engineered from 16 FY2025-26 multi-baggers:

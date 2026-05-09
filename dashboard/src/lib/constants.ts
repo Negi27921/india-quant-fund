@@ -34,19 +34,23 @@ export const SECTOR_COLORS: Record<string, string> = {
 };
 
 export const STRATEGY_COLORS: Record<string, string> = {
-  momentum_st: "#3B82F6",
-  momentum_mt: "#8B5CF6",
-  mean_reversion: "#10B981",
-  factor: "#F59E0B",
-  event: "#EF4444",
+  vcp:          "#00ff87",
+  ipo_base:     "#00c8ff",
+  rocket_base:  "#f97316",
+  breakout:     "#a855f7",
+  rsi_reversal: "#fbbf24",
+  golden_cross: "#06d6a0",
+  multibagger:  "#ff4757",
 };
 
 export const STRATEGY_LABELS: Record<string, string> = {
-  momentum_st: "ST Momentum",
-  momentum_mt: "MT Momentum",
-  mean_reversion: "Mean Rev",
-  factor: "Factor",
-  event: "Event",
+  vcp:          "VCP",
+  ipo_base:     "IPO Base",
+  rocket_base:  "Rocket Base",
+  breakout:     "Breakout",
+  rsi_reversal: "RSI Reversal",
+  golden_cross: "Golden Cross",
+  multibagger:  "Multibagger",
 };
 
 export const REFETCH_INTERVALS = {

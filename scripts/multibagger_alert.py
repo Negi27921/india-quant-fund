@@ -512,7 +512,12 @@ def send_email(html: str, subject: str) -> bool:
         req = urllib.request.Request(
             "https://api.resend.com/emails",
             data=payload,
-            headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+            headers={
+                "Authorization":  f"Bearer {RESEND_API_KEY}",
+                "Content-Type":   "application/json",
+                "User-Agent":     "curl/8.4.0",
+                "Accept":         "*/*",
+            },
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=20) as resp:
