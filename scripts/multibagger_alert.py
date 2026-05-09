@@ -353,37 +353,52 @@ def send_telegram(results: list[dict], credit_matches: set[str], run_time: str) 
         print("  Telegram not configured — skipping")
         return
 
-    session = "🌅 Morning" if int(run_time[:2]) < 12 else "☀️ Afternoon" if int(run_time[:2]) < 17 else "🌙 Evening"
+    hour = int(run_time[:2])
+    session = "Morning" if hour < 12 else "Afternoon" if hour < 17 else "Evening"
+    today   = date.today().strftime("%-d %b %Y")
+
+    # Header
     lines = [
-        f"📈 *IQF Multibagger Alert* — {session}",
-        f"📅 {date.today().strftime('%d %b %Y')} | {run_time} IST",
-        f"🔍 {len(results)} candidates (≥{MIN_CONFIDENCE}% conf)",
+        f"*ONE PIECE · Multibagger · {session}*",
+        f"_{today}  {run_time} IST · {len(results)} hits / {_UNIVERSE_SIZE:,} stocks_",
         "",
     ]
+
+    if results:
+        # Monospace-aligned table in a code block
+        rows = []
+        for r in results[:15]:
+            tag    = "★" if r["ticker"] in credit_matches else " "
+            ticker = r["ticker"][:10].ljust(10)
+            ltp    = f"{r['ltp']:,.0f}".rjust(7)
+            conf   = f"{r['confidence']}%".rjust(4)
+            rsi    = f"{r['rsi']}".rjust(3)
+            sl_pct = f"{r['sl_pct']}%".rjust(4)
+            rows.append(f"{tag}{ticker}{ltp}  {conf}  {rsi}  {sl_pct}")
+
+        header = " TICKER       LTP    CF  RSI   SL"
+        sep    = "─" * len(header)
+        table  = "\n".join([header, sep] + rows)
+        lines += [f"```\n{table}\n```", ""]
+
+        if len(results) > 15:
+            lines.append(f"_+{len(results)-15} more in email_\n")
+
+    else:
+        lines.append("_No candidates above the confidence threshold today._\n")
+
     if credit_matches:
-        lines.append(f"⭐ *Credit-rated overlap:* {', '.join(sorted(credit_matches))}")
-        lines.append("")
-
-    for r in results[:10]:
-        star = "⭐" if r["ticker"] in credit_matches else "•"
-        lines.append(
-            f"{star} *{r['ticker']}* ₹{r['ltp']:,.0f} | Conf {r['confidence']}% | RSI {r['rsi']} | SL ₹{r['sl']:,.0f}"
-        )
-
-    if len(results) > 10:
-        lines.append(f"\n_...and {len(results)-10} more. Check email for full list._")
+        lines.append(f"★ *Credit upgrade overlap:* {', '.join(sorted(credit_matches))}\n")
 
     lines += [
-        "",
-        "🔗 Dashboard: https://dashboard-two-plum-91.vercel.app",
-        "_Not financial advice._",
+        "[Dashboard](https://dashboard-two-plum-91.vercel.app)  ·  _Not financial advice_",
     ]
 
     msg  = "\n".join(lines)
     url  = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     body = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "Markdown"}).encode()
     try:
-        req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+        req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json", "User-Agent": "curl/8.4.0"}, method="POST")
         with urllib.request.urlopen(req, timeout=15) as resp:
             result = json.loads(resp.read())
         if result.get("ok"):
@@ -397,105 +412,143 @@ def send_telegram(results: list[dict], credit_matches: set[str], run_time: str) 
 # ── Step 5: Email ─────────────────────────────────────────────────────────────
 
 def build_email(results: list[dict], rating_events: list[dict], credit_matches: set[str], run_time: str) -> str:
-    session = "MORNING (10:30 AM IST)" if int(run_time[:2]) < 12 else (
-        "AFTERNOON (2:00 PM IST)" if int(run_time[:2]) < 17 else "EVENING (10:00 PM IST)"
-    )
+    hour    = int(run_time[:2])
+    session = "Morning" if hour < 12 else "Afternoon" if hour < 17 else "Evening"
+    today   = date.today().strftime("%-d %b %Y")
+
+    # ── Candidates table rows ─────────────────────────────────────────────────
+    def _conf_badge(c: int) -> str:
+        col = "#00ff41" if c >= 97 else "#7dff7d" if c >= 95 else "#f59e0b"
+        return f'<span style="color:{col};font-weight:700">{c}%</span>'
+
+    def _signals(passed: list) -> str:
+        short = {
+            "EMA Stack (9>20>50)":       "EMA stack",
+            "Price > SMA200":            "Above SMA200",
+            "SMA200 Slope ↑ (>0.3%)":   "SMA200↑",
+            "RSI 55–78":                 "RSI zone",
+            "Recovered ≥15% from 90dL":  "Recovered",
+            "Within 40% of 52W High":    "Near 52Wh",
+            "Base Forming <30%":         "Base",
+            "Inst Accum (5d>20d vol)":   "Accum",
+            "Vol Re-entry (3d≥1.5×20d)":"Vol surge",
+            "Not Extended (<20%EMA50)":  "Not ext.",
+            "Liquidity (>75k vol)":      "Liquid",
+        }
+        return " · ".join(short.get(p, p) for p in passed[:4])
 
     rows_html = ""
     for r in results:
-        star     = "⭐ " if r["ticker"] in credit_matches else ""
-        conf_col = "#00ff41" if r["confidence"] >= 95 else "#f59e0b"
+        is_star  = r["ticker"] in credit_matches
+        star_td  = '<td style="padding:8px 6px;color:#f59e0b;font-size:14px">★</td>' if is_star else '<td style="padding:8px 6px"></td>'
+        t_color  = "#f59e0b" if is_star else "#00ff41"
         rows_html += f"""
-        <tr style="border-bottom:1px solid #00ff4110">
-          <td style="padding:6px 4px;font-weight:700;color:#00ff41">{star}{r['ticker']}</td>
-          <td style="padding:6px 4px">₹{r['ltp']:,.2f}</td>
-          <td style="padding:6px 4px;color:{conf_col};font-weight:700">{r['confidence']}%</td>
-          <td style="padding:6px 4px">{r['rsi']}</td>
-          <td style="padding:6px 4px;color:#ff6644">₹{r['sl']:,.2f} ({r['sl_pct']}%)</td>
-          <td style="padding:6px 4px;color:#00cc44">₹{r['tp1']:,.2f} / ₹{r['tp2']:,.2f}</td>
-          <td style="padding:6px 4px;font-size:10px;color:#888">{", ".join(r["passed"][:3])}</td>
+        <tr style="border-bottom:1px solid #ffffff08">
+          {star_td}
+          <td style="padding:8px 6px;font-weight:700;color:{t_color};letter-spacing:.04em">{r['ticker']}</td>
+          <td style="padding:8px 6px;color:#e8ffe8">₹{r['ltp']:,.0f}</td>
+          <td style="padding:8px 6px">{_conf_badge(r['confidence'])}</td>
+          <td style="padding:8px 6px;color:#aaa">{r['rsi']}</td>
+          <td style="padding:8px 6px;color:#ff6b6b">₹{r['sl']:,.0f}<span style="color:#555;font-size:10px"> -{r['sl_pct']}%</span></td>
+          <td style="padding:8px 6px;color:#00cc88">₹{r['tp1']:,.0f} <span style="color:#555">·</span> ₹{r['tp2']:,.0f}</td>
+          <td style="padding:8px 6px;font-size:10px;color:#556655">{_signals(r.get('passed', []))}</td>
         </tr>"""
 
-    rating_html = ""
-    for evt in (rating_events[:15] if rating_events else []):
-        rating_html += f"""
-        <tr style="border-bottom:1px solid #00ff4108">
-          <td style="padding:4px;color:#f59e0b">{str(evt.get('company',''))[:35]}</td>
-          <td style="padding:4px;font-size:11px">{str(evt.get('headline',''))[:65]}</td>
-          <td style="padding:4px;font-size:11px;color:#888">{str(evt.get('date',''))[:10]}</td>
+    empty_row = f"<tr><td colspan='8' style='padding:20px;color:#334433;text-align:center'>No candidates above {MIN_CONFIDENCE}% confidence today</td></tr>"
+
+    # ── BSE credit upgrades ───────────────────────────────────────────────────
+    rating_rows = ""
+    for evt in (rating_events[:12] if rating_events else []):
+        rating_rows += f"""
+        <tr style="border-bottom:1px solid #ffffff06">
+          <td style="padding:6px;color:#f59e0b;font-weight:600">{str(evt.get('company',''))[:30]}</td>
+          <td style="padding:6px;color:#aaa;font-size:11px">{str(evt.get('headline',''))[:70]}</td>
+          <td style="padding:6px;color:#556655;font-size:11px">{str(evt.get('date',''))[:10]}</td>
         </tr>"""
-    if not rating_html:
-        rating_html = "<tr><td colspan='3' style='padding:8px;color:#444'>No upgrades via BSE API today</td></tr>"
+    if not rating_rows:
+        rating_rows = "<tr><td colspan='3' style='padding:12px;color:#334433'>No BSE credit upgrades found today</td></tr>"
 
-    return f"""<!DOCTYPE html><html><body style="font-family:monospace;background:#050e05;color:#e8ffe8;padding:24px">
-<div style="max-width:760px;margin:0 auto">
+    # ── Credit overlap callout ────────────────────────────────────────────────
+    overlap_html = ""
+    if credit_matches:
+        tickers_html = " ".join(
+            f'<span style="display:inline-block;background:#f59e0b18;border:1px solid #f59e0b40;color:#f59e0b;'
+            f'padding:2px 8px;border-radius:3px;margin:2px;font-size:11px">{t}</span>'
+            for t in sorted(credit_matches)
+        )
+        overlap_html = f"""
+        <div style="margin:16px 0;padding:12px 16px;background:#1a1200;border-left:3px solid #f59e0b">
+          <span style="color:#f59e0b;font-size:11px;font-weight:700;letter-spacing:.1em">HIGHEST CONVICTION — CREDIT UPGRADE OVERLAP</span><br>
+          <div style="margin-top:6px">{tickers_html}</div>
+        </div>"""
 
-<h1 style="color:#00ff41;letter-spacing:.1em;border-bottom:1px solid #00ff4130;padding-bottom:10px;font-size:18px">
-  📈 ONE PIECE QUANT TERMINAL
-  <span style="display:block;font-size:12px;color:#00aa28;margin-top:4px">
-    Multibagger Alert — {session} · {date.today().strftime('%d %b %Y')} · {run_time} IST
-  </span>
-</h1>
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#060d06;font-family:'SF Mono',Monaco,monospace;color:#c8e8c8">
+<div style="max-width:780px;margin:0 auto;padding:24px 16px">
 
-<p style="color:#00aa28;font-size:13px">
-  <strong style="color:#00ff41">{len(results)}</strong> stocks passed all multibagger criteria
-  (confidence ≥{MIN_CONFIDENCE}% from {_UNIVERSE_SIZE:,} stock universe).
-  {"<strong style='color:#f59e0b'>⭐ "+str(len(credit_matches))+" also have BSE credit upgrades — highest conviction.</strong>" if credit_matches else ""}
-</p>
+  <!-- Header -->
+  <div style="border-bottom:1px solid #00ff4120;padding-bottom:16px;margin-bottom:20px">
+    <div style="color:#00ff41;font-size:13px;font-weight:700;letter-spacing:.2em">ONE PIECE QUANT TERMINAL</div>
+    <div style="margin-top:4px;font-size:22px;font-weight:700;color:#e8ffe8">Multibagger Alert</div>
+    <div style="margin-top:4px;color:#556655;font-size:12px">{session} · {today} · {run_time} IST</div>
+  </div>
 
-<h2 style="color:#00e535;font-size:12px;letter-spacing:.18em;margin-top:20px">MULTIBAGGER CANDIDATES</h2>
-<table style="width:100%;border-collapse:collapse;font-size:12px">
-  <thead>
-    <tr style="color:#00aa28;border-bottom:1px solid #00ff4130">
-      <th style="text-align:left;padding:6px 4px">Ticker</th>
-      <th style="text-align:left;padding:6px 4px">LTP</th>
-      <th style="text-align:left;padding:6px 4px">Conf</th>
-      <th style="text-align:left;padding:6px 4px">RSI</th>
-      <th style="text-align:left;padding:6px 4px">Stop Loss</th>
-      <th style="text-align:left;padding:6px 4px">TP1 / TP2</th>
-      <th style="text-align:left;padding:6px 4px">Top Signals</th>
-    </tr>
-  </thead>
-  <tbody>{rows_html if rows_html else "<tr><td colspan='7' style='padding:12px;color:#555'>No candidates above {MIN_CONFIDENCE}% confidence today</td></tr>"}</tbody>
-</table>
-<p style="font-size:10px;color:#555;margin-top:4px">⭐ = BSE credit rating upgrade in last 6 months. Validate on Screener.in before acting.</p>
+  <!-- Stats bar -->
+  <div style="display:flex;gap:24px;margin-bottom:20px;flex-wrap:wrap">
+    <div><div style="color:#00ff41;font-size:28px;font-weight:700;line-height:1">{len(results)}</div>
+         <div style="color:#556655;font-size:11px;margin-top:2px">CANDIDATES</div></div>
+    <div><div style="color:#e8ffe8;font-size:28px;font-weight:700;line-height:1">{_UNIVERSE_SIZE:,}</div>
+         <div style="color:#556655;font-size:11px;margin-top:2px">STOCKS SCANNED</div></div>
+    <div><div style="color:#e8ffe8;font-size:28px;font-weight:700;line-height:1">{MIN_CONFIDENCE}%</div>
+         <div style="color:#556655;font-size:11px;margin-top:2px">MIN CONFIDENCE</div></div>
+    {f'<div><div style="color:#f59e0b;font-size:28px;font-weight:700;line-height:1">{len(credit_matches)}</div><div style="color:#556655;font-size:11px;margin-top:2px">CREDIT UPGRADES</div></div>' if credit_matches else ""}
+  </div>
 
-<h2 style="color:#00e535;font-size:12px;letter-spacing:.18em;margin-top:24px">BSE CREDIT RATING UPGRADES (LAST 6M)</h2>
-<table style="width:100%;border-collapse:collapse;font-size:12px">
-  <thead>
-    <tr style="color:#00aa28;border-bottom:1px solid #00ff4130">
-      <th style="text-align:left;padding:4px">Company</th>
-      <th style="text-align:left;padding:4px">BSE Headline</th>
-      <th style="text-align:left;padding:4px">Date</th>
-    </tr>
-  </thead>
-  <tbody>{rating_html}</tbody>
-</table>
+  {overlap_html}
 
-<div style="margin-top:24px;padding:14px;background:#0a1a0a;border:1px solid #00ff4120;font-size:11px">
-  <strong style="color:#f59e0b">Manual Validation Checklist (for ⭐ stocks):</strong>
-  <ol style="color:#888;margin:8px 0;padding-left:20px;line-height:2">
-    <li>Run Screener.in fundamental query (pasted below) — look for YOY sales growth &gt;20%</li>
-    <li>Verify order book ≥ 2.5× TTM revenue in latest concall / investor presentation on BSE</li>
-    <li>Confirm credit rating upgrade letter on bseindia.com → Announcements → Credit Rating</li>
-    <li>Check promoter holding trend — should be stable or increasing</li>
-  </ol>
+  <!-- Candidates table -->
+  <div style="color:#00ff41;font-size:10px;font-weight:700;letter-spacing:.18em;margin-bottom:8px">MULTIBAGGER CANDIDATES</div>
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead>
+      <tr style="border-bottom:1px solid #00ff4120;color:#445544;font-size:10px;letter-spacing:.08em">
+        <th style="padding:6px;width:16px"></th>
+        <th style="text-align:left;padding:6px">TICKER</th>
+        <th style="text-align:left;padding:6px">PRICE</th>
+        <th style="text-align:left;padding:6px">CONF</th>
+        <th style="text-align:left;padding:6px">RSI</th>
+        <th style="text-align:left;padding:6px">STOP LOSS</th>
+        <th style="text-align:left;padding:6px">TP1 · TP2</th>
+        <th style="text-align:left;padding:6px">SIGNALS</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows_html if rows_html else empty_row}
+    </tbody>
+  </table>
+  {'<p style="font-size:10px;color:#334433;margin-top:6px">★ BSE credit rating upgrade in last 6 months</p>' if credit_matches else ""}
+
+  <!-- BSE Credit Upgrades -->
+  <div style="color:#00ff41;font-size:10px;font-weight:700;letter-spacing:.18em;margin:28px 0 8px">BSE CREDIT RATING UPGRADES · LAST 6M</div>
+  <table style="width:100%;border-collapse:collapse;font-size:11px">
+    <thead>
+      <tr style="border-bottom:1px solid #00ff4115;color:#445544;font-size:10px;letter-spacing:.08em">
+        <th style="text-align:left;padding:6px">COMPANY</th>
+        <th style="text-align:left;padding:6px">HEADLINE</th>
+        <th style="text-align:left;padding:6px">DATE</th>
+      </tr>
+    </thead>
+    <tbody>{rating_rows}</tbody>
+  </table>
+
+  <!-- Footer -->
+  <div style="margin-top:28px;padding-top:14px;border-top:1px solid #ffffff08;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+    <a href="https://dashboard-two-plum-91.vercel.app" style="color:#00ff41;text-decoration:none;font-size:11px;font-weight:700">→ Open Dashboard</a>
+    <span style="color:#334433;font-size:10px">Not financial advice · {today} · ONE PIECE Quant Terminal</span>
+  </div>
+
 </div>
-
-<div style="margin-top:12px;padding:12px;background:#0a0a18;border:1px solid #f59e0b30;font-size:10px;color:#666">
-  <strong style="color:#f59e0b">Screener.in Query (copy-paste at screener.in/screens/new):</strong><br><br>
-  <code style="color:#aaa;line-height:1.9;white-space:pre-wrap">YOY Quarterly sales growth > 20 AND Sales growth > 20 AND OPM > 12 AND OPM last year &lt; OPM AND Debt to equity &lt; 0.5 AND Return on equity > 15 AND Market Capitalization > 500 AND Market Capitalization &lt; 30000 AND Cash from operations last year > 0 AND Promoter holding > 30 AND Change in promoter holding > -5 AND PEG Ratio &lt; 1.5 AND Current ratio > 1.5</code>
-</div>
-
-<div style="margin-top:12px;padding:12px;background:#0a0a18;border:1px solid #00ff4120;font-size:10px;color:#666">
-  <strong style="color:#00e535">ChartInk Scanner (chartink.com/screener):</strong><br><br>
-  <code style="color:#aaa;line-height:1.9;white-space:pre-wrap">( ( [Daily EMA ( [Close] ,9)] &gt; [Daily EMA ( [Close] ,20)] ) AND ( [Daily EMA ( [Close] ,20)] &gt; [Daily EMA ( [Close] ,50)] ) AND ( [Daily EMA ( [Close] ,50)] &gt; [Daily SMA ( [Close] ,200)] ) AND ( [Daily RSI ( [Close] ,14)] &gt; 55 ) AND ( [Daily RSI ( [Close] ,14)] &lt; 78 ) AND ( [Daily Volume] &gt; 1.5 * [20 day average volume] ) AND ( [Daily Close] &gt; [20 day high] ) AND ( [Daily Market cap] &gt; 500 ) )</code>
-</div>
-
-<p style="font-size:9px;color:#003311;border-top:1px solid #00ff4108;padding-top:10px;margin-top:20px">
-  Auto-generated · ONE PIECE Quant Terminal · {run_time} IST · {date.today()} · Not financial advice.
-</p>
-</div></body></html>"""
+</body></html>"""
 
 
 def send_email(html: str, subject: str) -> bool:
