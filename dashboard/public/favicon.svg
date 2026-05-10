@@ -1,5 +1,71 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <rect width="32" height="32" rx="8" fill="#111318"/>
-  <path d="M8 22L14 12L18 18L22 10L26 16" stroke="#3B82F6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="26" cy="16" r="2" fill="#10B981"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 120">
+  <!-- Dark background -->
+  <rect width="100" height="120" rx="13" fill="#0A0F0A"/>
+
+  <!-- HAT CROWN — large dome -->
+  <path d="
+    M 13,56
+    C 12,28 25,4 50,4
+    C 75,4 88,26 87,56
+    Z
+  " fill="#00ff87"/>
+
+  <!-- HAT BRIM — wide, curves down at edges -->
+  <path d="
+    M 1,56
+    Q 12,66 30,68
+    L 50,69
+    L 70,68
+    Q 88,66 99,56
+    Z
+  " fill="#00ff87"/>
+
+  <!-- HAT BAND cutout (background showing through crown base) -->
+  <path d="
+    M 15,46
+    C 38,42 62,42 85,46
+    L 85,56
+    L 15,56
+    Z
+  " fill="#0A0F0A"/>
+
+  <!-- BACK OF HEAD / HAIR MASS (right side) -->
+  <path d="
+    M 52,69
+    C 62,66 74,63 82,69
+    C 90,75 88,92 78,98
+    C 68,104 55,98 51,87
+    Z
+  " fill="#00ff87"/>
+
+  <!-- HAIR SPIKES RIGHT (behind brim) -->
+  <path d="M 74,56 C 78,50 84,48 88,52 C 92,56 90,62 87,56 Z" fill="#00ff87"/>
+  <path d="M 82,56 C 86,48 94,46 96,52 C 98,56 94,60 90,58 Z" fill="#00ff87"/>
+
+  <!-- FACE PROFILE (left-facing) -->
+  <path d="
+    M 25,69
+    C 14,74 8,86 9,98
+    C 10,110 20,116 32,116
+    C 44,116 53,106 51,94
+    C 49,82 40,72 30,69
+    Z
+  " fill="#00ff87"/>
+
+  <!-- FRONT HAIR TUFTS (below hat brim left) -->
+  <path d="M 24,69 C 22,63 24,56 28,56 C 32,56 32,63 30,69 Z" fill="#00ff87"/>
+  <path d="M 33,69 C 32,62 35,57 39,57 C 43,57 42,63 39,69 Z" fill="#00ff87"/>
+
+  <!-- NECK / SHOULDER base -->
+  <path d="M 20,116 Q 28,122 36,120 L 44,116 Q 38,120 20,116 Z" fill="#00ff87"/>
+
+  <!-- EAR (right side of face profile) -->
+  <path d="M 47,88 C 52,86 54,90 53,95 C 52,100 47,101 44,99 Z" fill="#0A0F0A"/>
+
+  <!-- SCAR — two parallel lines under left eye -->
+  <line x1="20" y1="88" x2="26" y2="95" stroke="#0A0F0A" stroke-width="1.4" stroke-linecap="round"/>
+  <line x1="23" y1="87" x2="29" y2="94" stroke="#0A0F0A" stroke-width="1.4" stroke-linecap="round"/>
+
+  <!-- GRIN — wide smile curve -->
+  <path d="M 12,104 Q 24,115 40,107" fill="none" stroke="#0A0F0A" stroke-width="2" stroke-linecap="round"/>
 </svg>
