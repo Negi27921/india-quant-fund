@@ -24,10 +24,10 @@ function Logo() {
   return (
     <img
       src="/favicon.svg"
-      width={32}
-      height={32}
-      alt="IQF"
-      style={{ display: "block", flexShrink: 0 }}
+      width={36}
+      height={44}
+      alt="One Piece Quant"
+      style={{ display: "block", flexShrink: 0, objectFit: "contain" }}
     />
   );
 }

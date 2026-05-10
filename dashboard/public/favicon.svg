@@ -1,71 +1,161 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 120">
-  <!-- Dark background -->
-  <rect width="100" height="120" rx="13" fill="#0A0F0A"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 600" shape-rendering="geometricPrecision">
+
+  <!-- ── Dark rounded background (favicon context) ── -->
+  <rect width="500" height="600" rx="60" fill="#0A0D0A"/>
+
+  <!-- ══════════════════════════════════════════════
+       LUFFY STRAW HAT SILHOUETTE — faithful trace
+       Black on dark bg, white band & hair highlights
+       ══════════════════════════════════════════════ -->
 
   <!-- HAT CROWN — large dome -->
   <path d="
-    M 13,56
-    C 12,28 25,4 50,4
-    C 75,4 88,26 87,56
+    M 80,230
+    C 75,145 90,75 160,42
+    C 210,18 265,14 315,28
+    C 375,45 420,100 418,225
     Z
-  " fill="#00ff87"/>
+  " fill="#e8ffe8"/>
 
-  <!-- HAT BRIM — wide, curves down at edges -->
+  <!-- BACK HAIR MASS — right side, under crown, above brim -->
   <path d="
-    M 1,56
-    Q 12,66 30,68
-    L 50,69
-    L 70,68
-    Q 88,66 99,56
+    M 295,232
+    C 320,225 360,218 390,228
+    C 420,238 418,225 418,225
+    L 295,225
     Z
-  " fill="#00ff87"/>
+  " fill="#e8ffe8"/>
 
-  <!-- HAT BAND cutout (background showing through crown base) -->
+  <!-- HAT BRIM — wide dark band -->
   <path d="
-    M 15,46
-    C 38,42 62,42 85,46
-    L 85,56
-    L 15,56
+    M 18,228 L 482,228
+    C 480,240 465,255 440,260
+    Q 250,272 60,260
+    C 35,255 20,242 18,228
     Z
-  " fill="#0A0F0A"/>
+  " fill="#e8ffe8"/>
 
-  <!-- BACK OF HEAD / HAIR MASS (right side) -->
+  <!-- === Main silhouette (all black) === -->
+
+  <!-- HAT CROWN FILL — solid black dome -->
   <path d="
-    M 52,69
-    C 62,66 74,63 82,69
-    C 90,75 88,92 78,98
-    C 68,104 55,98 51,87
+    M 82,224
+    C 80,148 94,78 162,46
+    C 212,22 268,18 316,32
+    C 373,50 416,104 414,222
     Z
-  " fill="#00ff87"/>
+  " fill="#050f05"/>
 
-  <!-- HAIR SPIKES RIGHT (behind brim) -->
-  <path d="M 74,56 C 78,50 84,48 88,52 C 92,56 90,62 87,56 Z" fill="#00ff87"/>
-  <path d="M 82,56 C 86,48 94,46 96,52 C 98,56 94,60 90,58 Z" fill="#00ff87"/>
-
-  <!-- FACE PROFILE (left-facing) -->
+  <!-- HAT BRIM FILL -->
   <path d="
-    M 25,69
-    C 14,74 8,86 9,98
-    C 10,110 20,116 32,116
-    C 44,116 53,106 51,94
-    C 49,82 40,72 30,69
+    M 22,226 L 478,226
+    C 476,238 462,252 438,257
+    Q 250,268 62,257
+    C 38,252 24,240 22,226
     Z
-  " fill="#00ff87"/>
+  " fill="#050f05"/>
 
-  <!-- FRONT HAIR TUFTS (below hat brim left) -->
-  <path d="M 24,69 C 22,63 24,56 28,56 C 32,56 32,63 30,69 Z" fill="#00ff87"/>
-  <path d="M 33,69 C 32,62 35,57 39,57 C 43,57 42,63 39,69 Z" fill="#00ff87"/>
+  <!-- FACE PROFILE — left-facing -->
+  <path d="
+    M 118,266
+    C 95,272 68,288 52,308
+    C 34,330 32,355 38,372
+    C 44,390 52,404 66,416
+    C 76,425 90,432 105,435
+    C 80,438 72,448 78,460
+    C 86,475 102,480 120,480
+    L 152,480
+    C 168,475 178,462 168,450
+    C 162,440 150,436 140,436
+    C 158,432 172,424 182,410
+    C 196,390 200,368 194,346
+    C 188,322 172,300 155,282
+    L 138,268
+    Z
+  " fill="#050f05"/>
 
-  <!-- NECK / SHOULDER base -->
-  <path d="M 20,116 Q 28,122 36,120 L 44,116 Q 38,120 20,116 Z" fill="#00ff87"/>
+  <!-- BACK OF HEAD / HAIR MASS — right side -->
+  <path d="
+    M 190,268
+    C 230,260 285,252 330,260
+    C 368,268 395,290 400,318
+    C 404,342 390,368 368,382
+    C 346,396 315,400 288,392
+    C 262,384 244,366 232,346
+    C 220,328 212,306 200,288
+    Z
+  " fill="#050f05"/>
 
-  <!-- EAR (right side of face profile) -->
-  <path d="M 47,88 C 52,86 54,90 53,95 C 52,100 47,101 44,99 Z" fill="#0A0F0A"/>
+  <!-- NECK / SHOULDER -->
+  <path d="
+    M 120,480 L 168,480 L 180,520 L 108,520 Z
+  " fill="#050f05"/>
 
-  <!-- SCAR — two parallel lines under left eye -->
-  <line x1="20" y1="88" x2="26" y2="95" stroke="#0A0F0A" stroke-width="1.4" stroke-linecap="round"/>
-  <line x1="23" y1="87" x2="29" y2="94" stroke="#0A0F0A" stroke-width="1.4" stroke-linecap="round"/>
+  <!-- FRONT HAIR TUFTS — under brim, left side -->
+  <path d="M 118,266 C 112,258 108,248 116,240 C 122,234 132,238 136,248 C 138,256 132,266 124,268 Z" fill="#050f05"/>
+  <path d="M 138,268 C 134,258 134,246 142,240 C 150,234 160,240 160,250 C 160,260 154,268 146,270 Z" fill="#050f05"/>
+  <path d="M 160,270 C 158,260 160,248 168,244 C 175,240 182,246 180,256 C 178,264 172,270 164,272 Z" fill="#050f05"/>
 
-  <!-- GRIN — wide smile curve -->
-  <path d="M 12,104 Q 24,115 40,107" fill="none" stroke="#0A0F0A" stroke-width="2" stroke-linecap="round"/>
+  <!-- ── WHITE DETAILS ───────────────────────────── -->
+
+  <!-- HAT BAND — thick white diagonal arc -->
+  <path d="
+    M 86,180
+    C 130,165 200,158 270,162
+    C 330,165 385,176 410,190
+    L 410,210
+    C 384,196 328,185 268,182
+    C 198,178 128,185 84,200
+    Z
+  " fill="white"/>
+
+  <!-- WHITE HAIR inside hat (spiky, between band and brim) -->
+  <!-- Left hair spike -->
+  <path d="M 92,212 C 84,204 80,196 88,190 C 96,184 106,190 108,200 C 110,208 104,216 96,216 Z" fill="white"/>
+  <!-- Center-left tuft -->
+  <path d="M 112,216 C 108,206 110,196 118,192 C 126,188 134,196 132,206 C 130,214 122,218 114,218 Z" fill="white"/>
+  <!-- Center tuft -->
+  <path d="M 135,218 C 133,208 136,198 144,196 C 152,194 158,202 156,212 C 154,220 146,222 138,220 Z" fill="white"/>
+
+  <!-- RIGHT side hair spikes (back, above brim) -->
+  <path d="M 320,240 C 334,230 350,226 362,232 C 370,236 368,246 358,250 C 348,254 332,252 322,246 Z" fill="white"/>
+  <path d="M 355,238 C 368,228 386,224 396,230 C 404,235 402,245 392,248 C 382,252 366,250 356,244 Z" fill="white"/>
+  <path d="M 388,234 C 400,224 418,222 426,228 C 432,232 430,242 420,246 C 410,250 396,248 386,242 Z" fill="white"/>
+
+  <!-- HAIR highlights on back of head -->
+  <path d="M 360,290 C 374,280 390,278 398,286 C 404,292 398,304 386,308 C 374,312 360,308 356,298 Z" fill="white" opacity="0.6"/>
+
+  <!-- EYE — small white area in face -->
+  <path d="M 72,316 C 68,310 68,304 74,302 C 80,300 86,306 84,312 C 82,318 76,320 72,316 Z" fill="white"/>
+
+  <!-- EAR — C-shape highlight on right side of face -->
+  <path d="
+    M 185,332
+    C 192,326 198,328 200,334
+    C 202,340 200,350 194,354
+    C 188,358 182,354 180,348
+    C 178,342 180,336 185,332
+    Z
+  " fill="white"/>
+  <!-- Ear inner -->
+  <path d="
+    M 187,336
+    C 191,332 195,334 196,338
+    C 197,344 194,349 190,351
+    C 186,353 183,350 183,346
+    C 183,342 185,338 187,336
+    Z
+  " fill="#050f05"/>
+
+  <!-- SCAR — two parallel diagonal lines under eye -->
+  <line x1="76" y1="326" x2="92" y2="346" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  <line x1="84" y1="324" x2="100" y2="344" stroke="white" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- GRIN / STITCHED SMILE -->
+  <path d="M 48,390 Q 80,415 120,400" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- Stitch marks on grin -->
+  <line x1="62" y1="392" x2="66" y2="400" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="78" y1="402" x2="82" y2="410" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="96" y1="406" x2="100" y2="414" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+
 </svg>
