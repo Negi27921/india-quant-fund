@@ -150,6 +150,48 @@ def _fetch_fast_info(ticker: str) -> dict:
         return {"ticker": ticker, "price": 0, "prev_close": 0, "change": 0, "change_pct": 0, "day_high": 0, "day_low": 0}
 
 
+def _batch_download(tickers: list[str]) -> list[dict]:
+    """Single yf.download for all tickers — far faster than N individual fast_info calls."""
+    import math
+    try:
+        raw = yf.download(
+            tickers, period="2d", interval="1d",
+            auto_adjust=True, progress=False, threads=True, group_by="ticker",
+        )
+        results = []
+        for ticker in tickers:
+            try:
+                df = raw[ticker] if len(tickers) > 1 else raw
+                df = df.dropna(subset=["Close"])
+                if len(df) < 1:
+                    continue
+                price = float(df["Close"].iloc[-1])
+                prev  = float(df["Close"].iloc[-2]) if len(df) >= 2 else price
+                high  = float(df["High"].iloc[-1])
+                low   = float(df["Low"].iloc[-1])
+                vol   = int(df["Volume"].iloc[-1])
+                if price <= 0 or math.isnan(price):
+                    continue
+                change     = price - prev
+                change_pct = (change / prev * 100) if prev else 0
+                results.append({
+                    "ticker":     ticker,
+                    "price":      round(price, 2),
+                    "prev_close": round(prev, 2),
+                    "change":     round(change, 2),
+                    "change_pct": round(change_pct, 3),
+                    "day_high":   round(high, 2),
+                    "day_low":    round(low, 2),
+                    "volume":     vol,
+                    "market_cap": 0,
+                })
+            except Exception:
+                pass
+        return results
+    except Exception:
+        return []
+
+
 def _fetch_nse_all_indices() -> dict[str, dict]:
     """Fetch all NSE indices in one call — returns {indexSymbol: data}."""
     if not _NSE_AVAILABLE:
@@ -294,23 +336,38 @@ NSE_INDEX_SYMBOL_MAP = {
 async def get_indices():
     loop = asyncio.get_event_loop()
 
-    # Try NSE official API first (real-time, 0 delay)
+    # NSE official: real-time, cap at 3s
     nse_data: dict[str, dict] = {}
     if _NSE_AVAILABLE:
         try:
-            nse_data = await loop.run_in_executor(_executor, _fetch_nse_all_indices)
+            nse_data = await asyncio.wait_for(
+                loop.run_in_executor(_executor, _fetch_nse_all_indices),
+                timeout=3.0,
+            )
         except Exception:
             pass
 
-    # Fall back to yfinance for any missing indices
+    # Collect which indices need yfinance fallback
+    missing = [
+        (key, yf_sym, label)
+        for key, (nse_sym, yf_sym, label) in NSE_INDEX_SYMBOL_MAP.items()
+        if not (nse_data.get(nse_sym, {}).get("price", 0) > 0)
+    ]
+
+    # Fetch all missing in parallel — not sequentially
+    fallbacks = await asyncio.gather(
+        *[loop.run_in_executor(_executor, _fetch_index, yf_sym) for _, yf_sym, _ in missing],
+        return_exceptions=True,
+    )
+
     out = {}
     for key, (nse_sym, yf_sym, label) in NSE_INDEX_SYMBOL_MAP.items():
         d = nse_data.get(nse_sym)
         if d and d.get("price", 0) > 0:
             out[key] = {"label": label, "symbol": yf_sym, **d}
-        else:
-            fallback = await loop.run_in_executor(_executor, _fetch_index, yf_sym)
-            out[key] = {"label": label, **fallback}
+
+    for (key, yf_sym, label), fb in zip(missing, fallbacks):
+        out[key] = {"label": label, **(fb if isinstance(fb, dict) else {})}
 
     out["status"] = _market_status()
     return out
@@ -327,24 +384,31 @@ async def get_history(
 
 
 @router.get("/movers")
-@_cached("movers", ttl=20)
+@_cached("movers", ttl=60)
 async def get_movers(limit: int = Query(8, le=20)):
     loop = asyncio.get_event_loop()
     quotes: list[dict] = []
 
-    # Try NSE official live data first
+    # NSE official: real-time, instant when available
     if _NSE_AVAILABLE:
         try:
-            stocks = await loop.run_in_executor(_executor, _fetch_nse_index_stocks, "NIFTY 50")
+            stocks = await asyncio.wait_for(
+                loop.run_in_executor(_executor, _fetch_nse_index_stocks, "NIFTY 50"),
+                timeout=3.0,
+            )
             quotes = [s for s in stocks if s.get("price", 0) > 0]
         except Exception:
             pass
 
-    # Fallback to yfinance
+    # yfinance fallback: one batch download instead of 50 individual fast_info calls
     if not quotes:
-        tasks = [loop.run_in_executor(_executor, _fetch_fast_info, t) for t in NIFTY50]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        quotes = [r for r in results if isinstance(r, dict) and r.get("price", 0) > 0]
+        try:
+            quotes = await asyncio.wait_for(
+                loop.run_in_executor(_executor, _batch_download, NIFTY50),
+                timeout=9.0,
+            )
+        except Exception:
+            quotes = []
 
     gainers = sorted([q for q in quotes if q["change_pct"] > 0], key=lambda x: -x["change_pct"])[:limit]
     losers  = sorted([q for q in quotes if q["change_pct"] < 0], key=lambda x: x["change_pct"])[:limit]
@@ -388,15 +452,59 @@ YF_SECTOR_FALLBACK = {
 }
 
 
+def _batch_download_sectors() -> list[dict]:
+    """Single download for all sector indices."""
+    import math
+    names   = list(YF_SECTOR_FALLBACK.keys())
+    symbols = list(YF_SECTOR_FALLBACK.values())
+    try:
+        raw = yf.download(
+            symbols, period="2d", interval="1d",
+            auto_adjust=True, progress=False, threads=True, group_by="ticker",
+        )
+        results = []
+        for name, symbol in zip(names, symbols):
+            try:
+                df = raw[symbol] if len(symbols) > 1 else raw
+                df = df.dropna(subset=["Close"])
+                if len(df) < 1:
+                    continue
+                price = float(df["Close"].iloc[-1])
+                prev  = float(df["Close"].iloc[-2]) if len(df) >= 2 else price
+                if price <= 0 or math.isnan(price):
+                    continue
+                change     = price - prev
+                change_pct = (change / prev * 100) if prev else 0
+                results.append({
+                    "sector":     name,
+                    "symbol":     symbol,
+                    "price":      round(price, 2),
+                    "prev_close": round(prev, 2),
+                    "change":     round(change, 2),
+                    "change_pct": round(change_pct, 3),
+                    "day_high":   round(float(df["High"].iloc[-1]), 2),
+                    "day_low":    round(float(df["Low"].iloc[-1]), 2),
+                })
+            except Exception:
+                pass
+        return sorted(results, key=lambda x: -abs(x.get("change_pct", 0)))
+    except Exception:
+        return []
+
+
 @router.get("/sectors")
-@_cached("sectors", ttl=30)
+@_cached("sectors", ttl=60)
 async def get_sectors():
     loop = asyncio.get_event_loop()
-    out = []
 
+    # NSE official: real-time, cap at 3s
     if _NSE_AVAILABLE:
         try:
-            nse_all = await loop.run_in_executor(_executor, _fetch_nse_all_indices)
+            nse_all = await asyncio.wait_for(
+                loop.run_in_executor(_executor, _fetch_nse_all_indices),
+                timeout=3.0,
+            )
+            out = []
             for sector_name, nse_sym in NSE_SECTOR_MAP.items():
                 d = nse_all.get(nse_sym)
                 if d and d.get("price", 0) > 0:
@@ -406,13 +514,15 @@ async def get_sectors():
         except Exception:
             pass
 
-    # yfinance fallback
-    tasks = [loop.run_in_executor(_executor, _fetch_index, sym) for sym in YF_SECTOR_FALLBACK.values()]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    for (name, sym), res in zip(YF_SECTOR_FALLBACK.items(), results):
-        if isinstance(res, dict):
-            out.append({"sector": name, **res})
-    return sorted(out, key=lambda x: -abs(x.get("change_pct", 0)))
+    # yfinance fallback: one batch download
+    try:
+        result = await asyncio.wait_for(
+            loop.run_in_executor(_executor, _batch_download_sectors),
+            timeout=9.0,
+        )
+        return result
+    except Exception:
+        return []
 
 
 def _fetch_nse_quote(symbol: str) -> dict | None:

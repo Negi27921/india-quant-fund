@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.routers import market, chat, screener, portfolio, trades, risk, telegram_bot
@@ -24,6 +24,24 @@ app.include_router(portfolio.router,     prefix="/api/portfolio", tags=["Portfol
 app.include_router(trades.router,        prefix="/api/trades",    tags=["Trades"])
 app.include_router(risk.router,          prefix="/api/risk",      tags=["Risk"])
 app.include_router(telegram_bot.router,  prefix="/api/telegram",  tags=["Telegram"])
+
+# Lightweight system stubs — the local system.py uses DuckDB which isn't on Vercel.
+# These return safe cloud-compatible responses so the frontend doesn't 404.
+_system = APIRouter()
+
+@_system.get("/health")
+async def system_health():
+    return {"database": "supabase", "api": "ok", "timestamp": datetime.now().isoformat(), "paper_trading": True}
+
+@_system.get("/kill-switch/status")
+async def kill_switch_status():
+    return {"active": False, "triggered_at": None, "reason": None}
+
+@_system.get("/audit-log")
+async def audit_log():
+    return []
+
+app.include_router(_system, prefix="/api/system", tags=["System"])
 
 
 @app.get("/health")

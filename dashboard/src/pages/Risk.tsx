@@ -175,7 +175,7 @@ export function RiskPage() {
               <div>
                 <LimitRow
                   label="Portfolio Drawdown"
-                  value={risk.drawdown_pct}
+                  value={Math.abs(risk.drawdown_pct)}
                   limit={risk.drawdown_limit}
                 />
                 <LimitRow
@@ -185,12 +185,12 @@ export function RiskPage() {
                 />
                 <LimitRow
                   label="Max Position Size"
-                  value={risk.max_position_pct}
+                  value={risk.position_utilization_pct ?? 0}
                   limit={risk.max_position_pct}
                 />
                 <LimitRow
                   label="Max Sector Exposure"
-                  value={risk.max_sector_pct}
+                  value={risk.sector_utilization_pct ?? 0}
                   limit={risk.max_sector_pct}
                 />
               </div>

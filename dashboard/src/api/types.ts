@@ -67,6 +67,8 @@ export interface RiskMetrics {
   rolling_sharpe_63d: number;
   max_position_pct: number;
   max_sector_pct: number;
+  position_utilization_pct: number;
+  sector_utilization_pct: number;
   kill_switch_active: boolean;
 }
 

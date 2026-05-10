@@ -1,16 +1,32 @@
 import { API_BASE } from "@/lib/constants";
 
+const TIMEOUT_MS = 10_000;
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    ...options,
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-  if (!res.ok) {
-    throw new Error(`API error ${res.status}: ${await res.text()}`);
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      signal: controller.signal,
+      ...options,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => res.statusText);
+      throw new Error(`API ${res.status}: ${text}`);
+    }
+
+    return res.json() as Promise<T>;
+  } catch (err) {
+    if ((err as Error).name === "AbortError") {
+      throw new Error(`Request timeout: ${path}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
-
-  return res.json() as Promise<T>;
 }
 
 export const api = {
