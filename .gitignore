@@ -3,6 +3,9 @@
 *.env
 .env.*
 !.env.example
+dashboard/.env
+dashboard/.env.*
+dashboard/.env*.local
 
 # Python
 __pycache__/

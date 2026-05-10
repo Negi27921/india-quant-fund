@@ -4,11 +4,17 @@ from __future__ import annotations
 import os
 from zoneinfo import ZoneInfo
 
+import re
+
 import httpx
-from fastapi import APIRouter
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel, Field, field_validator
+
+from api.middleware.security import rate_limit_chat
 
 router = APIRouter()
+
+_SAFE_SYMBOL_RE = re.compile(r'^[A-Z0-9&\-]{1,20}$')
 IST = ZoneInfo("Asia/Kolkata")
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
@@ -17,10 +23,20 @@ GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 
 class ChatMessage(BaseModel):
-    message: str
-    symbol: str | None = None
-    history: list[dict] | None = None  # [{"role": "user"|"assistant", "content": "..."}]
-    pdf_text: str | None = None
+    message: str = Field(..., min_length=1, max_length=2000)
+    symbol: str | None = Field(default=None, max_length=20)
+    history: list[dict] | None = None
+    pdf_text: str | None = Field(default=None, max_length=8000)
+
+    @field_validator("symbol")
+    @classmethod
+    def validate_symbol(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        cleaned = v.strip().upper().replace(".NS", "").replace(".BO", "")
+        if cleaned and not _SAFE_SYMBOL_RE.match(cleaned):
+            return None  # silently discard malformed symbols
+        return cleaned or None
 
 
 class ChatResponse(BaseModel):
@@ -92,7 +108,7 @@ Rules:
 """
 
 
-@router.post("/message", response_model=ChatResponse)
+@router.post("/message", response_model=ChatResponse, dependencies=[Depends(rate_limit_chat)])
 async def chat_message(body: ChatMessage):
     """Process a chat message and return AI analysis."""
     import asyncio
@@ -112,7 +128,7 @@ async def chat_message(body: ChatMessage):
             symbol=None,
         )
 
-    symbol = (body.symbol or "").strip().upper().replace(".NS", "").replace(".BO", "")
+    symbol = body.symbol or ""
     user_msg = body.message.strip()
 
     # Build context
@@ -121,7 +137,6 @@ async def chat_message(body: ChatMessage):
 
     # Try to extract symbol from message if not provided
     if not symbol:
-        import re
         candidates = re.findall(r'\b([A-Z]{2,10})\b', user_msg.upper())
         common_stops = {"THE", "AND", "FOR", "ARE", "YOU", "NSE", "BSE", "FII", "DII", "IPO", "AGM", "EPS", "ROE", "PAT", "NII", "NIM", "AUM", "SEBI"}
         for c in candidates:
@@ -178,13 +193,12 @@ async def chat_message(body: ChatMessage):
             )
             data = resp.json()
             reply = data["choices"][0]["message"]["content"]
-    except Exception as e:
+    except Exception:
         reply = (
-            f"I encountered a temporary issue connecting to the AI service. "
-            f"Please try again in a moment.\n\n"
-            f"_(Error: {type(e).__name__})_\n\n"
-            f"In the meantime, the live market panels on this page have indices, "
-            f"FII/DII flows, filings, and corporate actions."
+            "I encountered a temporary issue connecting to the AI service. "
+            "Please try again in a moment.\n\n"
+            "In the meantime, the live market panels on this page have indices, "
+            "FII/DII flows, filings, and corporate actions."
         )
 
     if not sources:

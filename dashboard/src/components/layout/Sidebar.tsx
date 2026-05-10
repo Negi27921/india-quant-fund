@@ -5,7 +5,7 @@ import {
   Shield, BarChart3, Settings2, ChevronLeft,
   Sun, Moon, LogOut,
 } from "lucide-react";
-import { AUTH_KEY } from "@/pages/Login";
+import { AUTH_KEY, LOCK_KEY, FAIL_KEY } from "@/pages/Login";
 import { useUIStore } from "@/store/ui";
 import { useLiveStore } from "@/store/live";
 import { useTheme } from "@/hooks/useTheme";
@@ -280,7 +280,12 @@ export function Sidebar() {
           collapsed={sidebarCollapsed}
           icon={<LogOut style={{ width: 13, height: 13 }} />}
           label="Lock Terminal"
-          onClick={() => { localStorage.removeItem(AUTH_KEY); window.location.reload(); }}
+          onClick={() => {
+            localStorage.removeItem(AUTH_KEY);
+            localStorage.removeItem(LOCK_KEY);
+            localStorage.removeItem(FAIL_KEY);
+            window.location.reload();
+          }}
           hoverColor="var(--red)"
           title="Lock terminal"
         />

@@ -12,7 +12,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from api.routers import portfolio, trades, risk, strategies, system, settings, market, chat, screener
+from api.middleware.security import SecurityHeadersMiddleware
 
+_ALLOWED_ORIGINS = [
+    "https://luffy-labs.vercel.app",
+    "https://onepiece-labs.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -26,14 +33,17 @@ app = FastAPI(
     version="1.0.0",
     description="Real-time dashboard API for automated hedge fund",
     lifespan=lifespan,
+    docs_url=None,   # disable Swagger UI in production
+    redoc_url=None,
 )
 
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
 
 # Include routers
@@ -50,17 +60,25 @@ app.include_router(screener.router, prefix="/api/screener", tags=["Screener"])
 
 # ── WebSocket manager ─────────────────────────────────────────────────────────
 
+_WS_MAX_CONNECTIONS = int(os.getenv("WS_MAX_CONNECTIONS", "50"))
+
+
 class ConnectionManager:
     def __init__(self):
         self.active: list[WebSocket] = []
 
-    async def connect(self, ws: WebSocket) -> None:
+    async def connect(self, ws: WebSocket) -> bool:
+        if len(self.active) >= _WS_MAX_CONNECTIONS:
+            await ws.close(code=1008, reason="Connection limit reached")
+            return False
         await ws.accept()
         self.active.append(ws)
         logger.info(f"WebSocket connected. Total: {len(self.active)}")
+        return True
 
     def disconnect(self, ws: WebSocket) -> None:
-        self.active.remove(ws)
+        if ws in self.active:
+            self.active.remove(ws)
         logger.info(f"WebSocket disconnected. Total: {len(self.active)}")
 
     async def broadcast(self, message: dict) -> None:
@@ -79,14 +97,17 @@ manager = ConnectionManager()
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    await manager.connect(websocket)
+    accepted = await manager.connect(websocket)
+    if not accepted:
+        return
     try:
         while True:
-            # Send live updates every 5 seconds during market hours
             snapshot = await _get_live_snapshot()
             await websocket.send_json(snapshot)
             await asyncio.sleep(5)
     except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception:
         manager.disconnect(websocket)
 
 
@@ -107,8 +128,8 @@ async def _get_live_snapshot() -> dict:
             "drawdown_pct": float(pnl["drawdown_pct"].iloc[0]) if not pnl.empty else 0,
             "n_positions": len(positions),
         }
-    except Exception as e:
-        return {"type": "error", "message": str(e), "timestamp": datetime.now().isoformat()}
+    except Exception:
+        return {"type": "error", "message": "snapshot unavailable", "timestamp": datetime.now().isoformat()}
 
 
 @app.get("/health")

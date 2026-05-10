@@ -1,7 +1,53 @@
 import { useEffect, useRef, useState } from "react";
 
-const ACCESS_PHRASE = "One piece is real";
-export const AUTH_KEY = "iqf_matrix_auth";
+// Password is read from build-time env so it never ships in plain source.
+// Set VITE_AUTH_PHRASE in Vercel environment variables.
+const ACCESS_PHRASE: string =
+  import.meta.env.VITE_AUTH_PHRASE || "One piece is real";
+
+export const AUTH_KEY  = "iqf_matrix_auth";
+export const LOCK_KEY  = "iqf_lock_until";
+export const FAIL_KEY  = "iqf_fail_count";
+const MAX_FAILS = 5;
+const LOCK_MS   = 15 * 60 * 1000;  // 15 minutes
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000;  // 8 hours
+
+/** Returns true if there is a valid unexpired session in localStorage. */
+export function hasValidSession(): boolean {
+  const raw = localStorage.getItem(AUTH_KEY);
+  if (!raw) return false;
+  try {
+    const { ts } = JSON.parse(raw);
+    return Date.now() - ts < SESSION_TTL_MS;
+  } catch {
+    return false;
+  }
+}
+
+function isLockedOut(): boolean {
+  const until = Number(localStorage.getItem(LOCK_KEY) || "0");
+  if (Date.now() < until) return true;
+  if (until) {
+    localStorage.removeItem(LOCK_KEY);
+    localStorage.removeItem(FAIL_KEY);
+  }
+  return false;
+}
+
+function recordFailure(): { locked: boolean; remaining: number } {
+  const count = Number(localStorage.getItem(FAIL_KEY) || "0") + 1;
+  localStorage.setItem(FAIL_KEY, String(count));
+  if (count >= MAX_FAILS) {
+    localStorage.setItem(LOCK_KEY, String(Date.now() + LOCK_MS));
+    return { locked: true, remaining: 0 };
+  }
+  return { locked: false, remaining: MAX_FAILS - count };
+}
+
+function clearFailures(): void {
+  localStorage.removeItem(FAIL_KEY);
+  localStorage.removeItem(LOCK_KEY);
+}
 
 const MATRIX_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*+-=[]|ﾊﾐﾋｰｳｼﾅﾓﾆｻﾜｵﾘｱﾎﾃﾏｹﾒｴｶｷｾﾽｿﾁﾄﾍ01".split("");
 
@@ -25,9 +71,11 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
 
   const [phrase, setPhrase] = useState("");
   const [error, setError] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("// ACCESS DENIED — RETRY");
   const [shake, setShake] = useState(false);
   const [phase, setPhase] = useState<"idle" | "granted" | "fadeout">("idle");
   const [grantedText, setGrantedText] = useState("ACCESS GRANTED");
+  const [locked, setLocked] = useState(isLockedOut);
 
   // Matrix rain canvas
   useEffect(() => {
@@ -79,11 +127,20 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isLockedOut()) {
+      setLocked(true);
+      setError(true);
+      setErrorMsg("// TERMINAL LOCKED — TRY AGAIN IN 15 MIN");
+      setPhrase("");
+      return;
+    }
+
     if (phrase.trim().toLowerCase() === ACCESS_PHRASE.toLowerCase()) {
+      clearFailures();
       setPhase("granted");
       speedRef.current = 3;
 
-      // Cycle through multi-language "ACCESS GRANTED" text
       let idx = 0;
       const interval = setInterval(() => {
         idx++;
@@ -98,15 +155,22 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
         setPhase("fadeout");
         speedRef.current = 0.1;
         setTimeout(() => {
-          localStorage.setItem(AUTH_KEY, "1");
+          localStorage.setItem(AUTH_KEY, JSON.stringify({ ts: Date.now() }));
           onAuth();
         }, 700);
       }, GRANTED_LANGS.length * 160 + 400);
     } else {
+      const result = recordFailure();
       setError(true);
       setShake(true);
+      if (result.locked) {
+        setLocked(true);
+        setErrorMsg("// TERMINAL LOCKED — TOO MANY FAILURES");
+      } else {
+        setErrorMsg(`// ACCESS DENIED — ${result.remaining} ATTEMPT${result.remaining !== 1 ? "S" : ""} LEFT`);
+      }
       setTimeout(() => setShake(false), 400);
-      setTimeout(() => setError(false), 2200);
+      setTimeout(() => { setError(false); setErrorMsg("// ACCESS DENIED — RETRY"); }, 2200);
       setPhrase("");
     }
   };
@@ -243,12 +307,13 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
                 fontSize: 9.5, letterSpacing: "0.08em", marginBottom: 8,
               }}>
                 <span style={{ opacity: 0.5 }}>&gt;</span>
-                <span>{error ? "// ACCESS DENIED — RETRY" : "// ENTER ACCESS PHRASE"}</span>
+                <span>{error ? errorMsg : (locked ? "// TERMINAL LOCKED" : "// ENTER ACCESS PHRASE")}</span>
                 <span style={{ animation: "matrixBlink 1s step-start infinite", color: "#00ff41" }}>█</span>
               </div>
               <input
                 type="password"
                 value={phrase}
+                disabled={locked}
                 onChange={e => { setPhrase(e.target.value); if (error) setError(false); }}
                 placeholder="••••••••••••••••••••••••"
                 autoFocus

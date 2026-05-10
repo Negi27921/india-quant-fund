@@ -8,7 +8,7 @@ import { PortfolioPage }  from "@/pages/Portfolio";
 import { RiskPage }       from "@/pages/Risk";
 import { StrategiesPage } from "@/pages/Strategies";
 import { SettingsPage }   from "@/pages/Settings";
-import { LoginPage, AUTH_KEY } from "@/pages/Login";
+import { LoginPage, hasValidSession } from "@/pages/Login";
 
 /* ── Error boundary ───────────────────────────────────────────────────────── */
 class ErrorBoundary extends React.Component<
@@ -57,7 +57,7 @@ class ErrorBoundary extends React.Component<
 
 /* ── App ──────────────────────────────────────────────────────────────────── */
 export default function App() {
-  const [authed, setAuthed] = useState(() => !!localStorage.getItem(AUTH_KEY));
+  const [authed, setAuthed] = useState(() => hasValidSession());
 
   if (!authed) return <LoginPage onAuth={() => setAuthed(true)} />;
 

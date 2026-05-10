@@ -6,19 +6,13 @@ from fastapi import APIRouter
 router = APIRouter()
 
 
-def _masked(value: str) -> str:
-    """Show only first 6 and last 4 chars of a secret."""
-    v = value.strip()
-    if not v:
-        return ""
-    if len(v) <= 10:
-        return "***"
-    return v[:6] + "…" + v[-4:]
+def _has_key(env_var: str) -> bool:
+    return bool(os.getenv(env_var, "").strip())
 
 
 @router.get("/providers")
 async def get_providers():
-    """Return configured LLM providers and their key status."""
+    """Return configured LLM providers and their key status (no key material)."""
     return {
         "active": os.getenv("LLM_PROVIDER", "groq"),
         "providers": [
@@ -27,8 +21,7 @@ async def get_providers():
                 "label":   "Groq",
                 "tier":    "free",
                 "model":   os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
-                "has_key": bool(os.getenv("GROQ_API_KEY", "").strip()),
-                "key_preview": _masked(os.getenv("GROQ_API_KEY", "")),
+                "has_key": _has_key("GROQ_API_KEY"),
                 "url":     "https://console.groq.com",
                 "models":  ["llama-3.3-70b-versatile", "qwen-qwq-32b", "mixtral-8x7b-32768", "gemma2-9b-it"],
             },
@@ -37,8 +30,7 @@ async def get_providers():
                 "label":   "DeepSeek",
                 "tier":    "paid",
                 "model":   os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
-                "has_key": bool(os.getenv("DEEPSEEK_API_KEY", "").strip()),
-                "key_preview": _masked(os.getenv("DEEPSEEK_API_KEY", "")),
+                "has_key": _has_key("DEEPSEEK_API_KEY"),
                 "url":     "https://platform.deepseek.com",
                 "models":  ["deepseek-chat", "deepseek-reasoner"],
             },
@@ -47,8 +39,7 @@ async def get_providers():
                 "label":   "Gemini",
                 "tier":    "free",
                 "model":   os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp"),
-                "has_key": bool(os.getenv("GEMINI_API_KEY", "").strip()),
-                "key_preview": _masked(os.getenv("GEMINI_API_KEY", "")),
+                "has_key": _has_key("GEMINI_API_KEY"),
                 "url":     "https://aistudio.google.com",
                 "models":  ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"],
             },
@@ -57,8 +48,7 @@ async def get_providers():
                 "label":   "Qwen / OpenRouter",
                 "tier":    "free",
                 "model":   os.getenv("OPENROUTER_MODEL", "qwen/qwen3-235b-a22b:free"),
-                "has_key": bool(os.getenv("OPENROUTER_API_KEY", "").strip()),
-                "key_preview": _masked(os.getenv("OPENROUTER_API_KEY", "")),
+                "has_key": _has_key("OPENROUTER_API_KEY"),
                 "url":     "https://openrouter.ai",
                 "models":  [
                     "nvidia/nemotron-3-super-120b-a12b:free",
@@ -74,7 +64,6 @@ async def get_providers():
                 "tier":    "local",
                 "model":   os.getenv("OLLAMA_MODEL", "llama3.2"),
                 "has_key": True,
-                "key_preview": "",
                 "url":     "https://ollama.com",
                 "models":  ["llama3.2", "qwen2.5", "mistral", "phi4"],
             },
@@ -92,22 +81,20 @@ async def probe_providers():
 
 @router.get("/brokers")
 async def get_brokers():
-    """Return broker configuration status."""
+    """Return broker configuration status (no key material)."""
     return [
         {
             "id":      "dhan",
             "label":   "Dhan",
             "role":    "primary",
-            "has_key": bool(os.getenv("DHAN_CLIENT_ID", "").strip()),
-            "client_id_preview": _masked(os.getenv("DHAN_CLIENT_ID", "")),
+            "has_key": _has_key("DHAN_CLIENT_ID"),
             "url":     "https://dhanhq.co",
         },
         {
             "id":      "shoonya",
             "label":   "Shoonya / Finvasia",
             "role":    "failover",
-            "has_key": bool(os.getenv("SHOONYA_USER", "").strip()),
-            "client_id_preview": _masked(os.getenv("SHOONYA_USER", "")),
+            "has_key": _has_key("SHOONYA_USER"),
             "url":     "https://shoonya.finvasia.com",
         },
     ]
@@ -115,17 +102,15 @@ async def get_brokers():
 
 @router.get("/alerts")
 async def get_alert_config():
-    """Return alert channel configuration status."""
+    """Return alert channel configuration status (no key material)."""
     return {
         "telegram": {
-            "configured": bool(os.getenv("TELEGRAM_BOT_TOKEN", "").strip()),
-            "chat_id_set": bool(os.getenv("TELEGRAM_CHAT_ID", "").strip()),
-            "token_preview": _masked(os.getenv("TELEGRAM_BOT_TOKEN", "")),
+            "configured": _has_key("TELEGRAM_BOT_TOKEN"),
+            "chat_id_set": _has_key("TELEGRAM_CHAT_ID"),
         },
         "email": {
-            "configured": bool(os.getenv("SMTP_USER", "").strip()),
+            "configured": _has_key("SMTP_USER"),
             "smtp_host": os.getenv("SMTP_HOST", ""),
-            "user_preview": _masked(os.getenv("SMTP_USER", "")),
         },
     }
 
@@ -147,19 +132,17 @@ async def test_telegram():
             )
         data = r.json()
         return {"ok": data.get("ok", False), "message_id": data.get("result", {}).get("message_id")}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    except Exception:
+        return {"ok": False, "error": "telegram send failed"}
 
 
 @router.get("/env")
 async def get_env_summary():
     """Non-sensitive summary of current environment settings."""
     return {
-        "env":              os.getenv("ENV", "development"),
-        "paper_trading":    os.getenv("PAPER_TRADING", "true").lower() == "true",
-        "initial_capital":  float(os.getenv("INITIAL_CAPITAL", "100000")),
-        "llm_provider":     os.getenv("LLM_PROVIDER", "groq"),
-        "log_level":        os.getenv("LOG_LEVEL", "INFO"),
-        "redis_url":        os.getenv("REDIS_URL", "redis://localhost:6379/0"),
-        "db_path":          os.getenv("DUCKDB_PATH", "./data/db/iqf.duckdb"),
+        "env":             os.getenv("ENV", "development"),
+        "paper_trading":   os.getenv("PAPER_TRADING", "true").lower() == "true",
+        "initial_capital": float(os.getenv("INITIAL_CAPITAL", "100000")),
+        "llm_provider":    os.getenv("LLM_PROVIDER", "groq"),
+        "log_level":       os.getenv("LOG_LEVEL", "INFO"),
     }

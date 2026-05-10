@@ -6,15 +6,24 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.routers import market, chat, screener, portfolio, trades, risk, telegram_bot
+from api.middleware.security import SecurityHeadersMiddleware
 
-app = FastAPI(title="IQF Cloud API", version="2.0.0")
+_ALLOWED_ORIGINS = [
+    "https://luffy-labs.vercel.app",
+    "https://onepiece-labs.vercel.app",
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
 
+app = FastAPI(title="IQF Cloud API", version="2.0.0", docs_url=None, redoc_url=None)
+
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
 
 app.include_router(market.router,        prefix="/api/market",    tags=["Market"])

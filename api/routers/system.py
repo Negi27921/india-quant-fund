@@ -1,8 +1,9 @@
 """System health and control API."""
 from datetime import datetime
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Query
 from data.storage import db
 from monitoring.audit import AuditLogger
+from api.middleware.security import require_internal_key, rate_limit
 
 router = APIRouter()
 
@@ -23,15 +24,17 @@ async def system_health():
     }
 
 
-@router.get("/audit-log")
-async def audit_log(limit: int = 50):
+@router.get("/audit-log", dependencies=[Depends(rate_limit)])
+async def audit_log(limit: int = Query(default=50, ge=1, le=500)):
     try:
-        df = db.query_df(f"""
-            SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT {limit}
-        """)
+        safe_limit = int(limit)  # ge/le already validated, explicit cast for clarity
+        df = db.query_df(
+            "SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT ?",
+            [safe_limit],
+        )
         return df.to_dict("records") if not df.empty else []
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        return {"error": "audit log unavailable"}
 
 
 @router.get("/kill-switch/status")
@@ -42,8 +45,8 @@ async def kill_switch_status():
     return ks.status()
 
 
-@router.post("/kill-switch/reset")
-async def reset_kill_switch(reason: str = "Manual reset via API"):
+@router.post("/kill-switch/reset", dependencies=[Depends(require_internal_key)])
+async def reset_kill_switch(reason: str = Query(default="Manual reset via API", max_length=200)):
     from risk.limits import get_limits
     from risk.kill_switch import KillSwitch
     ks = KillSwitch(get_limits())
