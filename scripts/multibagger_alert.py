@@ -359,7 +359,7 @@ def send_telegram(results: list[dict], credit_matches: set[str], run_time: str) 
 
     # Header
     lines = [
-        f"*ONE PIECE · Multibagger · {session}*",
+        f"🏴‍☠️ *ONE PIECE QUANT · Multibagger · {session}*",
         f"_{today}  {run_time} IST · {len(results)} hits / {_UNIVERSE_SIZE:,} stocks_",
         "",
     ]
@@ -391,7 +391,7 @@ def send_telegram(results: list[dict], credit_matches: set[str], run_time: str) 
         lines.append(f"★ *Credit upgrade overlap:* {', '.join(sorted(credit_matches))}\n")
 
     lines += [
-        "[Dashboard](https://dashboard-two-plum-91.vercel.app)  ·  _Not financial advice_",
+        "[📊 Dashboard](https://luffy-labs.vercel.app)  ·  _Not financial advice_",
     ]
 
     msg  = "\n".join(lines)
@@ -405,8 +405,10 @@ def send_telegram(results: list[dict], credit_matches: set[str], run_time: str) 
             print(f"  Telegram: sent OK")
         else:
             print(f"  Telegram error: {result}")
+            _send_failure_alert_email(f"Telegram sendMessage error: {result.get('description', str(result))}")
     except Exception as e:
         print(f"  Telegram failed: {e}")
+        _send_failure_alert_email(f"Telegram exception: {e}")
 
 
 # ── Step 5: Email ─────────────────────────────────────────────────────────────
@@ -543,12 +545,54 @@ def build_email(results: list[dict], rating_events: list[dict], credit_matches: 
 
   <!-- Footer -->
   <div style="margin-top:28px;padding-top:14px;border-top:1px solid #ffffff08;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-    <a href="https://dashboard-two-plum-91.vercel.app" style="color:#00ff41;text-decoration:none;font-size:11px;font-weight:700">→ Open Dashboard</a>
-    <span style="color:#334433;font-size:10px">Not financial advice · {today} · ONE PIECE Quant Terminal</span>
+    <a href="https://luffy-labs.vercel.app" style="color:#00ff41;text-decoration:none;font-size:11px;font-weight:700">→ Open Dashboard</a>
+    <span style="color:#334433;font-size:10px">Not financial advice · {today} · One Piece Quant Terminal</span>
   </div>
 
 </div>
 </body></html>"""
+
+
+def _send_failure_alert_email(error_msg: str) -> None:
+    """Send email alert when Telegram fails — silent fallback."""
+    if not RESEND_API_KEY:
+        return
+    payload = json.dumps({
+        "from":    "One Piece Quant <onboarding@resend.dev>",
+        "to":      [REPORT_EMAIL],
+        "subject": f"⚠️ OPQ Telegram Delivery Failed · {date.today()}",
+        "html":    f"<p style='font-family:monospace'>Telegram notification failed: {error_msg}</p>",
+    }).encode()
+    req = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=payload,
+        headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json", "User-Agent": "curl/8.4.0"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15):
+            print("  Failure alert email sent")
+    except Exception:
+        pass  # Both channels failed — log only
+
+
+def _send_failure_alert_telegram(error_msg: str) -> None:
+    """Send Telegram alert when email fails — silent fallback."""
+    if not (TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
+        return
+    msg  = f"⚠️ *OPQ Email Delivery Failed*\n`{error_msg[:200]}`"
+    body = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "Markdown"}).encode()
+    req  = urllib.request.Request(
+        f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+        data=body,
+        headers={"Content-Type": "application/json", "User-Agent": "curl/8.4.0"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10):
+            pass
+    except Exception:
+        pass
 
 
 def send_email(html: str, subject: str) -> bool:
@@ -557,7 +601,7 @@ def send_email(html: str, subject: str) -> bool:
         return False
     try:
         payload = json.dumps({
-            "from":    "IQF Alerts <onboarding@resend.dev>",
+            "from":    "One Piece Quant <onboarding@resend.dev>",
             "to":      [REPORT_EMAIL],
             "subject": subject,
             "html":    html,
@@ -578,10 +622,13 @@ def send_email(html: str, subject: str) -> bool:
         print(f"  Email sent → {REPORT_EMAIL} (id={res.get('id')})")
         return True
     except urllib.error.HTTPError as e:
-        print(f"  Email failed: {e.code} {e.read().decode()}")
+        body_text = e.read().decode()
+        print(f"  Email failed: {e.code} {body_text}")
+        _send_failure_alert_telegram(f"HTTP {e.code}: {body_text[:150]}")
         return False
     except Exception as e:
         print(f"  Email failed: {e}")
+        _send_failure_alert_telegram(str(e))
         return False
 
 

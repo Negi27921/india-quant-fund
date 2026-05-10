@@ -50,9 +50,9 @@ jobs:
       # always has fresh data when users request individual strategies.
       - name: Refresh all strategy caches via API
         env:
-          SCREENER_API: "https://india-quant-fund.vercel.app"
+          SCREENER_API: "https://onepiece-labs.vercel.app"
         run: |
-          for strategy in vcp ipo_base rocket_base breakout rsi_reversal golden_cross; do
+          for strategy in vcp ipo_base rocket_base breakout rsi_reversal golden_cross multibagger; do
             echo "  → Triggering scan: $strategy"
             curl -s -X POST \
               -H "User-Agent: curl/8.4.0" \
