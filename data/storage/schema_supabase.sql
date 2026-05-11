@@ -70,6 +70,47 @@ CREATE TABLE IF NOT EXISTS trades (
 CREATE INDEX IF NOT EXISTS idx_trades_date ON trades(trade_date DESC);
 CREATE INDEX IF NOT EXISTS idx_trades_ticker ON trades(ticker);
 
+-- Screener signal cache (written by multibagger_alert.py + API /screener/scan)
+CREATE TABLE IF NOT EXISTS screener_cache (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    strategy    TEXT NOT NULL,
+    universe    TEXT NOT NULL DEFAULT 'nifty500',
+    scanned_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    results     JSONB NOT NULL DEFAULT '[]'::jsonb
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_screener_strategy_universe
+    ON screener_cache(strategy, universe);
+CREATE INDEX IF NOT EXISTS idx_screener_scanned ON screener_cache(scanned_at DESC);
+
+-- Paper trading journal (written by paper_trader.py GitHub Action)
+CREATE TABLE IF NOT EXISTS paper_trades (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    strategy      TEXT NOT NULL,
+    ticker        TEXT NOT NULL,
+    entry_date    DATE NOT NULL,
+    entry_price   NUMERIC(12,4) NOT NULL,
+    target_price  NUMERIC(12,4),
+    sl_price      NUMERIC(12,4),
+    exit_date     DATE,
+    exit_price    NUMERIC(12,4),
+    trade_amount  NUMERIC(14,2),
+    shares        INTEGER,
+    pnl           NUMERIC(12,2),
+    pnl_pct       NUMERIC(8,4),
+    confidence    INTEGER,
+    hold_days     INTEGER,
+    status        TEXT NOT NULL DEFAULT 'open'
+                      CHECK (status IN ('open','target_hit','sl_hit','expired','manual_exit')),
+    notes         TEXT,
+    created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_pt_status  ON paper_trades(status);
+CREATE INDEX IF NOT EXISTS idx_pt_ticker  ON paper_trades(ticker);
+CREATE INDEX IF NOT EXISTS idx_pt_entry   ON paper_trades(entry_date DESC);
+-- Prevents duplicate entries for the same ticker+strategy on the same day
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pt_unique_daily
+    ON paper_trades(ticker, strategy, entry_date);
+
 -- Monthly report archive (email sent log + snapshot)
 CREATE TABLE IF NOT EXISTS monthly_reports (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
