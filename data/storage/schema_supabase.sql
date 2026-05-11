@@ -111,6 +111,13 @@ CREATE INDEX IF NOT EXISTS idx_pt_entry   ON paper_trades(entry_date DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_pt_unique_daily
     ON paper_trades(ticker, strategy, entry_date);
 
+-- Generic key-value config store (agent settings, strategy weights, etc.)
+CREATE TABLE IF NOT EXISTS app_config (
+    key        TEXT PRIMARY KEY,
+    value      JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Monthly report archive (email sent log + snapshot)
 CREATE TABLE IF NOT EXISTS monthly_reports (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

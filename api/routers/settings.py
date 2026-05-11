@@ -146,3 +146,57 @@ async def get_env_summary():
         "llm_provider":    os.getenv("LLM_PROVIDER", "groq"),
         "log_level":       os.getenv("LOG_LEVEL", "INFO"),
     }
+
+
+@router.get("/agent-config")
+async def get_agent_config():
+    """Return trading agent configuration from Supabase or defaults."""
+    defaults = {
+        "min_confidence":    95,
+        "trade_amount":      25000,
+        "max_open_trades":   30,
+        "kill_drawdown":     15.0,
+        "risk_pct_per_trade": 2.0,
+        "strategies": ["vcp", "breakout", "golden_cross", "multibagger", "ipo_base", "rocket_base", "rsi_reversal"],
+        "strategy_params": {
+            "vcp":          {"target_pct": 8.0,  "sl_pct": 4.0,  "hold_days": 15},
+            "ipo_base":     {"target_pct": 12.0, "sl_pct": 5.0,  "hold_days": 20},
+            "rocket_base":  {"target_pct": 15.0, "sl_pct": 6.0,  "hold_days": 10},
+            "breakout":     {"target_pct": 7.0,  "sl_pct": 3.0,  "hold_days": 10},
+            "rsi_reversal": {"target_pct": 6.0,  "sl_pct": 3.0,  "hold_days": 7},
+            "golden_cross": {"target_pct": 10.0, "sl_pct": 4.0,  "hold_days": 20},
+            "multibagger":  {"target_pct": 20.0, "sl_pct": 7.0,  "hold_days": 30},
+        },
+    }
+    try:
+        from data.storage import supabase_db as sdb
+        import json
+        rows = sdb.select("app_config", cols="value", filters={"key": "agent_config"}, limit=1)
+        if rows:
+            raw = rows[0].get("value") or {}
+            stored = json.loads(raw) if isinstance(raw, str) else raw
+            defaults.update(stored)
+    except Exception:
+        pass
+    return defaults
+
+
+@router.put("/agent-config")
+async def update_agent_config(body: dict):
+    """Persist trading agent configuration to Supabase app_config table."""
+    import json as _json
+    ALLOWED = {
+        "min_confidence", "trade_amount", "max_open_trades",
+        "kill_drawdown", "risk_pct_per_trade", "strategies", "strategy_params",
+    }
+    update = {k: v for k, v in body.items() if k in ALLOWED}
+    try:
+        from data.storage import supabase_db as sdb
+        existing = sdb.select("app_config", cols="key", filters={"key": "agent_config"}, limit=1)
+        if existing:
+            sdb.update("app_config", {"value": update}, {"key": "agent_config"})
+        else:
+            sdb.insert("app_config", {"key": "agent_config", "value": update})
+        return {"ok": True, "saved": update}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

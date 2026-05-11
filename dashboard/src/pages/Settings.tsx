@@ -14,6 +14,10 @@ import {
   ChevronDown,
   Copy,
   Check,
+  Bot,
+  Sliders,
+  RefreshCw as RefreshIcon,
+  Save,
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { KillSwitchBanner } from "@/components/ui/KillSwitchBanner";
@@ -26,7 +30,10 @@ import {
   useEnvSummary,
   useProbeProviders,
   useTestTelegram,
+  useAgentConfig,
+  useUpdateAgentConfig,
   type ProbeResult,
+  type AgentConfig,
 } from "@/api/settings-queries";
 import { formatCurrency } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -492,6 +499,126 @@ function EnvSection() {
   );
 }
 
+// ── Trading Agent section ─────────────────────────────────────────────────────
+function TradingAgentSection() {
+  const { data: cfg, isLoading } = useAgentConfig();
+  const update = useUpdateAgentConfig();
+  const [draft, setDraft] = useState<Partial<AgentConfig> | null>(null);
+  const current = draft ?? cfg;
+
+  const field = (key: keyof AgentConfig, label: string, min: number, max: number, step: number, unit: string) => (
+    <div key={key} className="space-y-1.5">
+      <div className="flex justify-between items-center">
+        <span className="text-xs text-text-muted">{label}</span>
+        <span className="text-xs font-mono text-text-primary font-semibold">
+          {current?.[key] as number}{unit}
+        </span>
+      </div>
+      <input
+        type="range" min={min} max={max} step={step}
+        value={(current?.[key] as number) ?? min}
+        onChange={e => setDraft(d => ({ ...(d ?? cfg ?? {}), [key]: parseFloat(e.target.value) }))}
+        className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
+        style={{ accentColor: "var(--blue)" }}
+      />
+      <div className="flex justify-between text-[10px] text-text-muted">
+        <span>{min}{unit}</span><span>{max}{unit}</span>
+      </div>
+    </div>
+  );
+
+  const strategyLabels: Record<string, string> = {
+    vcp: "VCP", ipo_base: "IPO Base", rocket_base: "Rocket Base",
+    breakout: "Breakout", rsi_reversal: "RSI Reversal",
+    golden_cross: "Golden Cross", multibagger: "Multibagger",
+  };
+  const allStrategies = Object.keys(strategyLabels);
+
+  const toggleStrategy = (s: string) => {
+    const active = (current?.strategies ?? allStrategies);
+    const next = active.includes(s) ? active.filter(x => x !== s) : [...active, s];
+    setDraft(d => ({ ...(d ?? cfg ?? {}), strategies: next }));
+  };
+
+  const handleSave = async () => {
+    if (!draft) return;
+    await update.mutateAsync(draft);
+    setDraft(null);
+  };
+
+  const stratParams = cfg?.strategy_params ?? {};
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Bot className="w-4 h-4 text-primary" />
+        <h2 className="text-sm font-semibold text-text-primary">Trading Agent</h2>
+        <span className="text-[10px] text-text-muted px-2 py-0.5 rounded-full border border-border">Paper Mode</span>
+      </div>
+
+      {isLoading ? (
+        <div className="card p-4 space-y-3">
+          {[1,2,3,4].map(i => <div key={i} className="h-8 bg-bg-elevated rounded animate-pulse" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Position sizing */}
+          <div className="card p-4 space-y-4">
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Position Sizing</p>
+            {field("min_confidence", "Min Confidence", 70, 100, 1, "%")}
+            {field("trade_amount", "Trade Amount (₹)", 5000, 100000, 5000, "")}
+            {field("max_open_trades", "Max Open Trades", 5, 50, 1, "")}
+            {field("risk_pct_per_trade", "Risk % Per Trade", 0.5, 5, 0.5, "%")}
+            {field("kill_drawdown", "Kill Switch Drawdown", 5, 30, 1, "%")}
+          </div>
+
+          {/* Strategy toggles */}
+          <div className="card p-4 space-y-3">
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Active Strategies</p>
+            <div className="grid grid-cols-2 gap-2">
+              {allStrategies.map(s => {
+                const active = (current?.strategies ?? allStrategies).includes(s);
+                const params = stratParams[s];
+                return (
+                  <button
+                    key={s}
+                    onClick={() => toggleStrategy(s)}
+                    className={cn(
+                      "text-left p-2.5 rounded-lg border text-xs transition-all",
+                      active
+                        ? "border-primary/40 bg-primary/5 text-text-primary"
+                        : "border-border bg-bg-elevated text-text-muted opacity-60"
+                    )}
+                  >
+                    <div className="font-semibold mb-1">{strategyLabels[s]}</div>
+                    {params && (
+                      <div className="text-[10px] text-text-muted font-mono">
+                        TP +{params.target_pct}% · SL -{params.sl_pct}% · {params.hold_days}d
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {draft && (
+              <button
+                onClick={handleSave}
+                disabled={update.isPending}
+                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all"
+                style={{ background: "var(--blue)", color: "#fff" }}
+              >
+                {update.isPending ? <RefreshIcon className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                {update.isPending ? "Saving…" : "Save Configuration"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export function SettingsPage() {
   return (
@@ -504,6 +631,14 @@ export function SettingsPage() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
+          >
+            <TradingAgentSection />
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.04 }}
           >
             <LLMSection />
           </motion.div>

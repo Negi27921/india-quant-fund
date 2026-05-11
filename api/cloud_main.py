@@ -5,7 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import market, chat, screener, portfolio, trades, risk, telegram_bot
+from api.routers import market, chat, screener, portfolio, trades, risk, telegram_bot, strategies, settings
 from api.middleware.security import SecurityHeadersMiddleware
 
 _ALLOWED_ORIGINS = [
@@ -33,6 +33,8 @@ app.include_router(portfolio.router,     prefix="/api/portfolio", tags=["Portfol
 app.include_router(trades.router,        prefix="/api/trades",    tags=["Trades"])
 app.include_router(risk.router,          prefix="/api/risk",      tags=["Risk"])
 app.include_router(telegram_bot.router,  prefix="/api/telegram",  tags=["Telegram"])
+app.include_router(strategies.router,    prefix="/api/strategies", tags=["Strategies"])
+app.include_router(settings.router,      prefix="/api/settings",   tags=["Settings"])
 
 # Lightweight system stubs — the local system.py uses DuckDB which isn't on Vercel.
 # These return safe cloud-compatible responses so the frontend doesn't 404.

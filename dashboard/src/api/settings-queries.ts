@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "./client";
 
 export interface LLMProvider {
@@ -85,3 +85,29 @@ export const useTestTelegram = () =>
         "/settings/alerts/test-telegram"
       ),
   });
+
+export interface AgentConfig {
+  min_confidence: number;
+  trade_amount: number;
+  max_open_trades: number;
+  kill_drawdown: number;
+  risk_pct_per_trade: number;
+  strategies: string[];
+  strategy_params: Record<string, { target_pct: number; sl_pct: number; hold_days: number }>;
+}
+
+export const useAgentConfig = () =>
+  useQuery({
+    queryKey: ["settings", "agent-config"],
+    queryFn: () => api.get<AgentConfig>("/settings/agent-config"),
+    staleTime: 30_000,
+  });
+
+export const useUpdateAgentConfig = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (config: Partial<AgentConfig>) =>
+      api.put<{ ok: boolean }>("/settings/agent-config", config),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["settings", "agent-config"] }),
+  });
+};
