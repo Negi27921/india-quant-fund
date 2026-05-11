@@ -182,6 +182,25 @@
   0%, 100% { border-color: rgba(0,255,135,0.2); box-shadow: 0 0 0 rgba(0,255,135,0); }
   50% { border-color: rgba(0,255,135,0.45); box-shadow: 0 0 16px rgba(0,255,135,0.15); }
 }
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* ── Ticker Banner ───────────────────────────────────────────────────────── */
+.ticker-wrap {
+  overflow: hidden;
+  min-width: 0;
+}
+.ticker-inner {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: ticker-scroll 40s linear infinite;
+  will-change: transform;
+}
+.ticker-inner:hover {
+  animation-play-state: paused;
+}
 
 /* ── Base Reset ──────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
