@@ -1,42 +1,33 @@
 {
-  "buildCommand": "cd dashboard && npm install && npm run build",
-  "outputDirectory": "dashboard/dist",
-  "functions": {
-    "api/index.py": {
-      "runtime": "python3.11",
-      "maxDuration": 60,
-      "memory": 1024,
-      "includeFiles": [
-        "api/**",
-        "data/storage/supabase_db.py",
-        "data/storage/__init__.py",
-        "risk/limits.py",
-        "risk/kill_switch.py",
-        "risk/__init__.py",
-        "config/**",
-        "requirements.txt"
-      ]
-    }
-  },
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "/api/index.py" },
-    { "source": "/(.*)",       "destination": "/index.html" }
-  ],
-  "headers": [
+  "version": 2,
+  "builds": [
     {
-      "source": "/assets/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
+      "src": "dashboard/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
     },
     {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Content-Type-Options",   "value": "nosniff" },
-        { "key": "X-Frame-Options",           "value": "DENY" },
-        { "key": "Referrer-Policy",           "value": "strict-origin-when-cross-origin" },
-        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" }
-      ]
+      "src": "api/index.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "50mb",
+        "includeFiles": [
+          "api/**",
+          "data/storage/supabase_db.py",
+          "data/storage/__init__.py",
+          "risk/limits.py",
+          "risk/kill_switch.py",
+          "risk/__init__.py",
+          "config/**"
+        ]
+      }
     }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/index.py" },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }

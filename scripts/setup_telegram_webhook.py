@@ -15,7 +15,7 @@ import urllib.request
 from pathlib import Path
 
 BOT_TOKEN   = os.getenv("TELEGRAM_BOT_TOKEN", "8632500920:AAE0anjkFiYDsm1-g3dU3JF3Y_GLbZC1tm8")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://india-quant-fund.vercel.app/api/telegram")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://luffy-labs.vercel.app/api/telegram")
 
 
 def _tg(method: str, payload: dict) -> dict:
