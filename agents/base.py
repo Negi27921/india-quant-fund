@@ -12,7 +12,7 @@ from pydantic import BaseModel
 T = TypeVar("T", bound=BaseModel)
 
 # Provider priority: first key with a value wins, then fallbacks in order
-_PROVIDER_ORDER = ["groq", "deepseek", "gemini", "qwen", "ollama"]
+_PROVIDER_ORDER = ["openai", "groq", "deepseek", "gemini", "qwen", "ollama"]
 
 
 class BaseLLMClient:
@@ -27,6 +27,16 @@ class BaseLLMClient:
         self._clients: dict[str, Any] = {}
 
     # ── Provider constructors ────────────────────────────────────────────────
+
+    def _openai(self):
+        if "openai" not in self._clients:
+            from openai import OpenAI
+            kwargs: dict = {"api_key": os.getenv("OPENAI_API_KEY", "")}
+            base_url = os.getenv("OPENAI_BASE_URL", "").strip()
+            if base_url:
+                kwargs["base_url"] = base_url
+            self._clients["openai"] = OpenAI(**kwargs)
+        return self._clients["openai"]
 
     def _groq(self):
         if "groq" not in self._clients:
@@ -74,16 +84,18 @@ class BaseLLMClient:
         if self._model_override:
             return self._model_override
         defaults = {
+            "openai":    os.getenv("OPENAI_MODEL",      "gpt-4o-mini"),
             "groq":      os.getenv("GROQ_MODEL",        "llama-3.3-70b-versatile"),
             "deepseek":  os.getenv("DEEPSEEK_MODEL",    "deepseek-chat"),
             "gemini":    os.getenv("GEMINI_MODEL",      "gemini-2.0-flash-exp"),
             "qwen":      os.getenv("OPENROUTER_MODEL",  "qwen/qwen3-235b-a22b:free"),
             "ollama":    os.getenv("OLLAMA_MODEL",      "llama3.2"),
         }
-        return defaults.get(provider, "llama-3.3-70b-versatile")
+        return defaults.get(provider, "gpt-4o-mini")
 
     def _has_key(self, provider: str) -> bool:
         keys = {
+            "openai":   "OPENAI_API_KEY",
             "groq":     "GROQ_API_KEY",
             "deepseek": "DEEPSEEK_API_KEY",
             "gemini":   "GEMINI_API_KEY",
@@ -137,6 +149,7 @@ class BaseLLMClient:
             return self._gemini_call(system, user)
 
         client_map = {
+            "openai":   self._openai,
             "groq":     self._groq,
             "deepseek": self._deepseek,
             "qwen":     self._openrouter,

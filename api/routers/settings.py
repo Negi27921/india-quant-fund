@@ -17,6 +17,15 @@ async def get_providers():
         "active": os.getenv("LLM_PROVIDER", "groq"),
         "providers": [
             {
+                "id":      "openai",
+                "label":   "OpenAI (Agent Router)",
+                "tier":    "paid",
+                "model":   os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+                "has_key": _has_key("OPENAI_API_KEY"),
+                "url":     "https://platform.openai.com",
+                "models":  ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
+            },
+            {
                 "id":      "groq",
                 "label":   "Groq",
                 "tier":    "free",

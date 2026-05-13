@@ -62,7 +62,11 @@ function TickerBar() {
   if (indices?.niftymid50) items.push({ label: "MIDCAP 50",  value: indices.niftymid50.price.toLocaleString("en-IN", { minimumFractionDigits: 2 }), chg: indices.niftymid50.change_pct });
   if (live) items.push({ label: "NAV", value: formatCurrency(live.portfolio_value, true), chg: live.day_pnl_pct });
 
-  if (items.length === 0) return <div style={{ flex: 1, margin: "0 16px" }} />;
+  // Always show ticker — use placeholders while API is loading
+  if (items.length === 0) {
+    const PLACEHOLDERS = ["NIFTY 50", "BANK NIFTY", "SENSEX", "NIFTY IT", "MIDCAP 50"];
+    PLACEHOLDERS.forEach(label => items.push({ label, value: "···" }));
+  }
   const doubled = [...items, ...items, ...items, ...items];
 
   return (
@@ -80,14 +84,15 @@ export function Header({ title, subtitle }: HeaderProps) {
   const { paperMode, openSearch } = useUIStore();
 
   return (
-    <div style={{ flexShrink: 0, borderBottom: "1px solid var(--border)" }}>
-      {/* Ticker strip */}
+    <div style={{ flexShrink: 0, borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 50, overflow: "hidden" }}>
+      {/* Ticker strip — isolation:isolate prevents GPU-composited ticker-inner
+          from bleeding past this row's clip boundary */}
       <div style={{
         display: "flex", alignItems: "center", height: 34, padding: "0 12px",
         overflow: "hidden",
+        isolation: "isolate",
         background: "var(--surface)",
         borderBottom: "1px solid var(--border-2)",
-        backdropFilter: "blur(8px)",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, paddingRight: 12, marginRight: 8, borderRight: "1px solid var(--border)" }}>
           <motion.div

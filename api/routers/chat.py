@@ -1,12 +1,13 @@
-"""AI Chat endpoint — stock research assistant powered by Groq."""
+"""AI Chat endpoint — stock research assistant via multi-provider LLM router."""
 from __future__ import annotations
 
+import asyncio
 import os
+import re
+import time
+from concurrent.futures import ThreadPoolExecutor
 from zoneinfo import ZoneInfo
 
-import re
-
-import httpx
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field, field_validator
 
@@ -17,9 +18,7 @@ router = APIRouter()
 _SAFE_SYMBOL_RE = re.compile(r'^[A-Z0-9&\-]{1,20}$')
 IST = ZoneInfo("Asia/Kolkata")
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+_executor = ThreadPoolExecutor(max_workers=4)
 
 
 class ChatMessage(BaseModel):
@@ -35,7 +34,7 @@ class ChatMessage(BaseModel):
             return None
         cleaned = v.strip().upper().replace(".NS", "").replace(".BO", "")
         if cleaned and not _SAFE_SYMBOL_RE.match(cleaned):
-            return None  # silently discard malformed symbols
+            return None
         return cleaned or None
 
 
@@ -43,10 +42,11 @@ class ChatResponse(BaseModel):
     response: str
     sources: list[str]
     symbol: str | None
+    provider: str | None = None
+    latency_ms: int | None = None
 
 
 def _get_stock_context(symbol: str) -> str:
-    """Fetch live stock data as context for the LLM."""
     try:
         import yfinance as yf
         ticker = yf.Ticker(f"{symbol.upper()}.NS")
@@ -108,108 +108,93 @@ Rules:
 """
 
 
+def _llm_complete(system: str, user_msg: str) -> tuple[str, str, int]:
+    """
+    Runs the BaseLLMClient completion synchronously (called from executor).
+    Returns (reply, provider_used, latency_ms).
+    """
+    from agents.base import BaseLLMClient
+
+    client = BaseLLMClient()
+    preferred = os.getenv("LLM_PROVIDER", "groq")
+    _PROVIDER_ORDER = ["openai", "groq", "deepseek", "gemini", "qwen", "ollama"]
+    order = [preferred] + [p for p in _PROVIDER_ORDER if p != preferred]
+
+    for provider in order:
+        if not client._has_key(provider):
+            continue
+        try:
+            t0 = time.monotonic()
+            result = client._call(provider, system, user_msg, 0.3, 1200)
+            latency_ms = int((time.monotonic() - t0) * 1000)
+            if result:
+                return result, provider, latency_ms
+        except Exception:
+            continue
+
+    return (
+        "I encountered a temporary issue connecting to all AI providers. "
+        "Please try again in a moment.",
+        "none",
+        0,
+    )
+
+
 @router.post("/message", response_model=ChatResponse, dependencies=[Depends(rate_limit_chat)])
 async def chat_message(body: ChatMessage):
-    """Process a chat message and return AI analysis."""
-    import asyncio
-    from concurrent.futures import ThreadPoolExecutor
     loop = asyncio.get_event_loop()
-    executor = ThreadPoolExecutor(max_workers=2)
-
-    # No API key — return helpful fallback immediately
-    if not GROQ_API_KEY:
-        return ChatResponse(
-            response=(
-                "I'm your IQF Market Assistant. To enable AI-powered analysis, "
-                "please set the GROQ_API_KEY environment variable (free at console.groq.com).\n\n"
-                "For now, use the market data panels for live indices, FII/DII flows, and filings."
-            ),
-            sources=["IQF Market Intelligence"],
-            symbol=None,
-        )
 
     symbol = body.symbol or ""
     user_msg = body.message.strip()
 
-    # Build context
-    context_parts = []
-    sources = []
-
-    # Try to extract symbol from message if not provided
+    # Auto-extract symbol from message
     if not symbol:
         candidates = re.findall(r'\b([A-Z]{2,10})\b', user_msg.upper())
-        common_stops = {"THE", "AND", "FOR", "ARE", "YOU", "NSE", "BSE", "FII", "DII", "IPO", "AGM", "EPS", "ROE", "PAT", "NII", "NIM", "AUM", "SEBI"}
+        common_stops = {"THE", "AND", "FOR", "ARE", "YOU", "NSE", "BSE", "FII", "DII",
+                        "IPO", "AGM", "EPS", "ROE", "PAT", "NII", "NIM", "AUM", "SEBI"}
         for c in candidates:
             if c not in common_stops:
                 symbol = c
                 break
 
-    if symbol:
-        def _get_ctx():
-            return _get_stock_context(symbol)
+    context_parts: list[str] = []
+    sources: list[str] = []
 
+    if symbol:
         try:
-            stock_context = await loop.run_in_executor(executor, _get_ctx)
+            stock_context = await loop.run_in_executor(_executor, _get_stock_context, symbol)
             if stock_context:
                 context_parts.append(stock_context)
                 sources.append(f"NSE Live Data: {symbol}")
         except Exception:
             pass
 
-    # Prepend PDF document context if provided
     if body.pdf_text:
         context_parts.insert(0, f"Document context:\n{body.pdf_text[:4000]}")
         sources.append("Uploaded Document")
 
-    # Build message history
-    history = body.history or []
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    for h in history[-6:]:  # Last 6 turns for context
-        if h.get("role") in ("user", "assistant") and h.get("content"):
-            messages.append({"role": h["role"], "content": h["content"]})
-
-    # Build final user message with context
     full_msg = user_msg
     if context_parts:
         full_msg = f"Context (live market data):\n{'---'.join(context_parts)}\n\nUser question: {user_msg}"
 
-    messages.append({"role": "user", "content": full_msg})
-
-    # Call Groq API
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                GROQ_URL,
-                headers={
-                    "Authorization": f"Bearer {GROQ_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": GROQ_MODEL,
-                    "messages": messages,
-                    "max_tokens": 1200,
-                    "temperature": 0.3,
-                },
-            )
-            data = resp.json()
-            reply = data["choices"][0]["message"]["content"]
-    except Exception:
-        reply = (
-            "I encountered a temporary issue connecting to the AI service. "
-            "Please try again in a moment.\n\n"
-            "In the meantime, the live market panels on this page have indices, "
-            "FII/DII flows, filings, and corporate actions."
-        )
+    reply, provider, latency_ms = await loop.run_in_executor(
+        _executor, _llm_complete, SYSTEM_PROMPT, full_msg
+    )
 
     if not sources:
         sources = ["IQF Market Intelligence"]
 
-    return ChatResponse(response=reply, sources=sources, symbol=symbol or None)
+    return ChatResponse(
+        response=reply,
+        sources=sources,
+        symbol=symbol or None,
+        provider=provider,
+        latency_ms=latency_ms,
+    )
 
 
 @router.get("/suggestions")
 async def chat_suggestions():
-    """Return suggested starter questions for the chatbot."""
     return [
         "What are the latest filings from Reliance Industries?",
         "Analyse HDFC Bank's Q4 results and dividend outlook",
