@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { RefreshCw, Bell, Search } from "lucide-react";
 import { format } from "date-fns";
@@ -30,19 +30,18 @@ function ISTClock() {
   );
 }
 
-function TickerItem({ label, value, chg }: { label: string; value: string; chg?: number }) {
-  const up = (chg ?? 0) > 0;
-  const dn = (chg ?? 0) < 0;
+interface TickerItemData { label: string; value: string; chg?: number }
+
+function renderTickerItem(item: TickerItemData, i: number) {
+  const up = (item.chg ?? 0) > 0;
+  const dn = (item.chg ?? 0) < 0;
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 32 }}>
-      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: "var(--text-4)", fontFamily: "var(--font-body)" }}>{label}</span>
-      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--text-2)", fontWeight: 500 }}>{value}</span>
-      {chg !== undefined && (
-        <span style={{
-          fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 10,
-          color: up ? "var(--green)" : dn ? "var(--red)" : "var(--text-3)",
-        }}>
-          {up ? "▲" : dn ? "▼" : "—"}{Math.abs(chg).toFixed(2)}%
+    <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, marginRight: 32, flexShrink: 0 }}>
+      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: "var(--text-4)", fontFamily: "var(--font-body)" }}>{item.label}</span>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--text-2)", fontWeight: 500 }}>{item.value}</span>
+      {item.chg !== undefined && (
+        <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 10, color: up ? "var(--green)" : dn ? "var(--red)" : "var(--text-3)" }}>
+          {up ? "▲" : dn ? "▼" : "—"}{Math.abs(item.chg).toFixed(2)}%
         </span>
       )}
       <span style={{ color: "var(--border)", marginLeft: 12 }}>│</span>
@@ -53,26 +52,55 @@ function TickerItem({ label, value, chg }: { label: string; value: string; chg?:
 function TickerBar() {
   const { data: indices } = useMarketIndices();
   const { data: live } = useLiveStore();
-  const items: { label: string; value: string; chg?: number }[] = [];
 
+  const items: TickerItemData[] = [];
   if (indices?.nifty50)    items.push({ label: "NIFTY 50",   value: indices.nifty50.price.toLocaleString("en-IN",    { minimumFractionDigits: 2 }), chg: indices.nifty50.change_pct });
   if (indices?.banknifty)  items.push({ label: "BANK NIFTY", value: indices.banknifty.price.toLocaleString("en-IN",  { minimumFractionDigits: 2 }), chg: indices.banknifty.change_pct });
   if (indices?.sensex)     items.push({ label: "SENSEX",     value: indices.sensex.price.toLocaleString("en-IN",     { minimumFractionDigits: 2 }), chg: indices.sensex.change_pct });
   if (indices?.niftyit)    items.push({ label: "NIFTY IT",   value: indices.niftyit.price.toLocaleString("en-IN",    { minimumFractionDigits: 2 }), chg: indices.niftyit.change_pct });
   if (indices?.niftymid50) items.push({ label: "MIDCAP 50",  value: indices.niftymid50.price.toLocaleString("en-IN", { minimumFractionDigits: 2 }), chg: indices.niftymid50.change_pct });
   if (live) items.push({ label: "NAV", value: formatCurrency(live.portfolio_value, true), chg: live.day_pnl_pct });
-
-  // Always show ticker — use placeholders while API is loading
   if (items.length === 0) {
-    const PLACEHOLDERS = ["NIFTY 50", "BANK NIFTY", "SENSEX", "NIFTY IT", "MIDCAP 50"];
-    PLACEHOLDERS.forEach(label => items.push({ label, value: "···" }));
+    ["NIFTY 50","BANK NIFTY","SENSEX","NIFTY IT","MIDCAP 50"].forEach(label => items.push({ label, value: "···" }));
   }
+
+  // JS-driven ticker: no CSS animation, no GPU compositor layer, no overflow bleed
+  const trackRef = useRef<HTMLDivElement>(null);
+  const posRef   = useRef(0);
+  const pauseRef = useRef(false);
+  const rafRef   = useRef<number>(0);
+
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const speed = 0.5; // px per frame at 60fps
+
+    const step = () => {
+      if (!pauseRef.current && track) {
+        posRef.current += speed;
+        const half = track.scrollWidth / 2;
+        if (posRef.current >= half) posRef.current = 0;
+        track.style.transform = `translateX(${-posRef.current}px)`;
+      }
+      rafRef.current = requestAnimationFrame(step);
+    };
+    rafRef.current = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [items.length]);
+
   const doubled = [...items, ...items, ...items, ...items];
 
   return (
-    <div className="ticker-wrap" style={{ flex: 1, margin: "0 12px" }}>
-      <div className="ticker-inner">
-        {doubled.map((item, i) => <TickerItem key={i} {...item} />)}
+    <div
+      style={{ flex: 1, overflow: "hidden", minWidth: 0, height: "100%" }}
+      onMouseEnter={() => { pauseRef.current = true; }}
+      onMouseLeave={() => { pauseRef.current = false; }}
+    >
+      <div
+        ref={trackRef}
+        style={{ display: "inline-flex", alignItems: "center", whiteSpace: "nowrap", height: "100%", willChange: "unset" }}
+      >
+        {doubled.map((item, i) => renderTickerItem(item, i))}
       </div>
     </div>
   );
@@ -84,16 +112,15 @@ export function Header({ title, subtitle }: HeaderProps) {
   const { paperMode, openSearch } = useUIStore();
 
   return (
-    <div style={{ flexShrink: 0, borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 50, overflow: "hidden", clipPath: "inset(0 0 0 0)" }}>
-      {/* Ticker strip — isolation:isolate prevents GPU-composited ticker-inner
-          from bleeding past this row's clip boundary */}
+    <div style={{ flexShrink: 0, position: "sticky", top: 0, zIndex: 50, borderBottom: "1px solid var(--border)" }}>
+      {/* ── Ticker strip — JS-driven, no CSS animation, no compositor bleed ── */}
       <div style={{
-        display: "flex", alignItems: "center", height: 34, padding: "0 12px",
-        overflow: "hidden",
-        clipPath: "inset(0 0 0 0)",
+        display: "flex", alignItems: "center", height: 34,
+        padding: "0 12px", overflow: "hidden",
         background: "var(--surface)",
         borderBottom: "1px solid var(--border-2)",
       }}>
+        {/* Exchange indicator */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, paddingRight: 12, marginRight: 8, borderRight: "1px solid var(--border)" }}>
           <motion.div
             style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)", boxShadow: "0 0 6px var(--green)" }}
@@ -106,7 +133,7 @@ export function Header({ title, subtitle }: HeaderProps) {
         <ISTClock />
       </div>
 
-      {/* Page header */}
+      {/* ── Page header ── */}
       <div style={{
         display: "flex", alignItems: "center", height: 52, padding: "0 20px", gap: 16,
         background: "var(--overlay)", backdropFilter: "blur(12px)",
@@ -115,11 +142,7 @@ export function Header({ title, subtitle }: HeaderProps) {
         <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 3, height: 20, borderRadius: 2, background: "linear-gradient(180deg, var(--blue), var(--violet))" }} />
           <div>
-            <div style={{
-              fontSize: 14, fontWeight: 700, color: "var(--text-1)",
-              letterSpacing: "0.06em", fontFamily: "var(--font-heading)",
-              textTransform: "uppercase",
-            }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-1)", letterSpacing: "0.06em", fontFamily: "var(--font-heading)", textTransform: "uppercase" }}>
               {title}
             </div>
             {subtitle && (
@@ -151,10 +174,7 @@ export function Header({ title, subtitle }: HeaderProps) {
 
         {/* Paper mode badge */}
         {paperMode && (
-          <div style={{
-            display: "flex", alignItems: "center", gap: 6, padding: "4px 10px",
-            background: "var(--amber-dim)", border: "1px solid var(--border-amber)", borderRadius: 8,
-          }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", background: "var(--amber-dim)", border: "1px solid var(--border-amber)", borderRadius: 8 }}>
             <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--amber)", display: "block", boxShadow: "0 0 6px var(--amber)" }} />
             <span style={{ fontSize: 9, color: "var(--amber)", fontWeight: 800, letterSpacing: "0.1em", fontFamily: "var(--font-body)" }}>PAPER</span>
           </div>

@@ -565,32 +565,57 @@ function PnLTab() {
 }
 
 // ── TRADES TAB ────────────────────────────────────────────────────────────────
+type TradeSortKey = "ticker" | "strategy" | "entry_date" | "entry_price" | "pnl" | "pnl_pct" | "status";
+
+function SortBtn({ col, current, dir, onSort }: { col: TradeSortKey; current: TradeSortKey; dir: "asc" | "desc"; onSort: (k: TradeSortKey) => void }) {
+  const active = col === current;
+  return (
+    <button onClick={() => onSort(col)} style={{ display: "inline-flex", alignItems: "center", gap: 3, cursor: "pointer", background: "none", border: "none", color: active ? "var(--blue)" : "var(--text-4)", fontFamily: "var(--font-body)", fontSize: "inherit", fontWeight: "inherit", letterSpacing: "inherit", padding: 0 }}>
+      {col === "ticker" ? "TICKER" : col === "strategy" ? "STRATEGY" : col === "entry_date" ? "ENTRY" : col === "entry_price" ? "ENTRY ₹" : col === "pnl" ? "P&L" : col === "pnl_pct" ? "RET%" : "STATUS"}
+      <span style={{ fontSize: 8, lineHeight: 1 }}>{active ? (dir === "asc" ? "▲" : "▼") : "⇅"}</span>
+    </button>
+  );
+}
+
 function TradesTab() {
   const [statusFilter, setStatusFilter] = useState<"all" | "OPEN" | "CLOSED">("all");
+  const [sortKey, setSortKey] = useState<TradeSortKey>("entry_date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const { data: trades, isLoading } = usePaperTrades(statusFilter);
   const { data: strategyStats }     = useStrategyPnl();
 
-  const filtered = trades ?? [];
+  const allTrades = trades ?? [];
 
-  const totalPnl    = filtered.reduce((s, t) => s + (t.pnl ?? 0), 0);
-  const closed      = filtered.filter(t => t.status?.toUpperCase() === "CLOSED");
-  const open        = filtered.filter(t => t.status?.toUpperCase() === "OPEN");
-  const wins        = closed.filter(t => (t.pnl ?? 0) > 0);
-  const winRate     = closed.length > 0 ? ((wins.length / closed.length) * 100).toFixed(0) : "—";
+  const totalPnl = allTrades.reduce((s, t) => s + (t.pnl ?? 0), 0);
+  const closed   = allTrades.filter(t => t.status?.toUpperCase() === "CLOSED");
+  const open     = allTrades.filter(t => t.status?.toUpperCase() === "OPEN");
+  const wins     = closed.filter(t => (t.pnl ?? 0) > 0);
+  const winRate  = closed.length > 0 ? ((wins.length / closed.length) * 100).toFixed(0) : "—";
 
-  const strategyChartData = (strategyStats ?? []).map(s => ({
-    strategy: STRATEGY_LABELS[s.strategy] ?? s.strategy,
-    pnl: s.total_pnl,
-    win_rate: s.win_rate,
-    trades: s.total_trades,
-  }));
+  const handleSort = (key: TradeSortKey) => {
+    if (key === sortKey) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("desc"); }
+  };
+
+  const filtered = [...allTrades].sort((a, b) => {
+    let av: string | number = 0, bv: string | number = 0;
+    if (sortKey === "ticker")       { av = a.ticker; bv = b.ticker; }
+    else if (sortKey === "strategy") { av = a.strategy; bv = b.strategy; }
+    else if (sortKey === "entry_date") { av = a.entry_date; bv = b.entry_date; }
+    else if (sortKey === "entry_price") { av = a.entry_price ?? 0; bv = b.entry_price ?? 0; }
+    else if (sortKey === "pnl")     { av = a.pnl ?? 0; bv = b.pnl ?? 0; }
+    else if (sortKey === "pnl_pct") { av = a.pnl_pct ?? 0; bv = b.pnl_pct ?? 0; }
+    else if (sortKey === "status")  { av = a.status ?? ""; bv = b.status ?? ""; }
+    if (typeof av === "string") return sortDir === "asc" ? av.localeCompare(String(bv)) : String(bv).localeCompare(av);
+    return sortDir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
+  });
 
   return (
     <div className="space-y-4">
       {/* Summary KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard label="Total Trades"  value={filtered.length}           subValue={`${open.length} open`}       delay={0}    />
+        <StatCard label="Total Trades"  value={allTrades.length}          subValue={`${open.length} open`}       delay={0}    />
         <StatCard label="Closed Trades" value={closed.length}             subValue={`Win rate: ${winRate}%`}     delay={0.05} variant="default" />
         <StatCard label="Winners"       value={wins.length}               subValue={`Losers: ${closed.length - wins.length}`} delay={0.1} variant="success" />
         <StatCard label="Total P&L"     value={formatCurrency(totalPnl)}  subValue={totalPnl >= 0 ? "Net profit" : "Net loss"}
@@ -648,9 +673,17 @@ function TradesTab() {
           <table className="tbl">
             <thead>
               <tr>
-                {["TICKER","STRATEGY","ENTRY","ENTRY ₹","TARGET ₹","SL ₹","EXIT ₹","P&L","RET%","STATUS","NOTES"].map((h, i) => (
-                  <th key={h} className={[3,4,5,6,7,8].includes(i) ? "tbl-th-r" : "tbl-th"} style={{ paddingLeft: i === 0 ? 16 : undefined }}>{h}</th>
-                ))}
+                <th className="tbl-th" style={{ paddingLeft: 16 }}><SortBtn col="ticker"       current={sortKey} dir={sortDir} onSort={handleSort} /></th>
+                <th className="tbl-th"><SortBtn col="strategy"    current={sortKey} dir={sortDir} onSort={handleSort} /></th>
+                <th className="tbl-th"><SortBtn col="entry_date"  current={sortKey} dir={sortDir} onSort={handleSort} /></th>
+                <th className="tbl-th-r"><SortBtn col="entry_price" current={sortKey} dir={sortDir} onSort={handleSort} /></th>
+                <th className="tbl-th-r">TARGET ₹</th>
+                <th className="tbl-th-r">SL ₹</th>
+                <th className="tbl-th-r">EXIT ₹</th>
+                <th className="tbl-th-r"><SortBtn col="pnl"       current={sortKey} dir={sortDir} onSort={handleSort} /></th>
+                <th className="tbl-th-r"><SortBtn col="pnl_pct"   current={sortKey} dir={sortDir} onSort={handleSort} /></th>
+                <th className="tbl-th"><SortBtn col="status"      current={sortKey} dir={sortDir} onSort={handleSort} /></th>
+                <th className="tbl-th">NOTES</th>
               </tr>
             </thead>
             <tbody>
