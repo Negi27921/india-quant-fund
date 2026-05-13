@@ -81,10 +81,21 @@ def _enrich_positions(rows: list[dict]) -> list[dict]:
 
 @router.get("/summary")
 async def portfolio_summary():
+    INITIAL_CAPITAL = 1_000_000.0
     try:
         rows = sdb.select("daily_pnl", order="-date", limit=1)
         equity_rows = sdb.select("daily_pnl", cols="date,portfolio_value,day_pnl_pct,drawdown_pct",
                                   order="-date", limit=252)
+        # Fetch paper trades for enriched stats
+        paper_rows = []
+        try:
+            paper_rows = sdb.select("paper_trades", limit=500)
+        except Exception:
+            pass
+        n_open = sum(1 for r in paper_rows if r.get("status") == "OPEN")
+        n_closed = sum(1 for r in paper_rows if r.get("status") == "CLOSED")
+        total_paper_pnl = sum(float(r.get("pnl") or 0) for r in paper_rows if r.get("status") == "CLOSED")
+
         if rows:
             r = rows[0]
             return {
@@ -96,6 +107,26 @@ async def portfolio_summary():
                 "drawdown_pct": float(r.get("drawdown_pct", 0)),
                 "n_positions": r.get("num_positions", 0),
                 "equity_curve": list(reversed(equity_rows)),
+                "n_open_paper_trades": n_open,
+                "n_closed_paper_trades": n_closed,
+                "total_paper_pnl": round(total_paper_pnl, 2),
+            }
+
+        # Fallback: derive portfolio value from paper trades when daily_pnl is empty
+        if paper_rows:
+            portfolio_value = INITIAL_CAPITAL + total_paper_pnl
+            return {
+                "portfolio_value": round(portfolio_value, 2),
+                "cash": round(INITIAL_CAPITAL * 0.2, 2),
+                "invested": round(portfolio_value * 0.8, 2),
+                "day_pnl": 0.0,
+                "day_pnl_pct": 0.0,
+                "drawdown_pct": 0.0,
+                "n_positions": n_open,
+                "equity_curve": [],
+                "n_open_paper_trades": n_open,
+                "n_closed_paper_trades": n_closed,
+                "total_paper_pnl": round(total_paper_pnl, 2),
             }
     except Exception:
         pass
@@ -107,6 +138,9 @@ async def portfolio_summary():
         "day_pnl_pct": mock[-1]["pnl_pct"] if mock else 0,
         "drawdown_pct": -3.2, "n_positions": 6,
         "equity_curve": mock,
+        "n_open_paper_trades": 0,
+        "n_closed_paper_trades": 0,
+        "total_paper_pnl": 0.0,
     }
 
 
@@ -323,6 +357,58 @@ async def exit_live_position(ticker: str, req: ExitRequest):
     else:
         sdb.update("live_positions", {"quantity": remaining}, {"ticker": t})
     return {"status": "exited", "ticker": t, "exited_qty": exit_qty, "remaining": max(0, remaining)}
+
+
+@router.get("/paper-trades")
+async def paper_trades_list(status: str = "all", limit: int = 100):
+    """All paper trades with P&L, sorted newest first."""
+    try:
+        rows = sdb.select("paper_trades", order="-entry_date", limit=limit)
+        if status != "all":
+            rows = [r for r in rows if r.get("status", "").upper() == status.upper()]
+        return rows
+    except Exception as e:
+        return []
+
+
+@router.get("/strategy-pnl")
+async def strategy_pnl():
+    """Aggregate P&L grouped by strategy from paper_trades."""
+    try:
+        rows = sdb.select("paper_trades", limit=1000)
+        if not rows:
+            return []
+        stats = {}
+        for r in rows:
+            s = r.get("strategy", "unknown")
+            pnl = float(r.get("pnl") or 0)
+            pnl_pct = float(r.get("pnl_pct") or 0)
+            status = r.get("status", "OPEN")
+            if s not in stats:
+                stats[s] = {"strategy": s, "total_trades": 0, "closed_trades": 0,
+                            "wins": 0, "losses": 0, "total_pnl": 0.0, "avg_pnl_pct": 0.0,
+                            "pnl_pcts": [], "open_trades": 0}
+            stats[s]["total_trades"] += 1
+            if status == "CLOSED":
+                stats[s]["closed_trades"] += 1
+                stats[s]["total_pnl"] += pnl
+                stats[s]["pnl_pcts"].append(pnl_pct)
+                if pnl > 0:
+                    stats[s]["wins"] += 1
+                else:
+                    stats[s]["losses"] += 1
+            elif status == "OPEN":
+                stats[s]["open_trades"] += 1
+        result = []
+        for s, d in stats.items():
+            pcts = d.pop("pnl_pcts")
+            d["avg_pnl_pct"] = round(sum(pcts) / len(pcts), 2) if pcts else 0.0
+            d["win_rate"] = round(d["wins"] / d["closed_trades"] * 100, 1) if d["closed_trades"] else 0.0
+            d["total_pnl"] = round(d["total_pnl"], 2)
+            result.append(d)
+        return sorted(result, key=lambda x: -x["total_pnl"])
+    except Exception:
+        return []
 
 
 @router.get("/sector-exposure")

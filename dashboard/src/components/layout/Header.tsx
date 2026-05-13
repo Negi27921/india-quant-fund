@@ -84,13 +84,13 @@ export function Header({ title, subtitle }: HeaderProps) {
   const { paperMode, openSearch } = useUIStore();
 
   return (
-    <div style={{ flexShrink: 0, borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 50, overflow: "hidden" }}>
+    <div style={{ flexShrink: 0, borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 50, overflow: "hidden", clipPath: "inset(0 0 0 0)" }}>
       {/* Ticker strip — isolation:isolate prevents GPU-composited ticker-inner
           from bleeding past this row's clip boundary */}
       <div style={{
         display: "flex", alignItems: "center", height: 34, padding: "0 12px",
         overflow: "hidden",
-        isolation: "isolate",
+        clipPath: "inset(0 0 0 0)",
         background: "var(--surface)",
         borderBottom: "1px solid var(--border-2)",
       }}>

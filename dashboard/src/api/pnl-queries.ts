@@ -133,3 +133,50 @@ export const useDeleteLivePosition = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["portfolio", "live-positions"] }),
   });
 };
+
+export interface PaperTrade {
+  id?: number;
+  strategy: string;
+  ticker: string;
+  entry_date: string;
+  entry_price: number;
+  target_price: number;
+  sl_price: number;
+  shares: number;
+  confidence: number;
+  hold_days: number | null;
+  exit_date: string | null;
+  exit_price: number | null;
+  pnl: number | null;
+  pnl_pct: number | null;
+  status: string;
+  notes: string;
+}
+
+export interface StrategyPnl {
+  strategy: string;
+  total_trades: number;
+  closed_trades: number;
+  open_trades: number;
+  wins: number;
+  losses: number;
+  total_pnl: number;
+  avg_pnl_pct: number;
+  win_rate: number;
+}
+
+export const usePaperTrades = (status = "all") =>
+  useQuery({
+    queryKey: ["portfolio", "paper-trades", status],
+    queryFn: () => api.get<PaperTrade[]>(`/portfolio/paper-trades?status=${status}&limit=200`),
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+
+export const useStrategyPnl = () =>
+  useQuery({
+    queryKey: ["portfolio", "strategy-pnl"],
+    queryFn: () => api.get<StrategyPnl[]>("/portfolio/strategy-pnl"),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });

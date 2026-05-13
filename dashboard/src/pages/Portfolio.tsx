@@ -25,12 +25,13 @@ import { OrderStatusBadge, SideBadge } from "@/components/ui/Badge";
 import { SimpleBarChart } from "@/components/charts/BarChart";
 import {
   usePortfolioSummary, usePositions, useSectorExposure, useEquityCurve,
-  useOrders, useFills, useTradeStats, useDrawdownHistory,
+  useOrders, useDrawdownHistory,
 } from "@/api/queries";
 import {
   usePaperPositions, useDeletePaperPosition, useLivePositions,
   useDeleteLivePosition, usePnLCalendar, usePnLStats,
-  type PaperPosition,
+  usePaperTrades, useStrategyPnl,
+  type PaperPosition, type PaperTrade, type StrategyPnl,
 } from "@/api/pnl-queries";
 import { formatCurrency, formatPct, pctColor, formatDateTime } from "@/lib/utils";
 import { useUIStore } from "@/store/ui";
@@ -45,8 +46,6 @@ type HoldingsTab = "paper" | "live";
 const numColor = (v: number) => (v > 0 ? "var(--green)" : v < 0 ? "var(--red)" : "var(--text-3)");
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DAYS_OPTIONS_EQUITY = [30, 90, 252, 756] as const;
-const STATUS_OPTIONS = ["all", "FILLED", "PENDING", "REJECTED", "CANCELLED"] as const;
-const DAYS_OPTIONS_TRADES = [7, 30, 90] as const;
 
 function pnlCellBg(pct: number): string {
   if (pct === 0) return "rgba(255,255,255,0.03)";
@@ -567,112 +566,138 @@ function PnLTab() {
 
 // ── TRADES TAB ────────────────────────────────────────────────────────────────
 function TradesTab() {
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [tradeDays, setTradeDays]       = useState(30);
-  const [sortKey, setSortKey]           = useState<"created_at" | "ticker">("created_at");
+  const [statusFilter, setStatusFilter] = useState<"all" | "OPEN" | "CLOSED">("all");
 
-  const { data: orders,  isLoading: ordersLoading } = useOrders(statusFilter, 100);
-  const { data: stats,   isLoading: statsLoading  } = useTradeStats(tradeDays);
-  const { data: fills }                             = useFills(tradeDays);
+  const { data: trades, isLoading } = usePaperTrades(statusFilter);
+  const { data: strategyStats }     = useStrategyPnl();
 
-  const sorted = orders ? [...orders].sort((a, b) =>
-    sortKey === "ticker" ? a.ticker.localeCompare(b.ticker)
-      : new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  ) : [];
+  const filtered = trades ?? [];
 
-  const strategyBreakdown = fills
-    ? Object.entries(fills.reduce((acc, o) => { acc[o.strategy] = (acc[o.strategy] ?? 0) + 1; return acc; }, {} as Record<string, number>))
-        .map(([strategy, count]) => ({ strategy: STRATEGY_LABELS[strategy] ?? strategy, count }))
-    : [];
+  const totalPnl    = filtered.reduce((s, t) => s + (t.pnl ?? 0), 0);
+  const closed      = filtered.filter(t => t.status?.toUpperCase() === "CLOSED");
+  const open        = filtered.filter(t => t.status?.toUpperCase() === "OPEN");
+  const wins        = closed.filter(t => (t.pnl ?? 0) > 0);
+  const winRate     = closed.length > 0 ? ((wins.length / closed.length) * 100).toFixed(0) : "—";
 
-  const fillRate = stats && stats.total_orders > 0
-    ? ((stats.filled / stats.total_orders) * 100).toFixed(1) : "0";
+  const strategyChartData = (strategyStats ?? []).map(s => ({
+    strategy: STRATEGY_LABELS[s.strategy] ?? s.strategy,
+    pnl: s.total_pnl,
+    win_rate: s.win_rate,
+    trades: s.total_trades,
+  }));
 
   return (
     <div className="space-y-4">
-      {/* Period selector */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 10, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>Period:</span>
-        {DAYS_OPTIONS_TRADES.map(d => (
-          <button key={d} onClick={() => setTradeDays(d)} style={{
-            fontSize: 10, padding: "4px 12px", borderRadius: 6, cursor: "pointer", transition: "all 120ms",
-            background: tradeDays === d ? "rgba(0,255,135,0.08)" : "transparent",
-            border: tradeDays === d ? "1px solid rgba(0,255,135,0.2)" : "1px solid transparent",
-            color: tradeDays === d ? "var(--blue)" : "var(--text-3)", fontFamily: "var(--font-body)", fontWeight: 600,
-          }}>{d}d</button>
-        ))}
-      </div>
-
-      {/* KPIs */}
+      {/* Summary KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {statsLoading ? Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />) : (
-          <>
-            <StatCard label="Total Orders" value={stats?.total_orders ?? 0} subValue={`Fill rate: ${fillRate}%`} delay={0} />
-            <StatCard label="Filled"   value={stats?.filled   ?? 0} variant="success" delay={0.05} />
-            <StatCard label="Rejected" value={stats?.rejected ?? 0} variant={stats?.rejected ? "danger" : "default"} delay={0.1} />
-            <StatCard label="Buy / Sell" value={`${stats?.buys ?? 0} / ${stats?.sells ?? 0}`} delay={0.15} />
-          </>
-        )}
+        <StatCard label="Total Trades"  value={filtered.length}           subValue={`${open.length} open`}       delay={0}    />
+        <StatCard label="Closed Trades" value={closed.length}             subValue={`Win rate: ${winRate}%`}     delay={0.05} variant="default" />
+        <StatCard label="Winners"       value={wins.length}               subValue={`Losers: ${closed.length - wins.length}`} delay={0.1} variant="success" />
+        <StatCard label="Total P&L"     value={formatCurrency(totalPnl)}  subValue={totalPnl >= 0 ? "Net profit" : "Net loss"}
+          delay={0.15} variant={totalPnl >= 0 ? "success" : "danger"} />
       </div>
 
-      {/* Strategy breakdown chart */}
-      {strategyBreakdown.length > 0 && (
+      {/* Strategy P&L breakdown */}
+      {strategyChartData.length > 0 && (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="card p-5">
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-1)", fontFamily: "var(--font-body)", marginBottom: 12 }}>FILLS BY STRATEGY ({tradeDays}d)</div>
-          <SimpleBarChart data={strategyBreakdown} dataKey="count" nameKey="strategy" height={150} colorFn={() => CHART_COLORS.primary} formatter={v => `${v} trades`} />
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-1)", fontFamily: "var(--font-body)" }}>STRATEGY P&L BREAKDOWN</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10 }}>
+            {(strategyStats ?? []).map(s => (
+              <div key={s.strategy} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: "10px 12px" }}>
+                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: "var(--text-4)", fontFamily: "var(--font-body)", marginBottom: 6 }}>
+                  {(STRATEGY_LABELS[s.strategy] ?? s.strategy).toUpperCase()}
+                </div>
+                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 15, fontWeight: 700, color: s.total_pnl >= 0 ? "var(--green)" : "var(--red)" }}>
+                  {s.total_pnl >= 0 ? "+" : ""}₹{Math.abs(s.total_pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                </div>
+                <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                  <span style={{ fontSize: 10, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>{s.closed_trades} closed</span>
+                  <span style={{ fontSize: 10, color: s.win_rate >= 50 ? "var(--green)" : "var(--red)", fontFamily: "var(--font-mono)", fontWeight: 600 }}>
+                    {s.win_rate}% WR
+                  </span>
+                </div>
+                <div style={{ marginTop: 6, height: 3, borderRadius: 2, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${s.win_rate}%`, background: s.win_rate >= 50 ? "var(--green)" : "var(--red)", borderRadius: 2, transition: "width 600ms ease" }} />
+                </div>
+              </div>
+            ))}
+          </div>
         </motion.div>
       )}
 
-      {/* Orders table */}
+      {/* Paper trades table */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="card">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexWrap: "wrap", gap: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-1)", fontFamily: "var(--font-body)" }}>ORDER HISTORY</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            {STATUS_OPTIONS.map(s => (
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-1)", fontFamily: "var(--font-body)" }}>
+            PAPER TRADES ({filtered.length})
+          </span>
+          <div style={{ display: "flex", gap: 6 }}>
+            {(["all", "OPEN", "CLOSED"] as const).map(s => (
               <button key={s} onClick={() => setStatusFilter(s)} style={{
                 fontSize: 10, padding: "3px 10px", borderRadius: 6, cursor: "pointer", transition: "all 120ms",
                 background: statusFilter === s ? "rgba(0,255,135,0.08)" : "transparent",
                 border: statusFilter === s ? "1px solid rgba(0,255,135,0.2)" : "1px solid transparent",
                 color: statusFilter === s ? "var(--blue)" : "var(--text-3)", fontFamily: "var(--font-body)", fontWeight: 600,
-                textTransform: "lowercase",
-              }}>{s}</button>
+              }}>{s === "all" ? "ALL" : s}</button>
             ))}
-            <button onClick={() => setSortKey(k => k === "created_at" ? "ticker" : "created_at")}
-              style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, padding: "3px 10px", borderRadius: 6, cursor: "pointer", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", color: "var(--text-3)" }}>
-              <ArrowUpDown style={{ width: 10, height: 10 }} />
-              {sortKey === "created_at" ? "Time" : "Ticker"}
-            </button>
           </div>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table className="tbl">
             <thead>
               <tr>
-                {["TICKER","SIDE","QTY","LIMIT","FILLED @","STATUS","STRATEGY","SUBMITTED","NOTE"].map((h, i) => (
-                  <th key={h} className={i >= 2 && i <= 4 ? "tbl-th-r" : "tbl-th"} style={{ paddingLeft: i === 0 ? 16 : undefined }}>{h}</th>
+                {["TICKER","STRATEGY","ENTRY","ENTRY ₹","TARGET ₹","SL ₹","EXIT ₹","P&L","RET%","STATUS","NOTES"].map((h, i) => (
+                  <th key={h} className={[3,4,5,6,7,8].includes(i) ? "tbl-th-r" : "tbl-th"} style={{ paddingLeft: i === 0 ? 16 : undefined }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {ordersLoading ? <SkeletonTable rows={8} /> : sorted.length === 0 ? (
-                <tr><td colSpan={9} style={{ textAlign: "center", padding: "48px 20px", color: "var(--text-3)", fontSize: 13 }}>No orders found</td></tr>
-              ) : (
-                sorted.map((order, i) => (
-                  <motion.tr key={order.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.012 }} className="tbl-row">
+              {isLoading ? <SkeletonTable rows={8} /> : filtered.length === 0 ? (
+                <tr><td colSpan={11} style={{ textAlign: "center", padding: "48px 20px", color: "var(--text-3)", fontSize: 13 }}>
+                  No paper trades yet — screener will populate trades during market hours
+                </td></tr>
+              ) : filtered.map((t, i) => {
+                const pnl = t.pnl ?? 0;
+                const pct = t.pnl_pct ?? 0;
+                const isOpen = t.status?.toUpperCase() === "OPEN";
+                return (
+                  <motion.tr key={`${t.ticker}-${t.entry_date}-${i}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.01 }} className="tbl-row">
                     <td className="tbl-cell" style={{ paddingLeft: 16, fontWeight: 700, color: "var(--blue)", fontFamily: "JetBrains Mono, monospace", fontSize: 12 }}>
-                      {order.ticker.replace(".NS","").replace(".BO","")}
+                      {t.ticker}
                     </td>
-                    <td className="tbl-cell"><SideBadge side={order.side} /></td>
-                    <td className="tbl-cell-r">{order.quantity.toLocaleString("en-IN")}</td>
-                    <td className="tbl-cell-r">{order.limit_price ? `₹${order.limit_price.toFixed(2)}` : "MKT"}</td>
-                    <td className="tbl-cell-r">{order.avg_fill_price ? `₹${order.avg_fill_price.toFixed(2)}` : "—"}</td>
-                    <td className="tbl-cell"><OrderStatusBadge status={order.status} /></td>
-                    <td className="tbl-cell-muted" style={{ fontSize: 10 }}>{STRATEGY_LABELS[order.strategy] ?? order.strategy}</td>
-                    <td className="tbl-cell-r" style={{ fontSize: 10, color: "var(--text-3)" }}>{formatDateTime(order.created_at)}</td>
-                    <td className="tbl-cell-muted" style={{ fontSize: 10, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{order.rejection_reason ?? "—"}</td>
+                    <td className="tbl-cell">
+                      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-3)", fontFamily: "var(--font-body)", background: "rgba(255,255,255,0.04)", padding: "2px 6px", borderRadius: 4 }}>
+                        {(STRATEGY_LABELS[t.strategy] ?? t.strategy).toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="tbl-cell" style={{ fontSize: 10, color: "var(--text-3)" }}>{t.entry_date?.slice(0,10)}</td>
+                    <td className="tbl-cell-r">₹{t.entry_price?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                    <td className="tbl-cell-r" style={{ color: "var(--green)", fontSize: 11 }}>₹{t.target_price?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                    <td className="tbl-cell-r" style={{ color: "var(--red)", fontSize: 11 }}>₹{t.sl_price?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                    <td className="tbl-cell-r" style={{ color: "var(--text-2)" }}>{t.exit_price ? `₹${t.exit_price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "—"}</td>
+                    <td className="tbl-cell-r" style={{ fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: isOpen ? "var(--text-3)" : pnl >= 0 ? "var(--green)" : "var(--red)" }}>
+                      {isOpen ? "OPEN" : `${pnl >= 0 ? "+" : ""}₹${Math.abs(pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`}
+                    </td>
+                    <td className="tbl-cell-r" style={{ fontFamily: "JetBrains Mono, monospace", fontWeight: 700, fontSize: 11, color: isOpen ? "var(--text-3)" : pct >= 0 ? "var(--green)" : "var(--red)" }}>
+                      {isOpen ? "—" : `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`}
+                    </td>
+                    <td className="tbl-cell">
+                      <span style={{
+                        fontSize: 9, fontWeight: 700, letterSpacing: "0.06em", padding: "2px 7px", borderRadius: 4,
+                        fontFamily: "var(--font-body)",
+                        background: isOpen ? "rgba(0,200,255,0.08)" : pnl >= 0 ? "rgba(52,211,153,0.1)" : "rgba(248,113,113,0.1)",
+                        color: isOpen ? "var(--cyan)" : pnl >= 0 ? "var(--green)" : "var(--red)",
+                        border: `1px solid ${isOpen ? "rgba(0,200,255,0.2)" : pnl >= 0 ? "rgba(52,211,153,0.2)" : "rgba(248,113,113,0.2)"}`,
+                      }}>
+                        {t.status?.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="tbl-cell-muted" style={{ fontSize: 10, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.notes}</td>
                   </motion.tr>
-                ))
-              )}
+                );
+              })}
             </tbody>
           </table>
         </div>
