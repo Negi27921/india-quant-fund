@@ -75,9 +75,16 @@ export function ChatBot() {
         "/chat/message",
         { message: msg, history }
       );
-      setMessages(prev => [...prev, { role: "assistant", content: res.response, sources: res.sources }]);
-    } catch {
-      setMessages(prev => [...prev, { role: "assistant", content: "Connection error. Please ensure the IQF backend is running.", sources: [] }]);
+      setMessages(prev => [...prev, { role: "assistant", content: res.response, sources: res.sources ?? [] }]);
+    } catch (err) {
+      const isTimeout = String(err).includes("timeout") || String(err).includes("abort");
+      setMessages(prev => [...prev, {
+        role: "assistant",
+        content: isTimeout
+          ? "Request timed out — the AI is warming up. Please try again in a moment."
+          : "Unable to reach the AI backend. Please try again.",
+        sources: [],
+      }]);
     } finally {
       setLoading(false);
     }

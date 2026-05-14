@@ -231,7 +231,7 @@ async def chat_message(body: ChatMessage):
     symbol = body.symbol or ""
     user_msg = body.message.strip()
 
-    # Auto-extract stock symbol from message (words already uppercase in original)
+    # Auto-extract stock symbol — only from UPPERCASE tokens already in the message
     if not symbol:
         _STOP = {
             "THE", "AND", "FOR", "ARE", "YOU", "NSE", "BSE", "FII", "DII",
@@ -241,23 +241,25 @@ async def chat_message(body: ChatMessage):
             "LATEST", "RECENT", "UPCOMING", "WHICH", "SECTOR", "QUARTERLY",
             "RESULTS", "ANNUAL", "REPORT", "NEWS", "FLOW", "DATA",
         }
-        # Look for UPPERCASE tokens in the original (not uppercased) message
-        candidates = re.findall(r'\b([A-Z][A-Z0-9&\-]{1,9})\b', user_msg)
-        for c in candidates:
-            if c not in _STOP and len(c) >= 2:
+        for c in re.findall(r'\b([A-Z][A-Z0-9&\-]{1,9})\b', user_msg):
+            if c not in _STOP:
                 symbol = c
                 break
 
     context_parts: list[str] = []
     sources: list[str] = []
 
+    # yfinance capped at 2s — skip if slow to stay within Vercel's 10s limit
     if symbol:
         try:
-            stock_context = await loop.run_in_executor(_executor, _get_stock_context, symbol)
-            if stock_context:
+            stock_context = await asyncio.wait_for(
+                loop.run_in_executor(_executor, _get_stock_context, symbol),
+                timeout=2.0,
+            )
+            if stock_context and "unavailable" not in stock_context:
                 context_parts.append(stock_context)
                 sources.append(f"NSE Live Data: {symbol}")
-        except Exception:
+        except (asyncio.TimeoutError, Exception):
             pass
 
     if body.pdf_text:
@@ -268,12 +270,19 @@ async def chat_message(body: ChatMessage):
     if context_parts:
         full_msg = f"Context (live market data):\n{'---'.join(context_parts)}\n\nUser question: {user_msg}"
 
-    # Trim history to last 10 turns to stay within token limits
-    trimmed_history = (body.history or [])[-10:] if body.history else None
+    # Trim history to last 6 turns to reduce token count and latency
+    trimmed_history = (body.history or [])[-6:] if body.history else None
 
-    reply, provider, latency_ms = await loop.run_in_executor(
-        _executor, _llm_complete, SYSTEM_PROMPT, full_msg, trimmed_history
-    )
+    # LLM capped at 8s to guarantee response before Vercel's 10s function limit
+    try:
+        reply, provider, latency_ms = await asyncio.wait_for(
+            loop.run_in_executor(_executor, _llm_complete, SYSTEM_PROMPT, full_msg, trimmed_history),
+            timeout=8.0,
+        )
+    except asyncio.TimeoutError:
+        reply = "The AI is taking longer than usual. Please try again."
+        provider = "timeout"
+        latency_ms = 8000
 
     if not sources:
         sources = ["IQF Market Intelligence"]
