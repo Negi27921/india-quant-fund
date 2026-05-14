@@ -19,6 +19,9 @@ lxml>=5.2.0
 # Supabase cloud database
 supabase>=2.4.0
 
+# LLM providers (openai SDK for agents/base.py fallback)
+openai>=1.30.0
+
 # Config / utils
 pydantic>=2.7.0
 python-dotenv>=1.0.0

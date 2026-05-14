@@ -86,8 +86,8 @@ function TabBtn({
         fontFamily: "var(--font-body)", letterSpacing: "0.1em", cursor: "pointer",
         transition: "all 150ms",
         background: active ? "rgba(0,255,135,0.08)" : "transparent",
-        border: active ? "1px solid rgba(0,255,135,0.2)" : "1px solid transparent",
-        color: active ? "var(--blue)" : "var(--text-3)",
+        border: active ? "1px solid var(--accent-border)" : "1px solid transparent",
+        color: active ? "var(--accent)" : "var(--text-3)",
       }}
     >
       {label}
@@ -141,7 +141,7 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
                   fontSize: 10, padding: "2px 8px", borderRadius: 6, cursor: "pointer",
                   background: equityCurveDays === d ? "rgba(0,255,135,0.1)" : "transparent",
                   border: equityCurveDays === d ? "1px solid rgba(0,255,135,0.25)" : "1px solid transparent",
-                  color: equityCurveDays === d ? "var(--blue)" : "var(--text-3)",
+                  color: equityCurveDays === d ? "var(--accent)" : "var(--text-3)",
                   fontFamily: "var(--font-body)", fontWeight: 600,
                 }}>
                   {d === 252 ? "1Y" : d === 756 ? "3Y" : d === 90 ? "3M" : "1M"}
@@ -204,8 +204,8 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
                 background: tab === "live"
                   ? "linear-gradient(135deg, rgba(6,214,160,0.2), rgba(6,214,160,0.05))"
                   : "rgba(0,255,135,0.08)",
-                border: tab === "live" ? "1px solid rgba(6,214,160,0.4)" : "1px solid rgba(0,255,135,0.2)",
-                color: tab === "live" ? "var(--green)" : "var(--blue)",
+                border: tab === "live" ? "1px solid rgba(6,214,160,0.4)" : "1px solid var(--accent-border)",
+                color: tab === "live" ? "var(--green)" : "var(--accent)",
               }}
             >
               <Plus style={{ width: 12, height: 12 }} />
@@ -247,7 +247,7 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
                           display: "inline-flex", alignItems: "center", gap: 6,
                           padding: "8px 20px", borderRadius: 8, fontSize: 12, fontWeight: 600,
                           fontFamily: "var(--font-body)", cursor: "pointer",
-                          background: "rgba(0,255,135,0.06)", border: "1px solid rgba(0,255,135,0.2)", color: "var(--blue)",
+                          background: "var(--accent-dim)", border: "1px solid var(--accent-border)", color: "var(--accent)",
                         }}
                       >
                         <Plus style={{ width: 13, height: 13 }} /> Add your first {tab} position
@@ -266,12 +266,12 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
                         exit={{ opacity: 0, x: 8 }} transition={{ delay: idx * 0.03 }}
                       >
                         <td className="tbl-cell" style={{ paddingLeft: 20 }}>
-                          <span style={{ fontWeight: 700, color: "var(--blue)", fontSize: 12, fontFamily: "JetBrains Mono, monospace" }}>{sym}</span>
+                          <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: 12, fontFamily: "JetBrains Mono, monospace" }}>{sym}</span>
                         </td>
                         <td className="tbl-cell-muted" style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pos.name ?? "—"}</td>
                         <td className="tbl-cell">
                           {pos.sector ? (
-                            <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 10, whiteSpace: "nowrap", background: "rgba(0,200,255,0.08)", border: "1px solid rgba(0,200,255,0.2)", color: "var(--cyan)", fontFamily: "var(--font-body)", fontWeight: 600 }}>{pos.sector}</span>
+                            <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 10, whiteSpace: "nowrap", background: "var(--amber-dim)", border: "1px solid var(--amber-border)", color: "var(--amber)", fontFamily: "var(--font-body)", fontWeight: 600 }}>{pos.sector}</span>
                           ) : "—"}
                         </td>
                         <td className="tbl-cell-r">{pos.quantity}</td>
@@ -286,7 +286,7 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
                         <td className="tbl-cell row-actions" style={{ paddingRight: 16, textAlign: "right" }}>
                           <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                             <button title="Open Chart" onClick={() => openChart(sym, pos.name ?? sym)}
-                              style={{ padding: "4px 6px", borderRadius: 6, background: "rgba(0,255,135,0.06)", border: "1px solid rgba(0,255,135,0.2)", color: "var(--blue)", cursor: "pointer" }}>
+                              style={{ padding: "4px 6px", borderRadius: 6, background: "var(--accent-dim)", border: "1px solid var(--accent-border)", color: "var(--accent)", cursor: "pointer" }}>
                               <BarChart3 style={{ width: 11, height: 11 }} />
                             </button>
                             <button title="Exit Position" onClick={() => { setExitTarget(pos); setExitOpen(true); }}
@@ -468,7 +468,7 @@ function PnLTab() {
                     fontSize: 9, fontFamily: "var(--font-mono)", padding: "3px 7px", borderRadius: 3, cursor: "pointer",
                     border: isActive ? "1px solid rgba(0,255,135,0.5)" : "1px solid rgba(0,255,135,0.12)",
                     background: isActive ? "rgba(0,255,135,0.12)" : "rgba(0,255,135,0.02)",
-                    color: isActive ? "var(--blue)" : "var(--text-4)", transition: "all 80ms",
+                    color: isActive ? "var(--accent)" : "var(--text-4)", transition: "all 80ms",
                   }}>{label}</button>
                 );
               })}
@@ -479,7 +479,7 @@ function PnLTab() {
                   <span style={{ fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-mono)", letterSpacing: "0.06em" }}>{label}</span>
                   <input type="date" value={i === 0 ? rangeStart : rangeEnd}
                     onChange={e => i === 0 ? setRangeStart(e.target.value) : setRangeEnd(e.target.value)}
-                    style={{ background: "rgba(0,255,135,0.03)", border: "1px solid rgba(0,255,135,0.2)", color: "var(--text-1)", fontFamily: "var(--font-mono)", borderRadius: 4, padding: "5px 8px", outline: "none", fontSize: 11 }}
+                    style={{ background: "rgba(0,255,135,0.03)", border: "1px solid var(--accent-border)", color: "var(--text-1)", fontFamily: "var(--font-mono)", borderRadius: 4, padding: "5px 8px", outline: "none", fontSize: 11 }}
                   />
                 </React.Fragment>
               ))}
@@ -569,7 +569,7 @@ type TradeSortKey = "ticker" | "strategy" | "entry_date" | "entry_price" | "pnl"
 function SortBtn({ col, current, dir, onSort }: { col: TradeSortKey; current: TradeSortKey; dir: "asc" | "desc"; onSort: (k: TradeSortKey) => void }) {
   const active = col === current;
   return (
-    <button onClick={() => onSort(col)} style={{ display: "inline-flex", alignItems: "center", gap: 3, cursor: "pointer", background: "none", border: "none", color: active ? "var(--blue)" : "var(--text-4)", fontFamily: "var(--font-body)", fontSize: "inherit", fontWeight: "inherit", letterSpacing: "inherit", padding: 0 }}>
+    <button onClick={() => onSort(col)} style={{ display: "inline-flex", alignItems: "center", gap: 3, cursor: "pointer", background: "none", border: "none", color: active ? "var(--accent)" : "var(--text-4)", fontFamily: "var(--font-body)", fontSize: "inherit", fontWeight: "inherit", letterSpacing: "inherit", padding: 0 }}>
       {col === "ticker" ? "TICKER" : col === "strategy" ? "STRATEGY" : col === "entry_date" ? "ENTRY" : col === "entry_price" ? "ENTRY ₹" : col === "pnl" ? "P&L" : col === "pnl_pct" ? "RET%" : "STATUS"}
       <span style={{ fontSize: 8, lineHeight: 1 }}>{active ? (dir === "asc" ? "▲" : "▼") : "⇅"}</span>
     </button>
@@ -662,8 +662,8 @@ function TradesTab() {
               <button key={s} onClick={() => setStatusFilter(s)} style={{
                 fontSize: 10, padding: "3px 10px", borderRadius: 6, cursor: "pointer", transition: "all 120ms",
                 background: statusFilter === s ? "rgba(0,255,135,0.08)" : "transparent",
-                border: statusFilter === s ? "1px solid rgba(0,255,135,0.2)" : "1px solid transparent",
-                color: statusFilter === s ? "var(--blue)" : "var(--text-3)", fontFamily: "var(--font-body)", fontWeight: 600,
+                border: statusFilter === s ? "1px solid var(--accent-border)" : "1px solid transparent",
+                color: statusFilter === s ? "var(--accent)" : "var(--text-3)", fontFamily: "var(--font-body)", fontWeight: 600,
               }}>{s === "all" ? "ALL" : s}</button>
             ))}
           </div>
@@ -696,7 +696,7 @@ function TradesTab() {
                 const isOpen = t.status?.toUpperCase() === "OPEN";
                 return (
                   <motion.tr key={`${t.ticker}-${t.entry_date}-${i}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.01 }} className="tbl-row">
-                    <td className="tbl-cell" style={{ paddingLeft: 16, fontWeight: 700, color: "var(--blue)", fontFamily: "JetBrains Mono, monospace", fontSize: 12 }}>
+                    <td className="tbl-cell" style={{ paddingLeft: 16, fontWeight: 700, color: "var(--accent)", fontFamily: "JetBrains Mono, monospace", fontSize: 12 }}>
                       {t.ticker}
                     </td>
                     <td className="tbl-cell">
@@ -719,9 +719,9 @@ function TradesTab() {
                       <span style={{
                         fontSize: 9, fontWeight: 700, letterSpacing: "0.06em", padding: "2px 7px", borderRadius: 4,
                         fontFamily: "var(--font-body)",
-                        background: isOpen ? "rgba(0,200,255,0.08)" : pnl >= 0 ? "rgba(52,211,153,0.1)" : "rgba(248,113,113,0.1)",
-                        color: isOpen ? "var(--cyan)" : pnl >= 0 ? "var(--green)" : "var(--red)",
-                        border: `1px solid ${isOpen ? "rgba(0,200,255,0.2)" : pnl >= 0 ? "rgba(52,211,153,0.2)" : "rgba(248,113,113,0.2)"}`,
+                        background: isOpen ? "var(--amber-dim)" : pnl >= 0 ? "rgba(52,211,153,0.1)" : "rgba(248,113,113,0.1)",
+                        color: isOpen ? "var(--amber)" : pnl >= 0 ? "var(--green)" : "var(--red)",
+                        border: `1px solid ${isOpen ? "var(--amber-border)" : pnl >= 0 ? "rgba(52,211,153,0.2)" : "rgba(248,113,113,0.2)"}`,
                       }}>
                         {t.status?.toUpperCase()}
                       </span>
@@ -827,7 +827,7 @@ function LiveTab() {
               ) : (
                 orders.slice(0, 20).map((o, i) => (
                   <motion.tr key={o.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.02 }} className="tbl-row">
-                    <td className="tbl-cell" style={{ paddingLeft: 16, fontWeight: 700, color: "var(--blue)", fontFamily: "JetBrains Mono, monospace", fontSize: 12 }}>
+                    <td className="tbl-cell" style={{ paddingLeft: 16, fontWeight: 700, color: "var(--accent)", fontFamily: "JetBrains Mono, monospace", fontSize: 12 }}>
                       {o.ticker.replace(".NS","").replace(".BO","")}
                     </td>
                     <td className="tbl-cell"><SideBadge side={o.side} /></td>
@@ -890,8 +890,8 @@ export function PortfolioPage() {
                 style={{
                   padding: "8px 20px", fontSize: 11, fontWeight: 700, fontFamily: "var(--font-body)",
                   letterSpacing: "0.1em", cursor: "pointer", border: "none", background: "transparent",
-                  color: active ? "var(--blue)" : "var(--text-3)", transition: "all 150ms",
-                  borderBottom: active ? "2px solid var(--blue)" : "2px solid transparent",
+                  color: active ? "var(--accent)" : "var(--text-3)", transition: "all 150ms",
+                  borderBottom: active ? "2px solid var(--accent)" : "2px solid transparent",
                   marginBottom: -1,
                 }}
               >

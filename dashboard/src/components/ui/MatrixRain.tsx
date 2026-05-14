@@ -44,7 +44,7 @@ export function MatrixRain() {
             const alpha = Math.max(0, 1 - (y / canvas.height) * 1.1);
             ctx.fillStyle = i % 3 === 0
               ? `rgba(6,214,160,${alpha * 0.35})`
-              : `rgba(91,127,255,${alpha * 0.4})`;
+              : `rgba(250,93,41,${alpha * 0.4})`;
             ctx.fillText(ch, i * fontSize, y);
           }
           if (y > canvas.height && Math.random() > 0.975) drops[i] = 0;

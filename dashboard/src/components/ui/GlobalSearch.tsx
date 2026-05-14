@@ -99,11 +99,11 @@ export function GlobalSearch({ open, onClose, onSelect }: Props) {
   const showPopular = !query;
 
   const sectorColor: Record<string, string> = {
-    IT: "#5B7FFF", Banking: "#06D6A0", Finance: "#A78BFA",
+    IT: "#FA5D29", Banking: "#06D6A0", Finance: "#F39C12",
     FMCG: "#FBBF24", Healthcare: "#FF4757", Auto: "#FB923C",
     Energy: "#F97316", Metals: "#94A3B8", Materials: "#84CC16",
     Chemicals: "#2DD4BF", Industrials: "#60A5FA", Telecom: "#C084FC",
-    Consumer: "#FB7185", Defence: "#F59E0B", "Real Estate": "#5B7FFF",
+    Consumer: "#FB7185", Defence: "#F59E0B", "Real Estate": "#FA5D29",
   };
 
   return (
@@ -132,32 +132,32 @@ export function GlobalSearch({ open, onClose, onSelect }: Props) {
             <div
               className="overflow-hidden"
               style={{
-                background: "#000000",
-                border: "1px solid rgba(91,127,255,0.2)",
+                background: "var(--surface)",
+                border: "1px solid rgba(250,93,41,0.2)",
                 borderRadius: 12,
-                boxShadow: "0 0 0 1px rgba(91,127,255,0.08), 0 32px 80px rgba(0,0,0,0.9)",
+                boxShadow: "0 0 0 1px rgba(250,93,41,0.08), 0 32px 80px rgba(0,0,0,0.2)",
               }}
             >
               {/* Input */}
-              <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                <Search style={{ width: 16, height: 16, color: "#5B7FFF", flexShrink: 0 }} />
+              <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: "1px solid var(--border)" }}>
+                <Search style={{ width: 16, height: 16, color: "#FA5D29", flexShrink: 0 }} />
                 <input
                   ref={inputRef}
                   value={query}
                   onChange={e => setQuery(e.target.value.toUpperCase())}
                   placeholder="Search stocks — RELIANCE, HDFC, Infosys..."
                   className="flex-1 bg-transparent outline-none font-mono"
-                  style={{ fontSize: "14px", color: "#FFFFFF", caretColor: "#5B7FFF" }}
+                  style={{ fontSize: "14px", color: "var(--text-1)", caretColor: "#FA5D29" }}
                 />
                 {query && (
-                  <button onClick={() => setQuery("")} style={{ color: "#5C5C78" }}
-                    onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")}
-                    onMouseLeave={e => (e.currentTarget.style.color = "#5C5C78")}>
+                  <button onClick={() => setQuery("")} style={{ color: "var(--text-3)" }}
+                    onMouseEnter={e => (e.currentTarget.style.color = "var(--text-1)")}
+                    onMouseLeave={e => (e.currentTarget.style.color = "var(--text-3)")}>
                     <X style={{ width: 14, height: 14 }} />
                   </button>
                 )}
                 <kbd className="hidden sm:flex items-center gap-1 px-1.5 py-0.5 rounded"
-                  style={{ fontSize: "10px", color: "#5C5C78", background: "#0A0A12", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  style={{ fontSize: "10px", color: "var(--text-3)", background: "var(--surface-2)", border: "1px solid var(--border)" }}>
                   ESC
                 </kbd>
               </div>
@@ -172,8 +172,8 @@ export function GlobalSearch({ open, onClose, onSelect }: Props) {
                         key={stock.symbol}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-all"
                         style={{
-                          background: i === activeIdx ? "rgba(91,127,255,0.08)" : "transparent",
-                          borderLeft: i === activeIdx ? "2px solid #5B7FFF" : "2px solid transparent",
+                          background: i === activeIdx ? "rgba(250,93,41,0.08)" : "transparent",
+                          borderLeft: i === activeIdx ? "2px solid #FA5D29" : "2px solid transparent",
                         }}
                         onMouseEnter={() => setActiveIdx(i)}
                         onClick={() => handleSelect(stock)}
@@ -184,8 +184,8 @@ export function GlobalSearch({ open, onClose, onSelect }: Props) {
                         <div
                           className="flex items-center justify-center w-8 h-8 rounded-lg shrink-0 font-mono font-bold"
                           style={{
-                            background: `${sectorColor[stock.sector] ?? "#5B7FFF"}15`,
-                            color: sectorColor[stock.sector] ?? "#5B7FFF",
+                            background: `${sectorColor[stock.sector] ?? "#FA5D29"}15`,
+                            color: sectorColor[stock.sector] ?? "#FA5D29",
                             fontSize: "9px",
                             letterSpacing: "0.05em",
                           }}
@@ -194,14 +194,14 @@ export function GlobalSearch({ open, onClose, onSelect }: Props) {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold" style={{ fontSize: "13px", color: "#FFFFFF" }}>
+                            <span className="font-mono font-bold" style={{ fontSize: "13px", color: "var(--text-1)" }}>
                               {stock.symbol}
                             </span>
                             <span
                               className="px-1.5 py-0.5 rounded"
-                              style={{ fontSize: "8px", color: sectorColor[stock.sector] ?? "#5B7FFF",
-                                background: `${sectorColor[stock.sector] ?? "#5B7FFF"}15`,
-                                border: `1px solid ${sectorColor[stock.sector] ?? "#5B7FFF"}30`,
+                              style={{ fontSize: "8px", color: sectorColor[stock.sector] ?? "#FA5D29",
+                                background: `${sectorColor[stock.sector] ?? "#FA5D29"}15`,
+                                border: `1px solid ${sectorColor[stock.sector] ?? "#FA5D29"}30`,
                                 letterSpacing: "0.08em", fontWeight: 700 }}
                             >
                               {stock.sector}
@@ -209,7 +209,7 @@ export function GlobalSearch({ open, onClose, onSelect }: Props) {
                           </div>
                           <div className="truncate mt-0.5" style={{ fontSize: "11px", color: "#A0A0BC" }}>{stock.name}</div>
                         </div>
-                        <span style={{ fontSize: "9px", color: "rgba(255,255,255,0.06)" }}>NSE</span>
+                        <span style={{ fontSize: "9px", color: "var(--text-4)" }}>NSE</span>
                       </motion.button>
                     ))}
                   </div>
@@ -219,8 +219,8 @@ export function GlobalSearch({ open, onClose, onSelect }: Props) {
                 {showEmpty && (
                   <div className="py-10 text-center">
                     <div style={{ fontSize: "24px", marginBottom: 8 }}>🔍</div>
-                    <div style={{ fontSize: "12px", color: "#5C5C78" }}>No stocks found for "{query}"</div>
-                    <div style={{ fontSize: "10px", color: "rgba(255,255,255,0.06)", marginTop: 4 }}>Try a different spelling or symbol</div>
+                    <div style={{ fontSize: "12px", color: "var(--text-3)" }}>No stocks found for "{query}"</div>
+                    <div style={{ fontSize: "10px", color: "var(--text-4)", marginTop: 4 }}>Try a different spelling or symbol</div>
                   </div>
                 )}
 
@@ -230,8 +230,8 @@ export function GlobalSearch({ open, onClose, onSelect }: Props) {
                     {showRecent && (
                       <div>
                         <div className="flex items-center gap-2 mb-2">
-                          <Clock style={{ width: 11, height: 11, color: "#5C5C78" }} />
-                          <span style={{ fontSize: "10px", color: "#5C5C78", letterSpacing: "0.1em", fontWeight: 700 }}>RECENT</span>
+                          <Clock style={{ width: 11, height: 11, color: "var(--text-3)" }} />
+                          <span style={{ fontSize: "10px", color: "var(--text-3)", letterSpacing: "0.1em", fontWeight: 700 }}>RECENT</span>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {recent.map(sym => (
@@ -239,10 +239,10 @@ export function GlobalSearch({ open, onClose, onSelect }: Props) {
                               key={sym}
                               onClick={() => handleSelectSymbol(sym)}
                               className="font-mono font-semibold px-2.5 py-1 rounded-lg transition-all"
-                              style={{ fontSize: "11px", background: "rgba(91,127,255,0.6)", color: "#FFFFFF",
-                                border: "1px solid rgba(255,255,255,0.06)" }}
-                              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(91,127,255,0.3)"; e.currentTarget.style.color = "#5B7FFF"; }}
-                              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = "#FFFFFF"; }}
+                              style={{ fontSize: "11px", background: "rgba(250,93,41,0.6)", color: "var(--text-1)",
+                                border: "1px solid var(--border)" }}
+                              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(250,93,41,0.3)"; e.currentTarget.style.color = "#FA5D29"; }}
+                              onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-1)"; }}
                             >
                               {sym}
                             </button>
@@ -253,8 +253,8 @@ export function GlobalSearch({ open, onClose, onSelect }: Props) {
 
                     <div>
                       <div className="flex items-center gap-2 mb-2">
-                        <TrendingUp style={{ width: 11, height: 11, color: "#5C5C78" }} />
-                        <span style={{ fontSize: "10px", color: "#5C5C78", letterSpacing: "0.1em", fontWeight: 700 }}>POPULAR</span>
+                        <TrendingUp style={{ width: 11, height: 11, color: "var(--text-3)" }} />
+                        <span style={{ fontSize: "10px", color: "var(--text-3)", letterSpacing: "0.1em", fontWeight: 700 }}>POPULAR</span>
                       </div>
                       <div className="flex flex-wrap gap-1.5">
                         {POPULAR.map(sym => (
@@ -262,10 +262,10 @@ export function GlobalSearch({ open, onClose, onSelect }: Props) {
                             key={sym}
                             onClick={() => handleSelectSymbol(sym)}
                             className="font-mono font-semibold px-2.5 py-1 rounded-lg transition-all"
-                            style={{ fontSize: "11px", background: "rgba(91,127,255,0.06)", color: "#5B7FFF",
-                              border: "1px solid rgba(91,127,255,0.15)" }}
-                            onMouseEnter={e => { e.currentTarget.style.background = "rgba(91,127,255,0.12)"; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = "rgba(91,127,255,0.06)"; }}
+                            style={{ fontSize: "11px", background: "rgba(250,93,41,0.06)", color: "#FA5D29",
+                              border: "1px solid rgba(250,93,41,0.15)" }}
+                            onMouseEnter={e => { e.currentTarget.style.background = "rgba(250,93,41,0.12)"; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = "rgba(250,93,41,0.06)"; }}
                           >
                             {sym}
                           </button>
@@ -279,14 +279,14 @@ export function GlobalSearch({ open, onClose, onSelect }: Props) {
               {/* Footer */}
               <div
                 className="flex items-center justify-between px-4 py-2 shrink-0"
-                style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(0,0,0,0.4)" }}
+                style={{ borderTop: "1px solid var(--border)", background: "var(--surface-2)" }}
               >
-                <div className="flex items-center gap-3" style={{ fontSize: "10px", color: "rgba(255,255,255,0.06)" }}>
+                <div className="flex items-center gap-3" style={{ fontSize: "10px", color: "var(--text-4)" }}>
                   <span>↑↓ navigate</span>
                   <span>↵ select</span>
                   <span>ESC close</span>
                 </div>
-                <div className="flex items-center gap-1.5" style={{ fontSize: "10px", color: "rgba(255,255,255,0.06)" }}>
+                <div className="flex items-center gap-1.5" style={{ fontSize: "10px", color: "var(--text-4)" }}>
                   <Command style={{ width: 10, height: 10 }} />
                   <span>K to open</span>
                 </div>

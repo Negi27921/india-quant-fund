@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   Terminal, ScanSearch, LayoutDashboard,
   Shield, BarChart3, Settings2, ChevronLeft, LogOut,
-  TrendingUp, Sun, Moon,
+  Sun, Moon,
 } from "lucide-react";
 import { AUTH_KEY, LOCK_KEY, FAIL_KEY } from "@/pages/Login";
 import { useUIStore } from "@/store/ui";
@@ -42,13 +42,11 @@ export function Sidebar() {
         borderBottom: "1px solid var(--sidebar-border)",
         flexShrink: 0, overflow: "hidden",
       }}>
-        <div style={{
-          width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-          background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center",
-          boxShadow: "0 4px 12px rgba(250,93,41,0.4)",
-        }}>
-          <TrendingUp style={{ width: 16, height: 16, color: "#fff" }} />
-        </div>
+        <img
+          src="/favicon.svg"
+          alt="One Piece"
+          style={{ width: 32, height: 32, flexShrink: 0, borderRadius: 6 }}
+        />
         <div style={{
           opacity: expanded ? 1 : 0,
           maxWidth: expanded ? 160 : 0,
@@ -56,7 +54,7 @@ export function Sidebar() {
           transition: `opacity 150ms ${ease}, max-width 200ms ${ease}`,
         }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text-1)", letterSpacing: "-0.01em" }}>
-            Luffy Labs
+            One Piece
           </div>
           <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: "var(--accent)", marginTop: 1 }}>
             QUANT TERMINAL

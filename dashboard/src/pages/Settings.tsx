@@ -518,7 +518,7 @@ function TradingAgentSection() {
         value={(current?.[key] as number) ?? min}
         onChange={e => setDraft(d => ({ ...(d ?? cfg ?? {}), [key]: parseFloat(e.target.value) }))}
         className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
-        style={{ accentColor: "var(--blue)" }}
+        style={{ accentColor: "var(--accent)" }}
       />
       <div className="flex justify-between text-[10px] text-text-muted">
         <span>{min}{unit}</span><span>{max}{unit}</span>
@@ -605,7 +605,7 @@ function TradingAgentSection() {
                 onClick={handleSave}
                 disabled={update.isPending}
                 className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all"
-                style={{ background: "var(--blue)", color: "#fff" }}
+                style={{ background: "var(--accent)", color: "#fff" }}
               >
                 {update.isPending ? <RefreshIcon className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
                 {update.isPending ? "Saving…" : "Save Configuration"}

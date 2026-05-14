@@ -10,6 +10,7 @@ from api.middleware.security import SecurityHeadersMiddleware
 
 _ALLOWED_ORIGINS = [
     "https://luffy-labs.vercel.app",
+    "https://onepiece-labs.vercel.app",
     "http://localhost:5173",
     "http://localhost:3000",
 ]
@@ -21,7 +22,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
 

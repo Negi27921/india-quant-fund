@@ -25,6 +25,56 @@ class TradeRequest(BaseModel):
     notes: Optional[str] = None
 
 
+def _paper_trade_to_order(r: dict) -> dict:
+    """Map a paper_trades row to the frontend Order interface."""
+    raw_status = r.get("status", "OPEN").upper()
+    status = "FILLED" if raw_status == "CLOSED" else ("PENDING" if raw_status == "OPEN" else raw_status)
+    return {
+        "id": str(r.get("id", "")),
+        "ticker": r.get("ticker", r.get("symbol", "")),
+        "side": "BUY",
+        "quantity": int(r.get("shares") or r.get("quantity") or r.get("qty") or 0),
+        "order_type": "MARKET",
+        "status": status,
+        "limit_price": float(r.get("entry_price") or 0),
+        "avg_fill_price": float(r.get("exit_price") or r.get("entry_price") or 0),
+        "strategy": r.get("strategy", ""),
+        "created_at": str(r.get("created_at", r.get("entry_date", ""))),
+        "filled_at": str(r.get("exit_date", "")) if r.get("exit_date") else None,
+        "rejection_reason": None,
+        "pnl": r.get("pnl"),
+        "pnl_pct": r.get("pnl_pct"),
+        "notes": r.get("notes", ""),
+    }
+
+
+@router.get("/orders")
+async def orders(status: str = Query("all"), limit: int = Query(100, ge=1, le=500)):
+    """Return paper_trades as order list — primary feed for Terminal / Trades page."""
+    try:
+        rows = sdb.select("paper_trades", order="-entry_date", limit=limit)
+        result = [_paper_trade_to_order(r) for r in rows]
+        if status.lower() != "all":
+            result = [o for o in result if o["status"].lower() == status.lower()]
+        return result
+    except Exception:
+        return []
+
+
+@router.get("/fills")
+async def fills(days: int = Query(30, ge=1, le=90)):
+    """Closed paper trades as execution fills."""
+    try:
+        from datetime import date, timedelta
+        cutoff = (date.today() - timedelta(days=days)).isoformat()
+        rows = sdb.select("paper_trades", order="-entry_date", limit=500)
+        closed = [r for r in rows if r.get("status", "").upper() == "CLOSED"
+                  and str(r.get("entry_date", "")) >= cutoff]
+        return [_paper_trade_to_order(r) for r in closed]
+    except Exception:
+        return []
+
+
 @router.get("/recent")
 async def recent_trades(days: int = Query(30, ge=1, le=90)):
     try:
@@ -61,29 +111,26 @@ async def add_trade(req: TradeRequest):
 
 @router.get("/stats")
 async def trade_stats(days: int = Query(30, ge=1, le=90)):
-    cutoff = (date.today() - timedelta(days=days)).isoformat()
-    rows = sdb.select("trades", order="-trade_date", limit=500)
-    filtered = [r for r in rows if str(r.get("trade_date", "")) >= cutoff]
-    if not filtered:
-        return {"total": 0, "buys": 0, "sells": 0, "total_pnl": 0, "win_trades": 0, "loss_trades": 0}
-
-    buys = [r for r in filtered if r["side"] == "BUY"]
-    sells = [r for r in filtered if r["side"] == "SELL"]
-    pnls = [float(r["pnl"]) for r in sells if r.get("pnl") is not None]
-    wins = [p for p in pnls if p > 0]
-    losses = [p for p in pnls if p < 0]
-
-    return {
-        "total": len(filtered),
-        "buys": len(buys),
-        "sells": len(sells),
-        "total_pnl": round(sum(pnls), 2),
-        "win_trades": len(wins),
-        "loss_trades": len(losses),
-        "avg_win": round(sum(wins) / len(wins), 2) if wins else 0,
-        "avg_loss": round(sum(losses) / len(losses), 2) if losses else 0,
-        "win_rate": round(len(wins) / len(pnls) * 100, 1) if pnls else 0,
-    }
+    """Return TradeStats shape matching frontend types.ts interface."""
+    try:
+        cutoff = (date.today() - timedelta(days=days)).isoformat()
+        rows = sdb.select("paper_trades", order="-entry_date", limit=500)
+        filtered = [r for r in rows if str(r.get("entry_date", "")) >= cutoff]
+        closed = [r for r in filtered if r.get("status", "").upper() == "CLOSED"]
+        prices = [float(r.get("entry_price") or 0) for r in filtered if r.get("entry_price")]
+        return {
+            "total_orders": len(filtered),
+            "filled": len(closed),
+            "rejected": 0,
+            "buys": len(filtered),
+            "sells": len(closed),
+            "avg_fill_price": round(sum(prices) / len(prices), 2) if prices else 0,
+            "total_pnl": round(sum(float(r.get("pnl") or 0) for r in closed), 2),
+            "win_trades": len([r for r in closed if float(r.get("pnl") or 0) > 0]),
+            "loss_trades": len([r for r in closed if float(r.get("pnl") or 0) < 0]),
+        }
+    except Exception:
+        return {"total_orders": 0, "filled": 0, "rejected": 0, "buys": 0, "sells": 0, "avg_fill_price": 0}
 
 
 @router.get("/mtd")

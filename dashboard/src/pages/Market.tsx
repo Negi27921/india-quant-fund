@@ -48,7 +48,7 @@ function timeAgo(dt: string): string {
 // borderTop: 3px solid accent
 // header: padding 11px 16px, fontSize 11px, letterSpacing 0.07em
 function Card({
-  title, icon, accent = "var(--blue)", children, headerRight, style,
+  title, icon, accent = "var(--accent)", children, headerRight, style,
 }: {
   title: string; icon?: React.ReactNode; accent?: string;
   children: React.ReactNode; headerRight?: React.ReactNode;
@@ -158,11 +158,11 @@ function IndexChip({ label, data }: { label: string; data?: IndexData }) {
 
 // ── Filings feed ───────────────────────────────────────────────────────────────
 const FILING_COLORS: Record<string, string> = {
-  "Financial Results": "var(--blue)", "Dividend": "var(--green)",
-  "Board Meeting": "var(--amber)", "Acquisition": "var(--violet)",
-  "USFDA": "var(--green)", "Credit Rating": "var(--blue)",
+  "Financial Results": "var(--accent)", "Dividend": "var(--green)",
+  "Board Meeting": "var(--amber)", "Acquisition": "var(--amber)",
+  "USFDA": "var(--green)", "Credit Rating": "var(--accent)",
   "Order Win": "var(--green)", "Shareholding": "var(--text-3)",
-  "AGM": "var(--amber)", "Split": "var(--violet)", "Bonus": "var(--green)",
+  "AGM": "var(--amber)", "Split": "var(--amber)", "Bonus": "var(--green)",
 };
 
 function FilingsPanel() {
@@ -247,9 +247,9 @@ function FilingsPanel() {
             <button key={cat} onClick={() => setCatFilter(cat)} style={{
               padding: "2px 7px", borderRadius: 9999, fontSize: 9, fontWeight: 700,
               fontFamily: "var(--font-body)", cursor: "pointer", border: "1px solid",
-              background: catFilter === cat ? "var(--blue-dim)" : "transparent",
-              borderColor: catFilter === cat ? "var(--border-blue)" : "var(--border)",
-              color: catFilter === cat ? "var(--blue)" : "var(--text-4)",
+              background: catFilter === cat ? "var(--accent-dim)" : "transparent",
+              borderColor: catFilter === cat ? "var(--accent-border)" : "var(--border)",
+              color: catFilter === cat ? "var(--accent)" : "var(--text-4)",
               transition: "all 120ms",
             }}>{cat === "ALL" ? "All" : cat.slice(0, 6)}</button>
           ))}
@@ -462,7 +462,7 @@ function FiiDiiPanel() {
         }}>
           30-Day Flows
         </span>
-        {[{ label: "FII", color: "var(--blue)" }, { label: "DII", color: "var(--green)" }].map(l => (
+        {[{ label: "FII", color: "var(--accent)" }, { label: "DII", color: "var(--green)" }].map(l => (
           <div key={l.label} style={{
             display: "flex", alignItems: "center", gap: 4,
             fontSize: 10, color: "var(--text-3)", fontFamily: "var(--font-body)",
@@ -519,7 +519,7 @@ function FiiDiiPanel() {
             />
             <ReferenceLine y={0} stroke="var(--border-2)" strokeDasharray="3 3" />
             <Bar dataKey="fii" radius={[2, 2, 0, 0]} maxBarSize={8}>
-              {chartData.map((d, i) => <Cell key={i} fill={d.fii >= 0 ? "var(--blue)" : "var(--red)"} fillOpacity={0.85} />)}
+              {chartData.map((d, i) => <Cell key={i} fill={d.fii >= 0 ? "var(--accent)" : "var(--red)"} fillOpacity={0.85} />)}
             </Bar>
             <Bar dataKey="dii" radius={[2, 2, 0, 0]} maxBarSize={8}>
               {chartData.map((d, i) => <Cell key={i} fill={d.dii >= 0 ? "var(--green)" : "var(--red)"} fillOpacity={0.75} />)}
@@ -767,8 +767,8 @@ function TopMoversPanel() {
 function CorporateActionsPanel() {
   const { data, isLoading } = useCorporateActions();
   const ACTION_COLOR: Record<string, string> = {
-    Dividend: "var(--green)", Bonus: "var(--violet)",
-    Split: "var(--amber)", Buyback: "var(--blue)", Rights: "var(--blue)",
+    Dividend: "var(--green)", Bonus: "var(--amber)",
+    Split: "var(--amber)", Buyback: "var(--accent)", Rights: "var(--accent)",
   };
 
   return (
@@ -849,8 +849,8 @@ function CorporateActionsPanel() {
 function ResultsCalendarPanel() {
   const { data, isLoading } = useResultsCalendar();
   const PURPOSE_COLOR: Record<string, string> = {
-    "Financial Results": "var(--blue)", "Dividend": "var(--green)",
-    "Board Meeting": "var(--amber)", "AGM": "var(--violet)",
+    "Financial Results": "var(--accent)", "Dividend": "var(--green)",
+    "Board Meeting": "var(--amber)", "AGM": "var(--amber)",
   };
 
   return (
@@ -1078,7 +1078,7 @@ export function MarketPage() {
             <Card
               title="FII / DII Flows"
               icon={<Globe2 style={{ width: 12, height: 12 }} />}
-              accent="var(--blue)"
+              accent="var(--accent)"
               style={{ flex: 1 }}
             >
               <FiiDiiPanel />
@@ -1087,7 +1087,7 @@ export function MarketPage() {
             <Card
               title="Market Breadth"
               icon={<Activity style={{ width: 12, height: 12 }} />}
-              accent="var(--violet)"
+              accent="var(--amber)"
             >
               <BreadthPanel />
             </Card>
@@ -1107,7 +1107,7 @@ export function MarketPage() {
             <Card
               title="Top Movers"
               icon={<BarChart2 style={{ width: 12, height: 12 }} />}
-              accent="var(--blue)"
+              accent="var(--accent)"
               style={{ flex: 1, minHeight: 200 }}
             >
               <TopMoversPanel />
@@ -1133,7 +1133,7 @@ export function MarketPage() {
           <Card
             title="Results Calendar"
             icon={<TrendingUp style={{ width: 12, height: 12 }} />}
-            accent="var(--violet)"
+            accent="var(--amber)"
             style={{ minHeight: 200 }}
           >
             <ResultsCalendarPanel />

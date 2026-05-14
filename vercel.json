@@ -15,6 +15,7 @@
         "maxLambdaSize": "50mb",
         "includeFiles": [
           "api/**",
+          "agents/**",
           "data/storage/supabase_db.py",
           "data/storage/__init__.py",
           "risk/limits.py",
@@ -25,6 +26,11 @@
       }
     }
   ],
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60
+    }
+  },
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/index.py" },
     { "handle": "filesystem" },

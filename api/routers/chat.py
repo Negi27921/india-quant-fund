@@ -108,27 +108,96 @@ Rules:
 """
 
 
+def _groq_complete(system: str, user_msg: str) -> str:
+    """Direct HTTP call to Groq — no openai SDK required."""
+    import requests as _req
+    key = os.getenv("GROQ_API_KEY", "")
+    if not key:
+        raise ValueError("GROQ_API_KEY not set")
+    model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    r = _req.post(
+        "https://api.groq.com/openai/v1/chat/completions",
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        json={
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_msg},
+            ],
+            "temperature": 0.3,
+            "max_tokens": 1200,
+        },
+        timeout=25,
+    )
+    r.raise_for_status()
+    return r.json()["choices"][0]["message"]["content"]
+
+
+def _gemini_complete(system: str, user_msg: str) -> str:
+    """Direct HTTP call to Gemini — no SDK required."""
+    import requests as _req
+    key = os.getenv("GEMINI_API_KEY", "")
+    if not key:
+        raise ValueError("GEMINI_API_KEY not set")
+    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+    r = _req.post(
+        url,
+        json={
+            "contents": [{"parts": [{"text": f"{system}\n\n{user_msg}"}]}],
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1200},
+        },
+        timeout=25,
+    )
+    r.raise_for_status()
+    return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+
+
+def _openai_compat_complete(system: str, user_msg: str) -> str:
+    """OpenAI-compatible endpoint (custom router, OpenAI, DeepSeek)."""
+    import requests as _req
+    key = os.getenv("OPENAI_API_KEY", "")
+    base = os.getenv("OPENAI_BASE_URL", "https://api.openai.com").rstrip("/")
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    if not key:
+        raise ValueError("OPENAI_API_KEY not set")
+    r = _req.post(
+        f"{base}/chat/completions",
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        json={
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_msg},
+            ],
+            "temperature": 0.3,
+            "max_tokens": 1200,
+        },
+        timeout=25,
+    )
+    r.raise_for_status()
+    return r.json()["choices"][0]["message"]["content"]
+
+
 def _llm_complete(system: str, user_msg: str) -> tuple[str, str, int]:
-    """
-    Runs the BaseLLMClient completion synchronously (called from executor).
-    Returns (reply, provider_used, latency_ms).
-    """
-    from agents.base import BaseLLMClient
+    """Try LLM providers in order. Returns (reply, provider, latency_ms)."""
+    preferred = os.getenv("LLM_PROVIDER", "groq").lower()
 
-    client = BaseLLMClient()
-    preferred = os.getenv("LLM_PROVIDER", "groq")
-    _PROVIDER_ORDER = ["openai", "groq", "deepseek", "gemini", "qwen", "ollama"]
-    order = [preferred] + [p for p in _PROVIDER_ORDER if p != preferred]
+    providers: list[tuple[str, callable]] = []
+    if preferred == "groq":
+        providers = [("groq", _groq_complete), ("gemini", _gemini_complete), ("openai", _openai_compat_complete)]
+    elif preferred == "gemini":
+        providers = [("gemini", _gemini_complete), ("groq", _groq_complete), ("openai", _openai_compat_complete)]
+    else:
+        providers = [("openai", _openai_compat_complete), ("groq", _groq_complete), ("gemini", _gemini_complete)]
 
-    for provider in order:
-        if not client._has_key(provider):
-            continue
+    for name, fn in providers:
         try:
             t0 = time.monotonic()
-            result = client._call(provider, system, user_msg, 0.3, 1200)
+            result = fn(system, user_msg)
             latency_ms = int((time.monotonic() - t0) * 1000)
-            if result:
-                return result, provider, latency_ms
+            if result and result.strip():
+                return result.strip(), name, latency_ms
         except Exception:
             continue
 

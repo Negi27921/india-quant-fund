@@ -67,7 +67,7 @@ function AllocationBars({
     return (
       <div className="flex flex-col items-center justify-center h-32 gap-2">
         <Activity style={{ width: 20, height: 20, color: "rgba(255,255,255,0.06)" }} />
-        <p style={{ fontSize: "11px", color: "#5C5C78" }}>No allocation data yet</p>
+        <p style={{ fontSize: "11px", color: "var(--text-3)" }}>No allocation data yet</p>
       </div>
     );
   }
@@ -77,7 +77,7 @@ function AllocationBars({
   return (
     <div className="space-y-2.5">
       {allocation.map((a) => {
-        const color = STRATEGY_COLORS[a.strategy] ?? "#5B7FFF";
+        const color = STRATEGY_COLORS[a.strategy] ?? "#FA5D29";
         const isSelected = selectedStrategy === a.strategy;
         const sharpe = perf?.find((p) => p.strategy === a.strategy)?.sharpe_ratio;
         // Bar fill: weight as % of maxWeight, capped at 80% of container width visually
@@ -108,7 +108,7 @@ function AllocationBars({
                 </span>
                 <span
                   className="truncate"
-                  style={{ fontSize: "9px", color: "#5C5C78", maxWidth: 140 }}
+                  style={{ fontSize: "9px", color: "var(--text-3)", maxWidth: 140 }}
                 >
                   {STRATEGY_DESCRIPTIONS[a.strategy]}
                 </span>
@@ -178,16 +178,16 @@ function SignalsEmptyState() {
       {/* Explanation card */}
       <div
         className="mx-4 mt-4 mb-3 rounded-xl p-4 flex gap-3 items-start"
-        style={{ background: "rgba(91,127,255,0.05)", border: "1px solid rgba(91,127,255,0.15)" }}
+        style={{ background: "rgba(250,93,41,0.05)", border: "1px solid rgba(250,93,41,0.15)" }}
       >
-        <Zap style={{ width: 16, height: 16, color: "#5B7FFF", marginTop: 1, flexShrink: 0 }} />
+        <Zap style={{ width: 16, height: 16, color: "#FA5D29", marginTop: 1, flexShrink: 0 }} />
         <div>
           <p style={{ fontSize: "12px", color: "#A0A0BC", lineHeight: 1.6 }}>
             Signal engine generates live <span style={{ color: "#06D6A0" }}>BUY</span> /{" "}
             <span style={{ color: "#FF4757" }}>SELL</span> signals during market hours.
             Strategies scan Nifty 500 constituents every 15 minutes for qualifying setups.
           </p>
-          <p style={{ fontSize: "10px", color: "#5C5C78", marginTop: 6 }}>
+          <p style={{ fontSize: "10px", color: "var(--text-3)", marginTop: 6 }}>
             No signals have been generated in this lookback window. Signals appear here as soon as the engine runs.
           </p>
         </div>
@@ -197,7 +197,7 @@ function SignalsEmptyState() {
       <div className="px-4 pb-4">
         <p
           className="mb-2"
-          style={{ fontSize: "9px", color: "#5C5C78", letterSpacing: "0.1em" }}
+          style={{ fontSize: "9px", color: "var(--text-3)", letterSpacing: "0.1em" }}
         >
           EXAMPLE — what signals look like:
         </p>
@@ -218,12 +218,12 @@ function SignalsEmptyState() {
                 <tr key={i} className="tbl-row">
                   <td className="tbl-cell-muted" style={{ fontSize: "10px" }}>{sig.date}</td>
                   <td className="tbl-cell">
-                    <span className="font-mono font-semibold" style={{ color: "#5B7FFF", fontSize: "11px" }}>
+                    <span className="font-mono font-semibold" style={{ color: "#FA5D29", fontSize: "11px" }}>
                       {sig.ticker}
                     </span>
                     <span
                       className="ml-1.5 px-1 py-0.5 rounded"
-                      style={{ fontSize: "8px", background: "rgba(91,127,255,0.1)", color: "#5B7FFF", letterSpacing: "0.06em" }}
+                      style={{ fontSize: "8px", background: "rgba(250,93,41,0.1)", color: "#FA5D29", letterSpacing: "0.06em" }}
                     >
                       EXAMPLE
                     </span>
@@ -298,7 +298,7 @@ export function StrategiesPage() {
           {/* Allocation horizontal bar chart */}
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="card p-5">
             <div className="flex items-center gap-2 mb-1">
-              <div className="w-0.5 h-4 rounded-full" style={{ background: "#5B7FFF" }} />
+              <div className="w-0.5 h-4 rounded-full" style={{ background: "#FA5D29" }} />
               <h3 className="text-sm font-semibold text-text-primary">Strategy Allocation</h3>
             </div>
             <p className="text-xs text-text-muted mb-4 pl-3">Dynamic Sharpe-weighted capital split</p>
@@ -314,9 +314,9 @@ export function StrategiesPage() {
           {/* Performance cards */}
           <div className="lg:col-span-2">
             <div className="flex items-center gap-2 mb-3">
-              <div className="w-0.5 h-4 rounded-full" style={{ background: "#5B7FFF" }} />
+              <div className="w-0.5 h-4 rounded-full" style={{ background: "#FA5D29" }} />
               <h3 className="text-sm font-semibold text-text-primary">Strategy Performance</h3>
-              <span style={{ fontSize: "10px", color: "#5C5C78" }}>click to filter stock universe</span>
+              <span style={{ fontSize: "10px", color: "var(--text-3)" }}>click to filter stock universe</span>
             </div>
             {perfLoading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -325,7 +325,7 @@ export function StrategiesPage() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {perf?.map((p, i) => {
-                  const color     = STRATEGY_COLORS[p.strategy] ?? "#5B7FFF";
+                  const color     = STRATEGY_COLORS[p.strategy] ?? "#FA5D29";
                   const isSelected = selectedStrategy === p.strategy;
                   return (
                     <motion.div
@@ -389,11 +389,11 @@ export function StrategiesPage() {
         >
           {/* Header */}
           <div className="panel-header gap-3 flex-wrap" style={{ paddingLeft: 16 }}>
-            <div className="w-0.5 h-4 rounded-full shrink-0" style={{ background: "#5B7FFF" }} />
+            <div className="w-0.5 h-4 rounded-full shrink-0" style={{ background: "#FA5D29" }} />
             <Target style={{ width: 12, height: 12, color: "#A0A0BC" }} />
             <span className="panel-title">STOCK UNIVERSE</span>
             {selectedStrategy && (
-              <span style={{ fontSize: "10px", color: "#5B7FFF" }}>
+              <span style={{ fontSize: "10px", color: "#FA5D29" }}>
                 — {STRATEGY_LABELS[selectedStrategy] ?? selectedStrategy}
               </span>
             )}
@@ -405,15 +405,15 @@ export function StrategiesPage() {
                 className="px-2 py-0.5 rounded-full transition-all"
                 style={{
                   fontSize: "9px", fontWeight: 700, letterSpacing: "0.08em",
-                  background: !selectedStrategy ? "rgba(91,127,255,0.15)" : "rgba(91,127,255,0.5)",
-                  color: !selectedStrategy ? "#5B7FFF" : "#5C5C78",
-                  border: `1px solid ${!selectedStrategy ? "rgba(91,127,255,0.3)" : "rgba(255,255,255,0.06)"}`,
+                  background: !selectedStrategy ? "rgba(250,93,41,0.15)" : "rgba(250,93,41,0.5)",
+                  color: !selectedStrategy ? "#FA5D29" : "var(--text-3)",
+                  border: `1px solid ${!selectedStrategy ? "rgba(250,93,41,0.3)" : "rgba(255,255,255,0.06)"}`,
                 }}
               >
                 ALL STRATS
               </button>
               {Object.entries(STRATEGY_LABELS).map(([key, label]) => {
-                const c = STRATEGY_COLORS[key] ?? "#5B7FFF";
+                const c = STRATEGY_COLORS[key] ?? "#FA5D29";
                 return (
                   <button
                     key={key}
@@ -421,8 +421,8 @@ export function StrategiesPage() {
                     className="px-2 py-0.5 rounded-full transition-all"
                     style={{
                       fontSize: "9px", fontWeight: 700, letterSpacing: "0.08em",
-                      background: selectedStrategy === key ? `${c}22` : "rgba(91,127,255,0.5)",
-                      color: selectedStrategy === key ? c : "#5C5C78",
+                      background: selectedStrategy === key ? `${c}22` : "rgba(250,93,41,0.5)",
+                      color: selectedStrategy === key ? c : "var(--text-3)",
                       border: `1px solid ${selectedStrategy === key ? c + "55" : "rgba(255,255,255,0.06)"}`,
                     }}
                   >
@@ -438,8 +438,8 @@ export function StrategiesPage() {
             className="px-4 py-2 flex items-center gap-1.5 flex-wrap"
             style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(8,14,24,0.5)" }}
           >
-            <Filter style={{ width: 9, height: 9, color: "#5C5C78", marginRight: 2 }} />
-            <span style={{ fontSize: "9px", color: "#5C5C78", letterSpacing: "0.1em", marginRight: 4 }}>SECTOR:</span>
+            <Filter style={{ width: 9, height: 9, color: "var(--text-3)", marginRight: 2 }} />
+            <span style={{ fontSize: "9px", color: "var(--text-3)", letterSpacing: "0.1em", marginRight: 4 }}>SECTOR:</span>
             {allSectors.slice(0, 16).map((s) => (
               <button
                 key={s}
@@ -447,9 +447,9 @@ export function StrategiesPage() {
                 className="px-2 py-0.5 rounded transition-all"
                 style={{
                   fontSize: "9px", fontWeight: 600,
-                  background: sectorFilter === s ? "rgba(91,127,255,0.1)" : "transparent",
-                  color: sectorFilter === s ? "#5B7FFF" : "#5C5C78",
-                  border: `1px solid ${sectorFilter === s ? "rgba(91,127,255,0.25)" : "transparent"}`,
+                  background: sectorFilter === s ? "rgba(250,93,41,0.1)" : "transparent",
+                  color: sectorFilter === s ? "#FA5D29" : "var(--text-3)",
+                  border: `1px solid ${sectorFilter === s ? "rgba(250,93,41,0.25)" : "transparent"}`,
                   borderRadius: 4,
                 }}
               >
@@ -465,7 +465,7 @@ export function StrategiesPage() {
               className="input"
               style={{ width: 130, height: 22, fontSize: "9px", padding: "0 8px" }}
             />
-            <span style={{ fontSize: "9px", color: "#5C5C78", marginLeft: 6 }}>{filteredStocks.length} stocks</span>
+            <span style={{ fontSize: "9px", color: "var(--text-3)", marginLeft: 6 }}>{filteredStocks.length} stocks</span>
           </div>
 
           {/* Stock grid */}
@@ -480,10 +480,10 @@ export function StrategiesPage() {
                 style={{ background: "rgba(13,22,36,0.6)", border: "1px solid rgba(255,255,255,0.06)" }}
                 onClick={() => openChart(stock.symbol, stock.name)}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background    = "rgba(91,127,255,0.08)";
-                  e.currentTarget.style.borderColor   = "rgba(91,127,255,0.3)";
+                  e.currentTarget.style.background    = "rgba(250,93,41,0.08)";
+                  e.currentTarget.style.borderColor   = "rgba(250,93,41,0.3)";
                   e.currentTarget.style.transform     = "scale(1.02)";
-                  e.currentTarget.style.boxShadow     = "0 0 12px rgba(91,127,255,0.12)";
+                  e.currentTarget.style.boxShadow     = "0 0 12px rgba(250,93,41,0.12)";
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background    = "rgba(13,22,36,0.6)";
@@ -497,7 +497,7 @@ export function StrategiesPage() {
                 <div className="flex items-center justify-between">
                   <span
                     className="font-mono font-bold"
-                    style={{ fontSize: "10px", color: "#5B7FFF" }}
+                    style={{ fontSize: "10px", color: "#FA5D29" }}
                   >
                     {stock.symbol}
                   </span>
@@ -510,20 +510,20 @@ export function StrategiesPage() {
                     className="opacity-0 group-hover:opacity-100 transition-opacity"
                     title={`Open ${stock.symbol} on TradingView`}
                   >
-                    <ExternalLink style={{ width: 8, height: 8, color: "#5B7FFF" }} />
+                    <ExternalLink style={{ width: 8, height: 8, color: "#FA5D29" }} />
                   </a>
                 </div>
                 <div
                   className="truncate mt-0.5"
-                  style={{ fontSize: "8.5px", color: "#5C5C78" }}
+                  style={{ fontSize: "8.5px", color: "var(--text-3)" }}
                 >
                   {stock.name}
                 </div>
                 <div
                   className="mt-1 inline-block px-1 rounded"
                   style={{
-                    fontSize: "7.5px", color: "#5C5C78", letterSpacing: "0.06em",
-                    background: "rgba(91,127,255,0.4)", border: "1px solid rgba(255,255,255,0.06)",
+                    fontSize: "7.5px", color: "var(--text-3)", letterSpacing: "0.06em",
+                    background: "rgba(250,93,41,0.4)", border: "1px solid rgba(255,255,255,0.06)",
                   }}
                 >
                   {stock.sector}
@@ -541,7 +541,7 @@ export function StrategiesPage() {
           className="card overflow-hidden"
         >
           <div className="panel-header gap-3 flex-wrap" style={{ paddingLeft: 16 }}>
-            <div className="w-0.5 h-4 rounded-full shrink-0" style={{ background: "#5B7FFF" }} />
+            <div className="w-0.5 h-4 rounded-full shrink-0" style={{ background: "#FA5D29" }} />
             <Zap style={{ width: 12, height: 12, color: "#A0A0BC" }} />
             <span className="panel-title">SIGNAL LOG</span>
             <div className="flex-1" />
@@ -593,7 +593,7 @@ export function StrategiesPage() {
                       <td className="tbl-cell">
                         <button
                           className="font-mono font-semibold hover:underline"
-                          style={{ color: "#5B7FFF", fontSize: "11px" }}
+                          style={{ color: "#FA5D29", fontSize: "11px" }}
                           onClick={() => openChart(
                             sig.ticker.replace(".NS", "").replace(".BO", ""),
                             sig.ticker.replace(".NS", "").replace(".BO", ""),

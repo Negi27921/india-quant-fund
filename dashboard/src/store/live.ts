@@ -21,9 +21,7 @@ export const useLiveStore = create<LiveStore>((set) => ({
 
     const fetchLive = async () => {
       try {
-        const res = await fetch(`${API_BASE}/portfolio/summary`, {
-          headers: { "Content-Type": "application/json" },
-        });
+        const res = await fetch(`${API_BASE}/portfolio/summary`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const summary = await res.json();
         const live: LiveData = {

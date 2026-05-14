@@ -3,16 +3,16 @@ import { FileText, Clock, RefreshCw } from "lucide-react";
 import { useFilings, type Filing } from "@/api/market-queries";
 
 const CATEGORY_COLOR: Record<string, string> = {
-  "Financial Results": "var(--blue)",
+  "Financial Results": "var(--accent)",
   "Dividend": "var(--green)",
   "Board Meeting": "var(--amber)",
-  "Acquisition": "var(--violet)",
+  "Acquisition": "var(--amber)",
   "USFDA": "var(--green)",
-  "Credit Rating": "var(--blue)",
+  "Credit Rating": "var(--accent)",
   "Order Win": "var(--green)",
   "Shareholding": "var(--text-3)",
   "AGM": "var(--amber)",
-  "Split": "var(--violet)",
+  "Split": "var(--amber)",
   "Bonus": "var(--green)",
 };
 
@@ -73,7 +73,7 @@ function FilingRow({ filing, index }: { filing: Filing; index: number }) {
               target="_blank"
               rel="noopener noreferrer"
               onClick={e => e.stopPropagation()}
-              style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 9, color: "var(--blue)", fontFamily: "Inter, sans-serif", fontWeight: 700, textDecoration: "none" }}
+              style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 9, color: "var(--accent)", fontFamily: "Inter, sans-serif", fontWeight: 700, textDecoration: "none" }}
               onMouseEnter={e => (e.currentTarget.style.opacity = "0.7")}
               onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
             >
@@ -94,10 +94,10 @@ export function FilingsFeed() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px 8px", borderBottom: "1px solid var(--border)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)", boxShadow: "0 0 6px var(--green)", animation: "pulse 2s infinite" }} />
-          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, color: "var(--blue)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, color: "var(--accent)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
             LIVE FILINGS
           </span>
-          {filings && <span style={{ fontSize: 10, background: "var(--blue-dim)", color: "var(--blue)", padding: "1px 6px", borderRadius: 99, fontFamily: "Inter, sans-serif", fontWeight: 700 }}>{filings.length}</span>}
+          {filings && <span style={{ fontSize: 10, background: "var(--accent-dim)", color: "var(--accent)", padding: "1px 6px", borderRadius: 99, fontFamily: "Inter, sans-serif", fontWeight: 700 }}>{filings.length}</span>}
         </div>
         <button onClick={() => refetch()} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", padding: 4, borderRadius: 6 }}>
           <RefreshCw style={{ width: 12, height: 12, animation: isFetching ? "spin 1s linear infinite" : "none" }} />

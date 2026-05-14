@@ -89,26 +89,26 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
     const chart = createChart(el, {
       layout: {
         background: { type: ColorType.Solid, color: "#000000" },
-        textColor: "#5C5C78",
+        textColor: "var(--text-3)",
         fontSize: 11,
         fontFamily: "'JetBrains Mono', monospace",
       },
       grid: {
-        vertLines: { color: "rgba(91,127,255,0.06)", style: LineStyle.Dotted },
-        horzLines: { color: "rgba(91,127,255,0.06)", style: LineStyle.Dotted },
+        vertLines: { color: "rgba(250,93,41,0.06)", style: LineStyle.Dotted },
+        horzLines: { color: "rgba(250,93,41,0.06)", style: LineStyle.Dotted },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: "rgba(91,127,255,0.5)", labelBackgroundColor: "#111120" },
-        horzLine: { color: "rgba(91,127,255,0.5)", labelBackgroundColor: "#111120" },
+        vertLine: { color: "rgba(250,93,41,0.5)", labelBackgroundColor: "var(--surface)" },
+        horzLine: { color: "rgba(250,93,41,0.5)", labelBackgroundColor: "var(--surface)" },
       },
       rightPriceScale: {
-        borderColor: "rgba(255,255,255,0.06)",
-        textColor: "#5C5C78",
+        borderColor: "var(--border)",
+        textColor: "var(--text-3)",
         scaleMargins: { top: 0.1, bottom: 0.25 },
       },
       timeScale: {
-        borderColor: "rgba(255,255,255,0.06)",
+        borderColor: "var(--border)",
         timeVisible: true,
         secondsVisible: false,
         tickMarkFormatter: (time: number | string) => {
@@ -133,7 +133,7 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
     const volSeries = chart.addHistogramSeries({
       priceFormat: { type: "volume" },
       priceScaleId: "volume",
-      color: "rgba(91,127,255,0.3)",
+      color: "rgba(250,93,41,0.3)",
     });
     chart.priceScale("volume").applyOptions({
       scaleMargins: { top: 0.8, bottom: 0 },
@@ -208,8 +208,8 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
             className="fixed top-0 right-0 bottom-0 z-50 flex flex-col"
             style={{
               width: "min(820px, 90vw)",
-              background: "#000000",
-              borderLeft: "1px solid rgba(91,127,255,0.15)",
+              background: "var(--surface)",
+              borderLeft: "1px solid rgba(250,93,41,0.15)",
               boxShadow: "-24px 0 80px rgba(0,0,0,0.9)",
             }}
             initial={{ x: "100%" }}
@@ -220,11 +220,11 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
             {/* Header */}
             <div
               className="flex items-center gap-3 px-5 py-3 shrink-0"
-              style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(0,0,0,0.95)" }}
+              style={{ borderBottom: "1px solid var(--border)", background: "var(--surface-2)" }}
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3">
-                  <span style={{ fontSize: "18px", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: "#FFFFFF", letterSpacing: "0.04em" }}>
+                  <span style={{ fontSize: "18px", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: "var(--text-1)", letterSpacing: "0.04em" }}>
                     {cleanSymbol}
                   </span>
                   <span
@@ -242,7 +242,7 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
                     {isUp ? "▲" : "▼"} {Math.abs(changePct).toFixed(2)}%
                   </span>
                 </div>
-                {name && <div style={{ fontSize: "11px", color: "#2E2E45", marginTop: 2, fontFamily: "Inter, sans-serif" }}>{name}</div>}
+                {name && <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: 2, fontFamily: "Inter, sans-serif" }}>{name}</div>}
               </div>
 
               {displayData && (
@@ -255,7 +255,7 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
                     { label: "V", val: fmtVol(displayData.volume ?? 0) },
                   ].map(item => (
                     <div key={item.label} className="text-center">
-                      <div style={{ fontSize: "9px", color: "#2E2E45", letterSpacing: "0.1em", fontFamily: "Inter, sans-serif" }}>{item.label}</div>
+                      <div style={{ fontSize: "9px", color: "var(--text-3)", letterSpacing: "0.1em", fontFamily: "Inter, sans-serif" }}>{item.label}</div>
                       <div style={{ fontSize: "11px", color: "#A0A0BC", fontFamily: "JetBrains Mono, monospace" }}>{item.val}</div>
                     </div>
                   ))}
@@ -263,15 +263,15 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
               )}
 
               <div className="flex items-center gap-1">
-                {loading && <RefreshCw style={{ width: 13, height: 13, color: "#5B7FFF", animation: "spin 1s linear infinite" }} />}
+                {loading && <RefreshCw style={{ width: 13, height: 13, color: "#FA5D29", animation: "spin 1s linear infinite" }} />}
                 <a
                   href={`https://www.tradingview.com/chart/?symbol=NSE%3A${cleanSymbol}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-1.5 rounded flex items-center gap-1 transition-colors"
-                  style={{ fontSize: "9px", color: "#2E2E45", letterSpacing: "0.08em", textDecoration: "none" }}
-                  onMouseEnter={e => (e.currentTarget.style.color = "#5B7FFF")}
-                  onMouseLeave={e => (e.currentTarget.style.color = "#2E2E45")}
+                  style={{ fontSize: "9px", color: "var(--text-3)", letterSpacing: "0.08em", textDecoration: "none" }}
+                  onMouseEnter={e => (e.currentTarget.style.color = "#FA5D29")}
+                  onMouseLeave={e => (e.currentTarget.style.color = "var(--text-3)")}
                   title="Open in TradingView"
                 >
                   <ExternalLink style={{ width: 12, height: 12 }} />
@@ -280,9 +280,9 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
                 <button
                   onClick={onClose}
                   className="p-1.5 rounded-lg transition-colors"
-                  style={{ color: "#2E2E45", background: "none", border: "none", cursor: "pointer" }}
+                  style={{ color: "var(--text-3)", background: "none", border: "none", cursor: "pointer" }}
                   onMouseEnter={e => (e.currentTarget.style.color = "#FFFFFF")}
-                  onMouseLeave={e => (e.currentTarget.style.color = "#2E2E45")}
+                  onMouseLeave={e => (e.currentTarget.style.color = "var(--text-3)")}
                 >
                   <X style={{ width: 16, height: 16 }} />
                 </button>
@@ -304,14 +304,14 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
                     fontWeight: tf.label === t.label ? 700 : 500,
                     padding: "4px 12px",
                     borderRadius: 6,
-                    background: tf.label === t.label ? "rgba(91,127,255,0.15)" : "transparent",
-                    color: tf.label === t.label ? "#5B7FFF" : "#2E2E45",
-                    border: `1px solid ${tf.label === t.label ? "rgba(91,127,255,0.35)" : "transparent"}`,
+                    background: tf.label === t.label ? "rgba(250,93,41,0.15)" : "transparent",
+                    color: tf.label === t.label ? "#FA5D29" : "var(--text-3)",
+                    border: `1px solid ${tf.label === t.label ? "rgba(250,93,41,0.35)" : "transparent"}`,
                     cursor: "pointer",
                     transition: "all 150ms",
                   }}
                   onMouseEnter={e => { if (tf.label !== t.label) { e.currentTarget.style.color = "#A0A0BC"; e.currentTarget.style.background = "rgba(255,255,255,0.04)"; } }}
-                  onMouseLeave={e => { if (tf.label !== t.label) { e.currentTarget.style.color = "#2E2E45"; e.currentTarget.style.background = "transparent"; } }}
+                  onMouseLeave={e => { if (tf.label !== t.label) { e.currentTarget.style.color = "var(--text-3)"; e.currentTarget.style.background = "transparent"; } }}
                 >
                   {t.label}
                 </button>
@@ -325,8 +325,8 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
               {loading && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.85)" }}>
                   <div className="flex flex-col items-center gap-3">
-                    <RefreshCw style={{ width: 20, height: 20, color: "#5B7FFF", animation: "spin 1s linear infinite" }} />
-                    <span style={{ fontSize: "11px", color: "#5C5C78", fontFamily: "Inter, sans-serif" }}>Loading chart data...</span>
+                    <RefreshCw style={{ width: 20, height: 20, color: "#FA5D29", animation: "spin 1s linear infinite" }} />
+                    <span style={{ fontSize: "11px", color: "var(--text-3)", fontFamily: "Inter, sans-serif" }}>Loading chart data...</span>
                   </div>
                 </div>
               )}
@@ -334,8 +334,8 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-center">
                     <div style={{ fontSize: "28px", marginBottom: 8 }}>📊</div>
-                    <div style={{ fontSize: "12px", color: "#5C5C78", fontFamily: "Inter, sans-serif" }}>No chart data for {cleanSymbol}</div>
-                    <div style={{ fontSize: "10px", color: "#2E2E45", marginTop: 4, fontFamily: "Inter, sans-serif" }}>Market may be closed or symbol not found</div>
+                    <div style={{ fontSize: "12px", color: "var(--text-3)", fontFamily: "Inter, sans-serif" }}>No chart data for {cleanSymbol}</div>
+                    <div style={{ fontSize: "10px", color: "var(--text-3)", marginTop: 4, fontFamily: "Inter, sans-serif" }}>Market may be closed or symbol not found</div>
                   </div>
                 </div>
               )}
@@ -353,10 +353,10 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
                   { label: "HIGH",  val: `₹${fmtPrice(last.high)}`,  color: "#06D6A0" },
                   { label: "LOW",   val: `₹${fmtPrice(last.low)}`,   color: "#FF4757" },
                   { label: "CLOSE", val: `₹${fmtPrice(last.close)}`, color: "#FFFFFF" },
-                  { label: "VOL",   val: fmtVol(last.volume),         color: "#5B7FFF" },
+                  { label: "VOL",   val: fmtVol(last.volume),         color: "#FA5D29" },
                 ].map(s => (
                   <div key={s.label} className="flex items-center gap-1.5">
-                    <span style={{ fontSize: "9px", color: "#2E2E45", letterSpacing: "0.1em", fontFamily: "Inter, sans-serif" }}>{s.label}</span>
+                    <span style={{ fontSize: "9px", color: "var(--text-3)", letterSpacing: "0.1em", fontFamily: "Inter, sans-serif" }}>{s.label}</span>
                     <span style={{ fontSize: "11px", color: s.color, fontFamily: "JetBrains Mono, monospace" }}>{s.val}</span>
                   </div>
                 ))}

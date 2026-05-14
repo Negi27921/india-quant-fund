@@ -20,7 +20,7 @@ const STRATEGY_META: Record<Strategy, { label: string; icon: React.ReactNode; co
   vcp: {
     label: "VCP",
     icon: <Layers style={{ width: 14, height: 14 }} />,
-    color: "var(--blue)",
+    color: "var(--accent)",
     desc: "Volatility Contraction Pattern — 4-wave tightening with declining volume",
   },
   ipo_base: {
@@ -188,8 +188,8 @@ function StockRow({ r, strategy, index }: { r: ScreenerResult; strategy: Strateg
             style={{
               display: "inline-flex", alignItems: "center", gap: 4,
               padding: "4px 9px", borderRadius: 5,
-              background: "var(--blue-dim)", border: "1px solid var(--border-blue)",
-              color: "var(--blue)", fontSize: 9.5, fontWeight: 700,
+              background: "var(--accent-dim)", border: "1px solid var(--accent-border)",
+              color: "var(--accent)", fontSize: 9.5, fontWeight: 700,
               fontFamily: "var(--font-body)", textDecoration: "none",
               letterSpacing: "0.05em",
               transition: "all 120ms",
@@ -198,7 +198,7 @@ function StockRow({ r, strategy, index }: { r: ScreenerResult; strategy: Strateg
               (e.currentTarget as HTMLAnchorElement).style.background = "rgba(0,229,53,0.18)";
             }}
             onMouseLeave={e => {
-              (e.currentTarget as HTMLAnchorElement).style.background = "var(--blue-dim)";
+              (e.currentTarget as HTMLAnchorElement).style.background = "var(--accent-dim)";
             }}
           >
             <ExternalLink style={{ width: 10, height: 10 }} />
@@ -262,7 +262,7 @@ function StockRow({ r, strategy, index }: { r: ScreenerResult; strategy: Strateg
                     <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.08em", marginBottom: 8 }}>RISK / REWARD</div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                       {[
-                        { label: "Entry (LTP)", value: `₹${r.ltp.toLocaleString("en-IN")}`, color: "var(--blue)" },
+                        { label: "Entry (LTP)", value: `₹${r.ltp.toLocaleString("en-IN")}`, color: "var(--accent)" },
                         { label: `Stop Loss (−${r.sl_pct.toFixed(1)}%)`, value: `₹${r.sl.toLocaleString("en-IN")}`, color: "var(--red)" },
                         { label: "TP1 (1:3 R:R)", value: `₹${r.tp1.toLocaleString("en-IN")}`, color: "var(--green)" },
                         { label: "TP2 (1:5 R:R)", value: `₹${r.tp2.toLocaleString("en-IN")}`, color: "var(--green)" },
@@ -350,11 +350,11 @@ export function ScreenerPage() {
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, gap: 16, flexWrap: "wrap" }}>
           <div>
             <h1 style={{ fontFamily: "var(--font-heading)", fontSize: 26, fontWeight: 700, color: "var(--text-1)", margin: 0, display: "flex", alignItems: "center", gap: 10 }}>
-              <ScanSearch style={{ width: 24, height: 24, color: "var(--blue)" }} />
+              <ScanSearch style={{ width: 24, height: 24, color: "var(--accent)" }} />
               Stock Screener
             </h1>
             <div style={{ fontSize: 11.5, color: "var(--text-3)", fontFamily: "var(--font-body)", marginTop: 4 }}>
-              Universe: <span style={{ color: "var(--blue)", fontWeight: 700 }}>{data?.universe_size ?? (universe === "full" ? "2,137" : "503")}</span> NSE stocks
+              Universe: <span style={{ color: "var(--accent)", fontWeight: 700 }}>{data?.universe_size ?? (universe === "full" ? "2,137" : "503")}</span> NSE stocks
               {data?.total != null ? (
                 <> · {data.total} scanned
                   {" · "}<span style={{ color: "var(--green)", fontWeight: 600 }}>{strong.length} Strong</span>
@@ -371,7 +371,7 @@ export function ScreenerPage() {
             style={{
               display: "flex", alignItems: "center", gap: 7,
               padding: "9px 18px", borderRadius: 10,
-              background: "var(--blue)", color: "#fff",
+              background: "var(--accent)", color: "#fff",
               border: "none", cursor: scanning ? "wait" : "pointer",
               fontFamily: "var(--font-body)", fontSize: 12.5, fontWeight: 700,
               opacity: (scanning || data?.is_scanning) ? 0.7 : 1,
@@ -453,9 +453,9 @@ export function ScreenerPage() {
             style={{
               display: "flex", alignItems: "center", gap: 7,
               padding: "8px 14px", borderRadius: 10,
-              background: universe === "full" ? "var(--blue-dim)" : "var(--surface)",
-              border: `1px solid ${universe === "full" ? "var(--border-blue)" : "var(--border)"}`,
-              color: universe === "full" ? "var(--blue)" : "var(--text-3)",
+              background: universe === "full" ? "var(--accent-dim)" : "var(--surface)",
+              border: `1px solid ${universe === "full" ? "var(--accent-border)" : "var(--border)"}`,
+              color: universe === "full" ? "var(--accent)" : "var(--text-3)",
               cursor: "pointer", fontFamily: "var(--font-body)",
               fontSize: 11.5, fontWeight: universe === "full" ? 700 : 500,
               transition: "all 150ms",
@@ -523,9 +523,9 @@ export function ScreenerPage() {
               type="range" min={0} max={100} step={5}
               value={minConf}
               onChange={e => setMinConf(Number(e.target.value))}
-              style={{ width: 80, accentColor: "var(--blue)", cursor: "pointer" }}
+              style={{ width: 80, accentColor: "var(--accent)", cursor: "pointer" }}
             />
-            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", fontFamily: "var(--font-mono)", minWidth: 30 }}>{minConf}%</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)", fontFamily: "var(--font-mono)", minWidth: 30 }}>{minConf}%</span>
           </div>
 
           <div style={{ width: 1, height: 20, background: "var(--border)" }} />
@@ -580,7 +580,7 @@ export function ScreenerPage() {
         {/* Stats row */}
         <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
           {[
-            { label: "Total Results", value: String(data?.total ?? 0), color: "var(--blue)" },
+            { label: "Total Results", value: String(data?.total ?? 0), color: "var(--accent)" },
             { label: "Strong Setups", value: String(strong.length), color: "#06D6A0" },
             { label: "Moderate", value: String(moderate.length), color: "#FFB017" },
             { label: "Strategy", value: meta.label, color: meta.color },
@@ -625,7 +625,7 @@ export function ScreenerPage() {
                 animate={{ rotate: 360 }}
                 transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
               >
-                <Loader2 style={{ width: 32, height: 32, color: "var(--blue)" }} />
+                <Loader2 style={{ width: 32, height: 32, color: "var(--accent)" }} />
               </motion.div>
               <div style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "var(--text-3)" }}>
                 Scanning {data?.universe_size ?? (universe === "full" ? "2,137" : "503")} stocks for {meta.label} setups...
@@ -648,7 +648,7 @@ export function ScreenerPage() {
                   onClick={handleScan}
                   style={{
                     marginTop: 8, padding: "8px 20px", borderRadius: 8,
-                    background: "var(--blue)", color: "#fff", border: "none",
+                    background: "var(--accent)", color: "#fff", border: "none",
                     cursor: "pointer", fontFamily: "var(--font-body)",
                     fontSize: 12, fontWeight: 600,
                   }}

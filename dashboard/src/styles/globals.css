@@ -119,9 +119,9 @@
   --border-accent:  rgba(250,93,41,0.3);
 
   --text-1:   #F0F0F0;
-  --text-2:   #A0A0A0;
-  --text-3:   #666666;
-  --text-4:   #444444;
+  --text-2:   #B0B0B0;
+  --text-3:   #888888;
+  --text-4:   #555555;
 
   --font-heading: "Inter Tight", system-ui, sans-serif;
   --font-body:    "Inter Tight", system-ui, sans-serif;
@@ -219,17 +219,17 @@ html, body {
   .card-yellow {
     @apply card;
     border-color: var(--yellow-border);
-    background: linear-gradient(135deg, #FFFDE7 0%, #FFFFFF 60%);
+    background: linear-gradient(135deg, var(--yellow-dim) 0%, var(--card-bg) 60%);
   }
   .card-accent {
     @apply card;
     border-color: var(--accent-border);
-    background: linear-gradient(135deg, #FFF4F0 0%, #FFFFFF 60%);
+    background: linear-gradient(135deg, var(--accent-dim) 0%, var(--card-bg) 60%);
   }
   .card-green {
     @apply card;
     border-color: var(--green-border);
-    background: linear-gradient(135deg, #F0FBF5 0%, #FFFFFF 60%);
+    background: linear-gradient(135deg, var(--green-dim) 0%, var(--card-bg) 60%);
   }
 
   /* ── Panel header ── */
@@ -421,7 +421,7 @@ html, body {
   .badge-blue   { background: var(--accent-dim);  color: var(--accent); border: 1px solid var(--accent-border); }
   .badge-amber  { background: var(--amber-dim);   color: var(--amber);  border: 1px solid var(--amber-border); }
   .badge-yellow { background: var(--yellow-dim);  color: var(--yellow-dark); border: 1px solid var(--yellow-border); }
-  .badge-violet { background: rgba(139,92,246,0.1); color: #7C3AED; border: 1px solid rgba(139,92,246,0.25); }
+  .badge-violet { background: rgba(243,156,18,0.1); color: #F39C12; border: 1px solid rgba(243,156,18,0.25); }
   .badge-gray   { background: var(--surface-2);   color: var(--text-3); border: 1px solid var(--border); }
 
   /* ── Tabs ── */
@@ -448,7 +448,7 @@ html, body {
     transition: all 120ms;
     white-space: nowrap;
   }
-  .tab-item:hover { color: var(--text-1); background: #FFFFFF; }
+  .tab-item:hover { color: var(--text-1); background: var(--surface); }
   .tab-item.active {
     background: var(--accent);
     color: #FFFFFF;
@@ -583,7 +583,7 @@ html, body {
 /* ── Recharts overrides ──────────────────────────────────────────────────── */
 .recharts-tooltip-wrapper { outline: none !important; }
 .recharts-default-tooltip {
-  background: #FFFFFF !important;
+  background: var(--surface) !important;
   border: 1px solid var(--border) !important;
   border-radius: var(--r-md) !important;
   font-family: var(--font-mono) !important;

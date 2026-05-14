@@ -13,7 +13,7 @@ interface StatCardProps {
 }
 
 const variantMap = {
-  default: { accentColor: "var(--blue)",  glowColor: "var(--blue-glow)",  hoverBorder: "var(--border-blue)" },
+  default: { accentColor: "var(--accent)", glowColor: "var(--accent-dim)", hoverBorder: "var(--accent-border)" },
   success: { accentColor: "var(--green)", glowColor: "var(--green-glow)", hoverBorder: "var(--border-green)" },
   danger:  { accentColor: "var(--red)",   glowColor: "var(--red-glow)",   hoverBorder: "var(--border-red)" },
   warning: { accentColor: "var(--amber)", glowColor: "transparent",       hoverBorder: "rgba(255,176,23,0.4)" },

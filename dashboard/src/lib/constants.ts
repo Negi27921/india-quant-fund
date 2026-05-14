@@ -8,39 +8,39 @@ const wsBase = import.meta.env.VITE_API_URL
 export const WS_URL = `${wsBase}/ws`;
 
 export const CHART_COLORS = {
-  primary: "#3B82F6",
-  success: "#10B981",
-  danger: "#EF4444",
-  warning: "#F59E0B",
-  purple: "#8B5CF6",
-  cyan: "#06B6D4",
-  grid: "#1E2028",
-  text: "#4B5066",
+  primary: "#FA5D29",
+  success: "#27AE60",
+  danger: "#E74C3C",
+  warning: "#F39C12",
+  purple: "#F39C12",
+  cyan: "#F39C12",
+  grid: "#E5E7EB",
+  text: "#9CA3AF",
 };
 
 export const SECTOR_COLORS: Record<string, string> = {
-  "Information Technology": "#3B82F6",
-  "Financial Services": "#10B981",
-  "Healthcare": "#8B5CF6",
+  "Information Technology": "#FA5D29",
+  "Financial Services": "#27AE60",
+  "Healthcare": "#F39C12",
   "Consumer Goods": "#F59E0B",
-  "Energy": "#EF4444",
-  "Industrials": "#06B6D4",
+  "Energy": "#E74C3C",
+  "Industrials": "#FA5D29",
   "Materials": "#F97316",
-  "Real Estate": "#EC4899",
-  "Utilities": "#6366F1",
+  "Real Estate": "#F39C12",
+  "Utilities": "#27AE60",
   "Communication Services": "#14B8A6",
   "Consumer Staples": "#84CC16",
   "Other": "#6B7280",
 };
 
 export const STRATEGY_COLORS: Record<string, string> = {
-  vcp:          "#00ff87",
-  ipo_base:     "#00c8ff",
-  rocket_base:  "#f97316",
-  breakout:     "#a855f7",
-  rsi_reversal: "#fbbf24",
-  golden_cross: "#06d6a0",
-  multibagger:  "#ff4757",
+  vcp:          "#27AE60",
+  ipo_base:     "#F39C12",
+  rocket_base:  "#FA5D29",
+  breakout:     "#E74C3C",
+  rsi_reversal: "#FFF083",
+  golden_cross: "#27AE60",
+  multibagger:  "#FA5D29",
 };
 
 export const STRATEGY_LABELS: Record<string, string> = {

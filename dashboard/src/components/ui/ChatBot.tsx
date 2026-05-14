@@ -26,7 +26,7 @@ function formatMessage(text: string) {
     if (isListItem) {
       return (
         <div key={i} style={{ display: "flex", gap: 6, marginBottom: 3 }}>
-          <span style={{ color: "var(--blue)", flexShrink: 0, marginTop: 2 }}>•</span>
+          <span style={{ color: "var(--accent)", flexShrink: 0, marginTop: 2 }}>•</span>
           <span>{rendered.map((p, _j) => typeof p === "string" ? p.slice(2) : p)}</span>
         </div>
       );
@@ -91,12 +91,12 @@ export function ChatBot() {
         style={{
           position: "fixed", bottom: 24, right: 24, zIndex: 100,
           width: 52, height: 52, borderRadius: "50%",
-          background: "linear-gradient(135deg, var(--blue), var(--violet))",
+          background: "linear-gradient(135deg, var(--accent), var(--amber))",
           border: "none", cursor: "pointer", display: open ? "none" : "flex",
           alignItems: "center", justifyContent: "center",
-          boxShadow: "0 4px 24px rgba(91,127,255,0.5)",
+          boxShadow: "0 4px 24px rgba(250,93,41,0.5)",
         }}
-        whileHover={{ scale: 1.1, boxShadow: "0 6px 32px rgba(91,127,255,0.7)" }}
+        whileHover={{ scale: 1.1, boxShadow: "0 6px 32px rgba(250,93,41,0.7)" }}
         whileTap={{ scale: 0.95 }}
         title="AI Market Assistant"
       >
@@ -119,13 +119,13 @@ export function ChatBot() {
               background: "var(--surface)",
               border: "1px solid var(--border)",
               borderRadius: 20,
-              boxShadow: "0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px var(--border-blue)",
+              boxShadow: "0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px var(--accent-border)",
               overflow: "hidden",
             }}
           >
             {/* Header */}
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid var(--border)", background: "var(--surface-2)", flexShrink: 0 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 10, background: "linear-gradient(135deg, var(--blue), var(--violet))", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ width: 32, height: 32, borderRadius: 10, background: "linear-gradient(135deg, var(--accent), var(--amber))", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <Sparkles style={{ width: 16, height: 16, color: "#fff" }} />
               </div>
               <div style={{ flex: 1 }}>
@@ -144,10 +144,10 @@ export function ChatBot() {
             <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
               {messages.map((m, i) => (
                 <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", flexDirection: m.role === "user" ? "row-reverse" : "row" }}>
-                  <div style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: m.role === "user" ? "var(--blue-dim)" : "linear-gradient(135deg, var(--blue), var(--violet))" }}>
-                    {m.role === "user" ? <User style={{ width: 13, height: 13, color: "var(--blue)" }} /> : <Bot style={{ width: 13, height: 13, color: "#fff" }} />}
+                  <div style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: m.role === "user" ? "var(--accent-dim)" : "linear-gradient(135deg, var(--accent), var(--amber))" }}>
+                    {m.role === "user" ? <User style={{ width: 13, height: 13, color: "var(--accent)" }} /> : <Bot style={{ width: 13, height: 13, color: "#fff" }} />}
                   </div>
-                  <div style={{ maxWidth: "80%", background: m.role === "user" ? "var(--blue-dim)" : "var(--surface-2)", border: `1px solid ${m.role === "user" ? "var(--border-blue)" : "var(--border)"}`, borderRadius: m.role === "user" ? "14px 4px 14px 14px" : "4px 14px 14px 14px", padding: "9px 12px", fontFamily: "var(--font-body)", fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.55 }}>
+                  <div style={{ maxWidth: "80%", background: m.role === "user" ? "var(--accent-dim)" : "var(--surface-2)", border: `1px solid ${m.role === "user" ? "var(--accent-border)" : "var(--border)"}`, borderRadius: m.role === "user" ? "14px 4px 14px 14px" : "4px 14px 14px 14px", padding: "9px 12px", fontFamily: "var(--font-body)", fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.55 }}>
                     {formatMessage(m.content)}
                     {m.sources && m.sources.length > 0 && (
                       <div style={{ marginTop: 8, paddingTop: 6, borderTop: "1px solid var(--border)", display: "flex", gap: 4, flexWrap: "wrap" }}>
@@ -159,14 +159,14 @@ export function ChatBot() {
               ))}
               {loading && (
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                  <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, var(--blue), var(--violet))", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, var(--accent), var(--amber))", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <Bot style={{ width: 13, height: 13, color: "#fff" }} />
                   </div>
                   <div style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "4px 14px 14px 14px", padding: "10px 14px", display: "flex", gap: 4, alignItems: "center" }}>
                     {[0, 1, 2].map(i => (
                       <motion.span
                         key={i}
-                        style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--blue)", display: "block" }}
+                        style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--accent)", display: "block" }}
                         animate={{ opacity: [0.3, 1, 0.3] }}
                         transition={{ duration: 1, delay: i * 0.2, repeat: Infinity }}
                       />
@@ -184,9 +184,9 @@ export function ChatBot() {
                   <button
                     key={s}
                     onClick={() => send(s)}
-                    style={{ fontSize: 10.5, padding: "4px 10px", borderRadius: 99, background: "var(--blue-dim)", border: "1px solid var(--border-blue)", color: "var(--blue)", cursor: "pointer", fontFamily: "var(--font-body)", fontWeight: 600, transition: "all 120ms" }}
-                    onMouseEnter={e => { e.currentTarget.style.background = "var(--blue)"; e.currentTarget.style.color = "#fff"; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = "var(--blue-dim)"; e.currentTarget.style.color = "var(--blue)"; }}
+                    style={{ fontSize: 10.5, padding: "4px 10px", borderRadius: 99, background: "var(--accent-dim)", border: "1px solid var(--accent-border)", color: "var(--accent)", cursor: "pointer", fontFamily: "var(--font-body)", fontWeight: 600, transition: "all 120ms" }}
+                    onMouseEnter={e => { e.currentTarget.style.background = "var(--accent)"; e.currentTarget.style.color = "#fff"; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "var(--accent-dim)"; e.currentTarget.style.color = "var(--accent)"; }}
                   >
                     {s}
                   </button>
@@ -203,13 +203,13 @@ export function ChatBot() {
                 onKeyDown={e => e.key === "Enter" && !e.shiftKey && send()}
                 placeholder="Ask about any stock, filing, result..."
                 style={{ flex: 1, background: "var(--surface-3)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 12px", color: "var(--text-1)", fontFamily: "var(--font-body)", fontSize: 12.5, outline: "none" }}
-                onFocus={e => (e.currentTarget.style.borderColor = "var(--border-blue)")}
+                onFocus={e => (e.currentTarget.style.borderColor = "var(--accent-border)")}
                 onBlur={e => (e.currentTarget.style.borderColor = "var(--border)")}
               />
               <button
                 onClick={() => send()}
                 disabled={!input.trim() || loading}
-                style={{ width: 36, height: 36, borderRadius: 10, background: input.trim() && !loading ? "var(--blue)" : "var(--surface-3)", border: "1px solid var(--border)", cursor: input.trim() && !loading ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 150ms" }}
+                style={{ width: 36, height: 36, borderRadius: 10, background: input.trim() && !loading ? "var(--accent)" : "var(--surface-3)", border: "1px solid var(--border)", cursor: input.trim() && !loading ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 150ms" }}
               >
                 {loading
                   ? <Loader2 style={{ width: 15, height: 15, color: "var(--text-3)", animation: "spin 1s linear infinite" }} />

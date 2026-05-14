@@ -91,18 +91,18 @@ export function ExitPositionModal({ open, position, mode, onClose }: Props) {
               zIndex: 1000,
               width: "min(480px, 94vw)",
               backgroundColor: "#0B1221",
-              border: "1px solid rgba(255,255,255,0.06)",
+              border: "1px solid var(--border)",
               borderRadius: 14,
               padding: "28px 28px 24px",
-              color: "#FFFFFF",
+              color: "var(--text-1)",
               boxShadow: "0 24px 60px rgba(0,0,0,0.55)",
             }}
           >
             {/* Header */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <LogOut size={18} color="#5B7FFF" />
-                <span style={{ fontSize: 16, fontWeight: 600, color: "#FFFFFF" }}>
+                <LogOut size={18} color="#FA5D29" />
+                <span style={{ fontSize: 16, fontWeight: 600, color: "var(--text-1)" }}>
                   Exit Position
                 </span>
                 <span
@@ -111,8 +111,8 @@ export function ExitPositionModal({ open, position, mode, onClose }: Props) {
                     fontWeight: 600,
                     padding: "2px 8px",
                     borderRadius: 20,
-                    backgroundColor: mode === "paper" ? "rgba(91,127,255,0.12)" : "rgba(6,214,160,0.12)",
-                    color: mode === "paper" ? "#5B7FFF" : "#06D6A0",
+                    backgroundColor: mode === "paper" ? "rgba(250,93,41,0.12)" : "rgba(6,214,160,0.12)",
+                    color: mode === "paper" ? "#FA5D29" : "#06D6A0",
                     textTransform: "uppercase",
                     letterSpacing: "0.06em",
                   }}
@@ -141,7 +141,7 @@ export function ExitPositionModal({ open, position, mode, onClose }: Props) {
             <div
               style={{
                 backgroundColor: "#0D1929",
-                border: "1px solid rgba(255,255,255,0.06)",
+                border: "1px solid var(--border)",
                 borderRadius: 10,
                 padding: "16px 18px",
                 marginBottom: 20,
@@ -149,7 +149,7 @@ export function ExitPositionModal({ open, position, mode, onClose }: Props) {
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                 <div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: "#FFFFFF", letterSpacing: "0.02em" }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-1)", letterSpacing: "0.02em" }}>
                     {position.ticker}
                   </div>
                   <div style={{ fontSize: 12, color: "#7C8DA6", marginTop: 2 }}>
@@ -209,10 +209,10 @@ export function ExitPositionModal({ open, position, mode, onClose }: Props) {
                   style={{
                     width: "100%",
                     backgroundColor: "#0D1929",
-                    border: "1px solid rgba(255,255,255,0.06)",
+                    border: "1px solid var(--border)",
                     borderRadius: 8,
                     padding: "9px 12px",
-                    color: "#FFFFFF",
+                    color: "var(--text-1)",
                     fontSize: 14,
                     outline: "none",
                     boxSizing: "border-box",
@@ -233,10 +233,10 @@ export function ExitPositionModal({ open, position, mode, onClose }: Props) {
                   style={{
                     width: "100%",
                     backgroundColor: "#0D1929",
-                    border: "1px solid rgba(255,255,255,0.06)",
+                    border: "1px solid var(--border)",
                     borderRadius: 8,
                     padding: "9px 12px",
-                    color: "#FFFFFF",
+                    color: "var(--text-1)",
                     fontSize: 14,
                     outline: "none",
                     boxSizing: "border-box",
@@ -292,13 +292,13 @@ export function ExitPositionModal({ open, position, mode, onClose }: Props) {
                   flex: 1,
                   padding: "11px 0",
                   borderRadius: 8,
-                  border: "1px solid #5B7FFF",
+                  border: "1px solid #FA5D29",
                   cursor:
                     exitMutation.isPending || quantity <= 0 || quantity >= position.quantity
                       ? "not-allowed"
                       : "pointer",
                   backgroundColor: "transparent",
-                  color: "#5B7FFF",
+                  color: "#FA5D29",
                   fontWeight: 600,
                   fontSize: 14,
                   opacity:
