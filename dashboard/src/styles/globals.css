@@ -80,6 +80,73 @@
   --shadow-green:  0 4px 16px rgba(39,174,96,0.2);
 }
 
+/* ── Dark Mode ───────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --bg:        #0D0D0D;
+  --surface:   #161616;
+  --surface-2: #1E1E1E;
+  --surface-3: #282828;
+  --overlay:   rgba(13,13,13,0.96);
+
+  --yellow:         #FFF083;
+  --yellow-dark:    #E8CC00;
+  --yellow-dim:     rgba(255,240,131,0.15);
+  --yellow-border:  rgba(255,240,131,0.25);
+
+  --accent:         #FA5D29;
+  --accent-hover:   #FF7040;
+  --accent-dim:     rgba(250,93,41,0.12);
+  --accent-border:  rgba(250,93,41,0.3);
+  --accent-dark:    #C4420F;
+
+  --green:          #27AE60;
+  --green-hover:    #32C96E;
+  --green-dim:      rgba(39,174,96,0.12);
+  --green-border:   rgba(39,174,96,0.3);
+  --green-dark:     #1A7A44;
+
+  --red:            #E74C3C;
+  --red-dim:        rgba(231,76,60,0.12);
+  --red-border:     rgba(231,76,60,0.3);
+
+  --amber:          #F39C12;
+  --amber-dim:      rgba(243,156,18,0.12);
+  --amber-border:   rgba(243,156,18,0.3);
+
+  --border:         rgba(255,255,255,0.08);
+  --border-2:       rgba(255,255,255,0.14);
+  --border-strong:  rgba(255,255,255,0.22);
+  --border-accent:  rgba(250,93,41,0.3);
+
+  --text-1:   #F0F0F0;
+  --text-2:   #A0A0A0;
+  --text-3:   #666666;
+  --text-4:   #444444;
+
+  --font-heading: "Inter Tight", system-ui, sans-serif;
+  --font-body:    "Inter Tight", system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", "Fira Code", monospace;
+
+  --sidebar-bg:     #111111;
+  --sidebar-border: rgba(255,255,255,0.07);
+
+  --card-bg:    #161616;
+  --card-hover: #1A1A1A;
+
+  --input-bg:     #1E1E1E;
+  --input-border: rgba(255,255,255,0.12);
+
+  --r-xs: 4px; --r-sm: 6px; --r-md: 8px;
+  --r-lg: 12px; --r-xl: 16px; --r-2xl: 24px; --r-pill: 9999px;
+
+  --shadow-sm:   0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05);
+  --shadow-md:   0 4px 12px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+  --shadow-lg:   0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05);
+  --shadow-accent: 0 4px 20px rgba(250,93,41,0.3);
+  --shadow-yellow: 0 4px 20px rgba(255,240,131,0.2);
+  --shadow-green:  0 4px 16px rgba(39,174,96,0.2);
+}
+
 /* ── Keyframes ───────────────────────────────────────────────────────────── */
 @keyframes fade-in    { from { opacity: 0 } to { opacity: 1 } }
 @keyframes slide-up   { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: translateY(0) } }
@@ -497,6 +564,21 @@ html, body {
   .cond-pass { @apply badge-green; }
   .cond-fail { @apply badge-gray; opacity: 0.6; }
 }
+
+/* ── Dark mode component overrides ──────────────────────────────────────── */
+[data-theme="dark"] .card-yellow {
+  background: linear-gradient(135deg, rgba(255,240,131,0.06) 0%, var(--surface) 60%);
+}
+[data-theme="dark"] .card-accent {
+  background: linear-gradient(135deg, rgba(250,93,41,0.08) 0%, var(--surface) 60%);
+}
+[data-theme="dark"] .card-green {
+  background: linear-gradient(135deg, rgba(39,174,96,0.08) 0%, var(--surface) 60%);
+}
+[data-theme="dark"] .tbl thead tr { background: var(--surface-2); }
+[data-theme="dark"] .tbl-row:hover { background: rgba(250,93,41,0.06); }
+[data-theme="dark"] .tab-item:hover { background: var(--surface-2); color: var(--text-1); }
+[data-theme="dark"] body { background: var(--bg); }
 
 /* ── Recharts overrides ──────────────────────────────────────────────────── */
 .recharts-tooltip-wrapper { outline: none !important; }

@@ -105,7 +105,7 @@ async def portfolio_summary():
                 "day_pnl": float(r.get("day_pnl", 0)),
                 "day_pnl_pct": float(r.get("day_pnl_pct", 0)),
                 "drawdown_pct": float(r.get("drawdown_pct", 0)),
-                "n_positions": r.get("num_positions", 0),
+                "n_positions": r.get("n_positions") or n_open or 0,
                 "equity_curve": list(reversed(equity_rows)),
                 "n_open_paper_trades": n_open,
                 "n_closed_paper_trades": n_closed,
@@ -253,6 +253,33 @@ class ExitRequest(BaseModel):
 def _normalize_ticker(t: str) -> str:
     t = t.upper().strip()
     return t if "." in t else f"{t}.NS"
+
+
+@router.get("/positions")
+async def positions():
+    """Unified positions: live first, fall back to paper_positions, then paper_trades (OPEN)."""
+    try:
+        live = sdb.select("live_positions", order="-created_at")
+        if live:
+            return _enrich_positions(live)
+        paper = sdb.select("paper_positions", order="-created_at")
+        if paper:
+            return _enrich_positions(paper)
+        # Derive from open paper_trades
+        trades = sdb.select("paper_trades", order="-entry_date", limit=200)
+        open_trades = [t for t in trades if t.get("status", "").upper() == "OPEN"]
+        if open_trades:
+            rows = [{
+                "ticker": t["ticker"], "name": t.get("name", t["ticker"]),
+                "quantity": int(t.get("shares") or 0),
+                "avg_buy_price": float(t.get("entry_price") or 0),
+                "buy_date": t.get("entry_date", ""), "sector": t.get("sector", ""),
+                "strategy": t.get("strategy", ""), "notes": t.get("notes", ""),
+            } for t in open_trades]
+            return _enrich_positions(rows)
+    except Exception:
+        pass
+    return []
 
 
 @router.get("/paper-positions")

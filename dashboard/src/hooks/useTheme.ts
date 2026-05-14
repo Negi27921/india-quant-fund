@@ -1,9 +1,22 @@
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
+
+export type Theme = "light" | "dark";
 
 export function useTheme() {
+  const [theme, setTheme] = useState<Theme>(() => {
+    return (localStorage.getItem("iqf-theme") as Theme) ?? "light";
+  });
+
   useEffect(() => {
-    // Always light theme — remove any stale dark-mode class/attr
-    document.documentElement.removeAttribute("data-theme");
-    document.documentElement.classList.remove("dark");
-  }, []);
+    const root = document.documentElement;
+    if (theme === "dark") {
+      root.setAttribute("data-theme", "dark");
+    } else {
+      root.removeAttribute("data-theme");
+    }
+    localStorage.setItem("iqf-theme", theme);
+  }, [theme]);
+
+  const toggle = () => setTheme(t => t === "dark" ? "light" : "dark");
+  return { theme, toggle };
 }

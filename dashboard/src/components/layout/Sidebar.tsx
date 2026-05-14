@@ -3,11 +3,12 @@ import { motion } from "framer-motion";
 import {
   Terminal, ScanSearch, LayoutDashboard,
   Shield, BarChart3, Settings2, ChevronLeft, LogOut,
-  TrendingUp,
+  TrendingUp, Sun, Moon,
 } from "lucide-react";
 import { AUTH_KEY, LOCK_KEY, FAIL_KEY } from "@/pages/Login";
 import { useUIStore } from "@/store/ui";
 import { useLiveStore } from "@/store/live";
+import { useTheme } from "@/hooks/useTheme";
 
 const NAV = [
   { to: "/",           icon: Terminal,        label: "Terminal",   end: true },
@@ -23,6 +24,7 @@ const ease = "cubic-bezier(0.25, 0.46, 0.45, 0.94)";
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, paperMode, togglePaperMode } = useUIStore();
   const { connected } = useLiveStore();
+  const { theme, toggle: toggleTheme } = useTheme();
 
   const W = sidebarCollapsed ? 60 : 220;
   const expanded = !sidebarCollapsed;
@@ -174,6 +176,16 @@ export function Sidebar() {
           label={connected ? "CONNECTED" : "OFFLINE"}
           labelColor={connected ? "var(--green)" : "var(--red)"}
           monoLabel
+        />
+
+        {/* Theme toggle */}
+        <FooterBtn collapsed={sidebarCollapsed}
+          title={theme === "dark" ? "Light mode" : "Dark mode"}
+          icon={theme === "dark"
+            ? <Sun style={{ width: 13, height: 13 }} />
+            : <Moon style={{ width: 13, height: 13 }} />}
+          label={theme === "dark" ? "Light Mode" : "Dark Mode"}
+          onClick={toggleTheme}
         />
 
         {/* Logout */}
