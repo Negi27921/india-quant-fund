@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { LiveData } from "@/api/types";
-import { WS_URL } from "@/lib/constants";
+import { API_BASE } from "@/lib/constants";
 
 interface LiveStore {
   data: LiveData | null;
@@ -9,50 +9,44 @@ interface LiveStore {
   connect: () => () => void;
 }
 
+// Vercel serverless doesn't support WebSockets — use HTTP polling instead
 export const useLiveStore = create<LiveStore>((set) => ({
   data: null,
   connected: false,
   lastUpdate: null,
 
   connect: () => {
-    let ws: WebSocket;
-    let reconnectTimer: ReturnType<typeof setTimeout>;
+    let timer: ReturnType<typeof setInterval>;
     let unmounted = false;
 
-    const connect = () => {
-      ws = new WebSocket(WS_URL);
-
-      ws.onopen = () => {
-        set({ connected: true });
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data: LiveData = JSON.parse(event.data);
-          set({ data, lastUpdate: new Date() });
-        } catch {
-          // ignore malformed messages
-        }
-      };
-
-      ws.onclose = () => {
-        set({ connected: false });
-        if (!unmounted) {
-          reconnectTimer = setTimeout(connect, 3000);
-        }
-      };
-
-      ws.onerror = () => {
-        ws.close();
-      };
+    const fetchLive = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/portfolio/summary`, {
+          headers: { "Content-Type": "application/json" },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const summary = await res.json();
+        const live: LiveData = {
+          portfolio_value:     summary.portfolio_value ?? 0,
+          day_pnl:             summary.day_pnl ?? 0,
+          day_pnl_pct:         summary.day_pnl_pct ?? 0,
+          drawdown_pct:        summary.drawdown_pct ?? 0,
+          n_positions:         summary.n_positions ?? 0,
+          kill_switch_active:  summary.kill_switch_active ?? false,
+          timestamp:           new Date().toISOString(),
+        };
+        if (!unmounted) set({ data: live, connected: true, lastUpdate: new Date() });
+      } catch {
+        if (!unmounted) set({ connected: false });
+      }
     };
 
-    connect();
+    fetchLive();
+    timer = setInterval(fetchLive, 15_000);
 
     return () => {
       unmounted = true;
-      clearTimeout(reconnectTimer);
-      ws?.close();
+      clearInterval(timer);
     };
   },
 }));
