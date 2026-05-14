@@ -315,9 +315,11 @@ async def chat_probe():
             results["groq_exception"] = str(e)[:200]
 
     if gemini_key:
+        gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip()
+        results["gemini_model"] = gemini_model
         try:
             r = _req.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={gemini_key.strip()}",
+                f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={gemini_key.strip()}",
                 json={"contents": [{"parts": [{"text": "Say OK"}]}], "generationConfig": {"maxOutputTokens": 5}},
                 timeout=10,
             )
