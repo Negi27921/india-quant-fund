@@ -191,6 +191,7 @@ def _llm_complete(system: str, user_msg: str) -> tuple[str, str, int]:
     else:
         providers = [("openai", _openai_compat_complete), ("groq", _groq_complete), ("gemini", _gemini_complete)]
 
+    last_error = ""
     for name, fn in providers:
         try:
             t0 = time.monotonic()
@@ -198,13 +199,14 @@ def _llm_complete(system: str, user_msg: str) -> tuple[str, str, int]:
             latency_ms = int((time.monotonic() - t0) * 1000)
             if result and result.strip():
                 return result.strip(), name, latency_ms
-        except Exception:
+        except Exception as exc:
+            last_error = f"{name}: {exc}"
             continue
 
     return (
-        "I encountered a temporary issue connecting to all AI providers. "
+        "I encountered a temporary issue connecting to the AI provider. "
         "Please try again in a moment.",
-        "none",
+        f"none:{last_error[:80]}" if last_error else "none",
         0,
     )
 
@@ -216,13 +218,20 @@ async def chat_message(body: ChatMessage):
     symbol = body.symbol or ""
     user_msg = body.message.strip()
 
-    # Auto-extract symbol from message
+    # Auto-extract stock symbol from message (words already uppercase in original)
     if not symbol:
-        candidates = re.findall(r'\b([A-Z]{2,10})\b', user_msg.upper())
-        common_stops = {"THE", "AND", "FOR", "ARE", "YOU", "NSE", "BSE", "FII", "DII",
-                        "IPO", "AGM", "EPS", "ROE", "PAT", "NII", "NIM", "AUM", "SEBI"}
+        _STOP = {
+            "THE", "AND", "FOR", "ARE", "YOU", "NSE", "BSE", "FII", "DII",
+            "IPO", "AGM", "EPS", "ROE", "PAT", "NII", "NIM", "AUM", "SEBI",
+            "WHAT", "HOW", "WHY", "WHEN", "WHERE", "BANK", "TODAY", "STOCK",
+            "MARKET", "SHARE", "PRICE", "ANALYSE", "ANALYZE", "COMPARE",
+            "LATEST", "RECENT", "UPCOMING", "WHICH", "SECTOR", "QUARTERLY",
+            "RESULTS", "ANNUAL", "REPORT", "NEWS", "FLOW", "DATA",
+        }
+        # Look for UPPERCASE tokens in the original (not uppercased) message
+        candidates = re.findall(r'\b([A-Z][A-Z0-9&\-]{1,9})\b', user_msg)
         for c in candidates:
-            if c not in common_stops:
+            if c not in _STOP and len(c) >= 2:
                 symbol = c
                 break
 
@@ -260,6 +269,51 @@ async def chat_message(body: ChatMessage):
         provider=provider,
         latency_ms=latency_ms,
     )
+
+
+@router.get("/probe")
+async def chat_probe():
+    """Debug: check LLM provider connectivity."""
+    import requests as _req
+    results = {}
+    groq_key = os.getenv("GROQ_API_KEY", "")
+    gemini_key = os.getenv("GEMINI_API_KEY", "")
+    results["groq_key_set"] = bool(groq_key)
+    results["gemini_key_set"] = bool(gemini_key)
+    results["llm_provider"] = os.getenv("LLM_PROVIDER", "NOT_SET")
+
+    if groq_key:
+        try:
+            r = _req.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {groq_key.strip()}"},
+                json={"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": "Say OK"}], "max_tokens": 5},
+                timeout=10,
+            )
+            results["groq_status"] = r.status_code
+            if r.status_code == 200:
+                results["groq_response"] = r.json()["choices"][0]["message"]["content"]
+            else:
+                results["groq_error"] = r.text[:200]
+        except Exception as e:
+            results["groq_exception"] = str(e)[:200]
+
+    if gemini_key:
+        try:
+            r = _req.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={gemini_key.strip()}",
+                json={"contents": [{"parts": [{"text": "Say OK"}]}], "generationConfig": {"maxOutputTokens": 5}},
+                timeout=10,
+            )
+            results["gemini_status"] = r.status_code
+            if r.status_code == 200:
+                results["gemini_response"] = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+            else:
+                results["gemini_error"] = r.text[:200]
+        except Exception as e:
+            results["gemini_exception"] = str(e)[:200]
+
+    return results
 
 
 @router.get("/suggestions")
