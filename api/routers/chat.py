@@ -111,10 +111,10 @@ Rules:
 def _groq_complete(system: str, user_msg: str) -> str:
     """Direct HTTP call to Groq — no openai SDK required."""
     import requests as _req
-    key = os.getenv("GROQ_API_KEY", "")
+    key = os.getenv("GROQ_API_KEY", "").strip()
     if not key:
         raise ValueError("GROQ_API_KEY not set")
-    model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
     r = _req.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
@@ -136,10 +136,10 @@ def _groq_complete(system: str, user_msg: str) -> str:
 def _gemini_complete(system: str, user_msg: str) -> str:
     """Direct HTTP call to Gemini — no SDK required."""
     import requests as _req
-    key = os.getenv("GEMINI_API_KEY", "")
+    key = os.getenv("GEMINI_API_KEY", "").strip()
     if not key:
         raise ValueError("GEMINI_API_KEY not set")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp")
+    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip()
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
     r = _req.post(
         url,
@@ -156,9 +156,9 @@ def _gemini_complete(system: str, user_msg: str) -> str:
 def _openai_compat_complete(system: str, user_msg: str) -> str:
     """OpenAI-compatible endpoint (custom router, OpenAI, DeepSeek)."""
     import requests as _req
-    key = os.getenv("OPENAI_API_KEY", "")
-    base = os.getenv("OPENAI_BASE_URL", "https://api.openai.com").rstrip("/")
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    key = os.getenv("OPENAI_API_KEY", "").strip()
+    base = os.getenv("OPENAI_BASE_URL", "https://api.openai.com").strip().rstrip("/")
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip()
     if not key:
         raise ValueError("OPENAI_API_KEY not set")
     r = _req.post(
