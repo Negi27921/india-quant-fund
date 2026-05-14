@@ -92,13 +92,21 @@ function TickerBar() {
 
   return (
     <div
-      style={{ flex: 1, overflow: "hidden", minWidth: 0, height: "100%" }}
+      style={{ flex: 1, position: "relative", height: "100%", overflow: "hidden", minWidth: 0 }}
       onMouseEnter={() => { pauseRef.current = true; }}
       onMouseLeave={() => { pauseRef.current = false; }}
     >
       <div
         ref={trackRef}
-        style={{ display: "inline-flex", alignItems: "center", whiteSpace: "nowrap", height: "100%", willChange: "unset" }}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          whiteSpace: "nowrap",
+        }}
       >
         {doubled.map((item, i) => renderTickerItem(item, i))}
       </div>
