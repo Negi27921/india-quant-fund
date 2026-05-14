@@ -108,46 +108,53 @@ Rules:
 """
 
 
-def _groq_complete(system: str, user_msg: str) -> str:
-    """Direct HTTP call to Groq — no openai SDK required."""
+def _groq_complete(system: str, user_msg: str, history: list[dict] | None = None) -> str:
+    """Direct HTTP call to Groq with conversation history support."""
     import requests as _req
     key = os.getenv("GROQ_API_KEY", "").strip()
     if not key:
         raise ValueError("GROQ_API_KEY not set")
     model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
+    messages: list[dict] = [{"role": "system", "content": system}]
+    if history:
+        for turn in history:
+            messages.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
+    messages.append({"role": "user", "content": user_msg})
     r = _req.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        json={
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_msg},
-            ],
-            "temperature": 0.3,
-            "max_tokens": 1200,
-        },
+        json={"model": model, "messages": messages, "temperature": 0.3, "max_tokens": 1200},
         timeout=25,
     )
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"]
 
 
-def _gemini_complete(system: str, user_msg: str) -> str:
-    """Direct HTTP call to Gemini — no SDK required."""
+def _gemini_complete(system: str, user_msg: str, history: list[dict] | None = None) -> str:
+    """Direct HTTP call to Gemini with multi-turn conversation history support."""
     import requests as _req
     key = os.getenv("GEMINI_API_KEY", "").strip()
     if not key:
         raise ValueError("GEMINI_API_KEY not set")
     model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip()
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+
+    contents: list[dict] = []
+    if history:
+        for turn in history:
+            role = turn.get("role", "user")
+            gemini_role = "model" if role == "assistant" else "user"
+            contents.append({"role": gemini_role, "parts": [{"text": turn.get("content", "")}]})
+    contents.append({"role": "user", "parts": [{"text": user_msg}]})
+
     r = _req.post(
         url,
         json={
-            "contents": [{"parts": [{"text": f"{system}\n\n{user_msg}"}]}],
+            "system_instruction": {"parts": [{"text": system}]},
+            "contents": contents,
             "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1200},
         },
-        timeout=25,
+        timeout=30,
     )
     r.raise_for_status()
     return r.json()["candidates"][0]["content"]["parts"][0]["text"]
@@ -179,9 +186,9 @@ def _openai_compat_complete(system: str, user_msg: str) -> str:
     return r.json()["choices"][0]["message"]["content"]
 
 
-def _llm_complete(system: str, user_msg: str) -> tuple[str, str, int]:
+def _llm_complete(system: str, user_msg: str, history: list[dict] | None = None) -> tuple[str, str, int]:
     """Try LLM providers in order. Returns (reply, provider, latency_ms)."""
-    preferred = os.getenv("LLM_PROVIDER", "groq").lower()
+    preferred = os.getenv("LLM_PROVIDER", "gemini").lower()
 
     providers: list[tuple[str, callable]] = []
     if preferred == "groq":
@@ -195,7 +202,13 @@ def _llm_complete(system: str, user_msg: str) -> tuple[str, str, int]:
     for name, fn in providers:
         try:
             t0 = time.monotonic()
-            result = fn(system, user_msg)
+            # Gemini supports history; other providers get history injected into user_msg
+            if name == "gemini":
+                result = fn(system, user_msg, history)
+            elif history and name in ("groq", "openai"):
+                result = fn(system, user_msg, history)
+            else:
+                result = fn(system, user_msg)
             latency_ms = int((time.monotonic() - t0) * 1000)
             if result and result.strip():
                 return result.strip(), name, latency_ms
@@ -255,8 +268,11 @@ async def chat_message(body: ChatMessage):
     if context_parts:
         full_msg = f"Context (live market data):\n{'---'.join(context_parts)}\n\nUser question: {user_msg}"
 
+    # Trim history to last 10 turns to stay within token limits
+    trimmed_history = (body.history or [])[-10:] if body.history else None
+
     reply, provider, latency_ms = await loop.run_in_executor(
-        _executor, _llm_complete, SYSTEM_PROMPT, full_msg
+        _executor, _llm_complete, SYSTEM_PROMPT, full_msg, trimmed_history
     )
 
     if not sources:

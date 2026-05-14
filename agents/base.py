@@ -12,7 +12,7 @@ from pydantic import BaseModel
 T = TypeVar("T", bound=BaseModel)
 
 # Provider priority: first key with a value wins, then fallbacks in order
-_PROVIDER_ORDER = ["openai", "groq", "deepseek", "gemini", "qwen", "ollama"]
+_PROVIDER_ORDER = ["gemini", "groq", "openai", "deepseek", "qwen", "ollama"]
 
 
 class BaseLLMClient:
@@ -87,7 +87,7 @@ class BaseLLMClient:
             "openai":    os.getenv("OPENAI_MODEL",      "gpt-4o-mini"),
             "groq":      os.getenv("GROQ_MODEL",        "llama-3.3-70b-versatile"),
             "deepseek":  os.getenv("DEEPSEEK_MODEL",    "deepseek-chat"),
-            "gemini":    os.getenv("GEMINI_MODEL",      "gemini-2.0-flash-exp"),
+            "gemini":    os.getenv("GEMINI_MODEL",      "gemini-2.0-flash"),
             "qwen":      os.getenv("OPENROUTER_MODEL",  "qwen/qwen3-235b-a22b:free"),
             "ollama":    os.getenv("OLLAMA_MODEL",      "llama3.2"),
         }

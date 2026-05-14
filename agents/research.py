@@ -14,10 +14,13 @@ from data.storage.db import db
 from monitoring.audit import AuditLogger
 
 
-RESEARCH_TEMPLATE = """
-You are a quantitative researcher at a top-tier hedge fund focused on Indian equities.
+_RESEARCH_SYSTEM = (
+    "You are a quantitative researcher at a top-tier hedge fund focused on Indian equities. "
+    "Write precise, data-driven analysis. Use INR crore notation for flows. "
+    "Format responses as Markdown with clear section headers."
+)
 
-## Weekly Research Memo — {date}
+RESEARCH_TEMPLATE = """## Weekly Research Memo — {date}
 
 ### Input Data
 
@@ -40,9 +43,6 @@ Write a 400-600 word research memo covering:
 3. One concrete parameter tweak to improve the weakest strategy
 4. Recommended allocation adjustment (% change per strategy)
 5. Risks to monitor in the next week
-
-Keep language precise and quantitative. Use INR crore notation for flows.
-Format as Markdown with clear section headers.
 """
 
 
@@ -83,7 +83,7 @@ class ResearchAgent(BaseAgent):
         )
 
         try:
-            content = self.llm.complete(prompt)
+            content = self.llm.complete(system=_RESEARCH_SYSTEM, user=prompt)
         except Exception as e:
             content = self._fallback_memo(perf_df, regime_data, str(e))
 
