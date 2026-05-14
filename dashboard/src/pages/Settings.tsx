@@ -15,7 +15,6 @@ import {
   Copy,
   Check,
   Bot,
-  Sliders,
   RefreshCw as RefreshIcon,
   Save,
 } from "lucide-react";

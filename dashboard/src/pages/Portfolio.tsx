@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   DollarSign, TrendingDown, Layers, Activity, TrendingUp,
-  Plus, Trash2, LogOut, BarChart3, ArrowUpDown,
+  Plus, Trash2, LogOut, BarChart3,
   CalendarDays, BarChart2, Target, Flame,
   ChevronLeft, ChevronRight, Wifi, WifiOff,
 } from "lucide-react";
@@ -22,7 +22,6 @@ import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { AddPositionModal } from "@/components/ui/AddPositionModal";
 import { ExitPositionModal } from "@/components/ui/ExitPositionModal";
 import { OrderStatusBadge, SideBadge } from "@/components/ui/Badge";
-import { SimpleBarChart } from "@/components/charts/BarChart";
 import {
   usePortfolioSummary, usePositions, useSectorExposure, useEquityCurve,
   useOrders, useDrawdownHistory,
@@ -31,12 +30,12 @@ import {
   usePaperPositions, useDeletePaperPosition, useLivePositions,
   useDeleteLivePosition, usePnLCalendar, usePnLStats,
   usePaperTrades, useStrategyPnl,
-  type PaperPosition, type PaperTrade, type StrategyPnl,
+  type PaperPosition,
 } from "@/api/pnl-queries";
 import { formatCurrency, formatPct, pctColor, formatDateTime } from "@/lib/utils";
 import { useUIStore } from "@/store/ui";
 import { useLiveStore } from "@/store/live";
-import { CHART_COLORS, STRATEGY_LABELS } from "@/lib/constants";
+import { STRATEGY_LABELS } from "@/lib/constants";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type MainTab = "holdings" | "pnl" | "trades" | "live";
@@ -623,7 +622,7 @@ function TradesTab() {
       </div>
 
       {/* Strategy P&L breakdown */}
-      {strategyChartData.length > 0 && (
+      {(strategyStats ?? []).length > 0 && (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="card p-5">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-1)", fontFamily: "var(--font-body)" }}>STRATEGY P&L BREAKDOWN</span>
