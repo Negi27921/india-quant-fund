@@ -61,7 +61,7 @@ async def strategy_performance():
 
 @router.get("/signals")
 async def recent_signals(days: int = Query(5, ge=1, le=30)):
-    """Return signals derived from screener_cache (screener hits = BUY signals)."""
+    """Return signals from screener_cache; falls back to paper_trades entries when cache is empty."""
     try:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
         rows = sdb.select(
@@ -90,6 +90,33 @@ async def recent_signals(days: int = Query(5, ge=1, le=30)):
                     "approved": approved,
                     "rejection_reason": None if approved else f"confidence {conf}% < threshold",
                 })
+
+        # Fallback: derive signals from paper_trades when screener_cache is empty
+        if not signals:
+            cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
+            trades = sdb.select(
+                "paper_trades",
+                cols="ticker,strategy,entry_date,confidence,status",
+                order="-entry_date",
+                limit=100,
+            )
+            for t in trades:
+                entry_date = t.get("entry_date", "")
+                if entry_date and entry_date < cutoff_date:
+                    continue
+                conf = int(t.get("confidence") or 80)
+                approved = conf >= 80
+                status = t.get("status", "open").lower()
+                signals.append({
+                    "date": entry_date,
+                    "ticker": t.get("ticker", ""),
+                    "strategy": t.get("strategy", ""),
+                    "signal": round(conf / 100, 2),
+                    "approved": approved,
+                    "rejection_reason": None if approved else f"confidence {conf}% < threshold",
+                    "type": "BUY" if status == "open" else "CLOSED",
+                })
+
         signals.sort(key=lambda x: (x["date"], -x["signal"]), reverse=True)
         return signals[:150]
     except Exception:
