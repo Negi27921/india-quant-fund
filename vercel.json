@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "alias": ["luffy-labs.vercel.app"],
   "builds": [
     {
       "src": "dashboard/package.json",
