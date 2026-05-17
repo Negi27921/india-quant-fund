@@ -153,7 +153,7 @@ function StockRow({ r, strategy, index }: { r: ScreenerResult; strategy: Strateg
         {/* Conditions met */}
         <td style={{ padding: "10px 14px" }}>
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: "var(--green)", background: "rgba(6,214,160,0.1)", border: "1px solid rgba(6,214,160,0.25)", padding: "1px 7px", borderRadius: 99 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: "var(--green)", background: "rgba(39,174,96,0.1)", border: "1px solid rgba(39,174,96,0.25)", padding: "1px 7px", borderRadius: 99 }}>
               {r.matched_conditions.length}/{r.matched_conditions.length + r.failed_conditions.length} ✓
             </span>
           </div>
@@ -571,7 +571,7 @@ export function ScreenerPage() {
           <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
             {/* Legend */}
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <span style={{ fontSize: 9.5, fontWeight: 700, color: "#06D6A0", background: "rgba(6,214,160,0.12)", border: "1px solid rgba(6,214,160,0.3)", padding: "2px 8px", borderRadius: 99 }}>≥70% Strong</span>
+              <span style={{ fontSize: 9.5, fontWeight: 700, color: "#27AE60", background: "rgba(39,174,96,0.12)", border: "1px solid rgba(39,174,96,0.3)", padding: "2px 8px", borderRadius: 99 }}>≥70% Strong</span>
               <span style={{ fontSize: 9.5, fontWeight: 700, color: "#FFB017", background: "rgba(255,176,23,0.12)", border: "1px solid rgba(255,176,23,0.3)", padding: "2px 8px", borderRadius: 99 }}>45–69% Moderate</span>
             </div>
           </div>
@@ -581,7 +581,7 @@ export function ScreenerPage() {
         <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
           {[
             { label: "Total Results", value: String(data?.total ?? 0), color: "var(--accent)" },
-            { label: "Strong Setups", value: String(strong.length), color: "#06D6A0" },
+            { label: "Strong Setups", value: String(strong.length), color: "#27AE60" },
             { label: "Moderate", value: String(moderate.length), color: "#FFB017" },
             { label: "Strategy", value: meta.label, color: meta.color },
           ].map((stat, i) => (

@@ -1,18 +1,16 @@
 import { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
-// Password is read from build-time env so it never ships in plain source.
-// Set VITE_AUTH_PHRASE in Vercel environment variables.
-const ACCESS_PHRASE: string =
-  import.meta.env.VITE_AUTH_PHRASE || "One piece is real";
+// Password from build-time env — set VITE_AUTH_PHRASE in Vercel.
+const ACCESS_PHRASE: string = import.meta.env.VITE_AUTH_PHRASE || "One piece is real";
 
 export const AUTH_KEY  = "iqf_matrix_auth";
 export const LOCK_KEY  = "iqf_lock_until";
 export const FAIL_KEY  = "iqf_fail_count";
-const MAX_FAILS = 5;
-const LOCK_MS   = 15 * 60 * 1000;  // 15 minutes
-const SESSION_TTL_MS = 8 * 60 * 60 * 1000;  // 8 hours
+const MAX_FAILS       = 5;
+const LOCK_MS         = 15 * 60 * 1000;
+const SESSION_TTL_MS  = 8  * 60 * 60 * 1000;
 
-/** Returns true if there is a valid unexpired session in localStorage. */
 export function hasValidSession(): boolean {
   const raw = localStorage.getItem(AUTH_KEY);
   if (!raw) return false;
@@ -49,80 +47,85 @@ function clearFailures(): void {
   localStorage.removeItem(LOCK_KEY);
 }
 
-const MATRIX_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*+-=[]|ﾊﾐﾋｰｳｼﾅﾓﾆｻﾜｵﾘｱﾎﾃﾏｹﾒｴｶｷｾﾽｿﾁﾄﾍ01".split("");
-
-const GRANTED_LANGS = [
-  "ACCESS GRANTED",
-  "アクセス許可",
-  "ACCÈS ACCORDÉ",
-  "ZUGANG GEWÄHRT",
-  "ДОСТУП РАЗРЕШЁН",
-  "访问已授权",
-  "وصول مصرح",
-  "ACCESSO CONSENTITO",
-  "ACCESS GRANTED",
-];
-
-export function LoginPage({ onAuth }: { onAuth: () => void }) {
+/* ── Animated gradient background canvas ─────────────────────────────────── */
+function GradientCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animRef = useRef<number>(0);
-  const dropsRef = useRef<number[]>([]);
-  const speedRef = useRef<number>(1);
 
-  const [phrase, setPhrase] = useState("");
-  const [error, setError] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("// ACCESS DENIED — RETRY");
-  const [shake, setShake] = useState(false);
-  const [phase, setPhase] = useState<"idle" | "granted" | "fadeout">("idle");
-  const [grantedText, setGrantedText] = useState("ACCESS GRANTED");
-  const [locked, setLocked] = useState(isLockedOut);
-
-  // Matrix rain canvas
   useEffect(() => {
     const canvas = canvasRef.current!;
     const ctx = canvas.getContext("2d")!;
-    const FS = 13;
+    let raf: number;
+    let t = 0;
 
-    const init = () => {
-      canvas.width = window.innerWidth;
+    const resize = () => {
+      canvas.width  = window.innerWidth;
       canvas.height = window.innerHeight;
-      const cols = Math.floor(canvas.width / FS);
-      dropsRef.current = Array.from({ length: cols }, () => Math.random() * -80);
     };
-    init();
-    window.addEventListener("resize", init);
+    resize();
+    window.addEventListener("resize", resize);
+
+    /* Floating soft orbs */
+    const orbs = [
+      { x: 0.15, y: 0.30, r: 0.45, speed: 0.0004, phase: 0    },
+      { x: 0.80, y: 0.15, r: 0.38, speed: 0.0003, phase: 2.1  },
+      { x: 0.50, y: 0.75, r: 0.32, speed: 0.0005, phase: 4.2  },
+      { x: 0.90, y: 0.80, r: 0.28, speed: 0.0004, phase: 1.0  },
+    ];
 
     const draw = () => {
-      const { width: w, height: h } = canvas;
-      const speed = speedRef.current;
-      ctx.fillStyle = `rgba(0,0,0,${phase === "granted" ? 0.02 : 0.055})`;
+      t += 1;
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      /* Base gradient */
+      const base = ctx.createLinearGradient(0, 0, w, h);
+      base.addColorStop(0, "#F8F9FC");
+      base.addColorStop(1, "#EFF2F7");
+      ctx.fillStyle = base;
       ctx.fillRect(0, 0, w, h);
-      ctx.font = `${FS}px "JetBrains Mono", monospace`;
 
-      const drops = dropsRef.current;
-      for (let i = 0; i < drops.length; i++) {
-        const y = drops[i] * FS;
-        if (y < 0) { drops[i] += 0.4 * speed; continue; }
-        const char = MATRIX_CHARS[Math.floor(Math.random() * MATRIX_CHARS.length)];
-        const rnd = Math.random();
-        if (rnd > 0.995) ctx.fillStyle = "#ffffff";
-        else if (rnd > 0.93) ctx.fillStyle = phase === "granted" ? "#00ff41" : "#00e535";
-        else if (rnd > 0.7) ctx.fillStyle = "#00cc33";
-        else if (rnd > 0.4) ctx.fillStyle = "#009922";
-        else ctx.fillStyle = "#004411";
-        ctx.fillText(char, i * FS, y);
-        if (y > h && Math.random() > 0.975) drops[i] = 0;
-        drops[i] += (0.38 + Math.random() * 0.3) * speed;
+      /* Soft blue orbs */
+      for (const o of orbs) {
+        const cx = w * (o.x + Math.sin(t * o.speed + o.phase) * 0.08);
+        const cy = h * (o.y + Math.cos(t * o.speed + o.phase) * 0.07);
+        const r  = Math.min(w, h) * o.r;
+        const g  = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+        g.addColorStop(0, "rgba(50,121,249,0.07)");
+        g.addColorStop(1, "rgba(50,121,249,0)");
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, w, h);
       }
-      animRef.current = requestAnimationFrame(draw);
-    };
-    animRef.current = requestAnimationFrame(draw);
 
-    return () => {
-      cancelAnimationFrame(animRef.current);
-      window.removeEventListener("resize", init);
+      raf = requestAnimationFrame(draw);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    raf = requestAnimationFrame(draw);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", resize);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{ position: "absolute", inset: 0, display: "block" }}
+    />
+  );
+}
+
+/* ── Login page ─────────────────────────────────────────────────────────── */
+export function LoginPage({ onAuth }: { onAuth: () => void }) {
+  const [phrase, setPhrase]     = useState("");
+  const [error, setError]       = useState(false);
+  const [errorMsg, setErrorMsg] = useState("Incorrect passphrase. Try again.");
+  const [shake, setShake]       = useState(false);
+  const [granted, setGranted]   = useState(false);
+  const [locked, setLocked]     = useState(isLockedOut);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setTimeout(() => inputRef.current?.focus(), 300);
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -131,289 +134,269 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
     if (isLockedOut()) {
       setLocked(true);
       setError(true);
-      setErrorMsg("// TERMINAL LOCKED — TRY AGAIN IN 15 MIN");
+      setErrorMsg("Terminal locked — try again in 15 minutes.");
       setPhrase("");
       return;
     }
 
     if (phrase.trim().toLowerCase() === ACCESS_PHRASE.toLowerCase()) {
       clearFailures();
-      setPhase("granted");
-      speedRef.current = 3;
-
-      let idx = 0;
-      const interval = setInterval(() => {
-        idx++;
-        if (idx < GRANTED_LANGS.length) {
-          setGrantedText(GRANTED_LANGS[idx]);
-        } else {
-          clearInterval(interval);
-        }
-      }, 160);
-
+      setGranted(true);
       setTimeout(() => {
-        setPhase("fadeout");
-        speedRef.current = 0.1;
-        setTimeout(() => {
-          localStorage.setItem(AUTH_KEY, JSON.stringify({ ts: Date.now() }));
-          onAuth();
-        }, 700);
-      }, GRANTED_LANGS.length * 160 + 400);
+        localStorage.setItem(AUTH_KEY, JSON.stringify({ ts: Date.now() }));
+        onAuth();
+      }, 800);
     } else {
       const result = recordFailure();
       setError(true);
       setShake(true);
       if (result.locked) {
         setLocked(true);
-        setErrorMsg("// TERMINAL LOCKED — TOO MANY FAILURES");
+        setErrorMsg("Terminal locked — too many failed attempts.");
       } else {
-        setErrorMsg(`// ACCESS DENIED — ${result.remaining} ATTEMPT${result.remaining !== 1 ? "S" : ""} LEFT`);
+        setErrorMsg(`Incorrect passphrase — ${result.remaining} attempt${result.remaining !== 1 ? "s" : ""} left.`);
       }
       setTimeout(() => setShake(false), 400);
-      setTimeout(() => { setError(false); setErrorMsg("// ACCESS DENIED — RETRY"); }, 2200);
+      setTimeout(() => { setError(false); setErrorMsg("Incorrect passphrase. Try again."); }, 3000);
       setPhrase("");
     }
   };
 
   return (
-    <div style={{ position: "relative", width: "100vw", height: "100vh", overflow: "hidden", background: "#000" }}>
-      <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, display: "block" }} />
+    <div style={{
+      position: "relative", width: "100vw", height: "100vh",
+      overflow: "hidden", background: "#F8F9FC",
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      <GradientCanvas />
 
-      {/* CRT scanlines */}
+      {/* Grid pattern overlay */}
       <div style={{
         position: "absolute", inset: 0, pointerEvents: "none",
-        backgroundImage: "repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.04) 2px,rgba(0,0,0,0.04) 4px)",
+        backgroundImage: `
+          linear-gradient(rgba(33,34,38,0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(33,34,38,0.03) 1px, transparent 1px)
+        `,
+        backgroundSize: "40px 40px",
       }} />
 
-      {/* Vignette */}
-      <div style={{
-        position: "absolute", inset: 0, pointerEvents: "none",
-        background: "radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.72) 100%)",
-      }} />
-
-      {/* ── ACCESS GRANTED overlay ── */}
-      {phase !== "idle" && (
-        <div style={{
-          position: "absolute", inset: 0,
-          display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column",
-          gap: 24,
-          opacity: phase === "fadeout" ? 0 : 1,
-          transition: "opacity 0.6s ease-in",
-          pointerEvents: "none",
-          zIndex: 10,
-        }}>
-          <div style={{
-            fontFamily: '"JetBrains Mono", monospace',
-            fontSize: 36,
-            fontWeight: 700,
-            color: "#00ff41",
-            textShadow: "0 0 30px #00ff41, 0 0 60px rgba(0,255,65,0.4)",
-            letterSpacing: "0.15em",
-            textAlign: "center",
-            animation: "matrixBlink 0.3s step-start 2",
-            minWidth: 500,
-          }}>
-            {grantedText}
-          </div>
-          <div style={{
-            fontFamily: '"JetBrains Mono", monospace',
-            fontSize: 12,
-            color: "#00aa28",
-            letterSpacing: "0.25em",
-            textTransform: "uppercase",
-          }}>
-            INITIALISING TERMINAL...
-          </div>
-          <div style={{
-            width: 300, height: 2,
-            background: "linear-gradient(90deg, transparent, #00ff41, transparent)",
-            animation: "matrixScan 0.4s linear infinite",
-          }} />
-        </div>
-      )}
-
-      {/* ── Login panel ── */}
-      <div style={{
-        position: "absolute", top: "50%", left: "50%",
-        transform: `translate(-50%, -50%) translateX(${shake ? "-8px" : "0"})`,
-        transition: shake ? "transform 50ms" : "transform 80ms ease-out",
-        width: 400,
-        opacity: phase !== "idle" ? 0 : 1,
-        transition2: "opacity 0.3s ease",
-      } as React.CSSProperties}>
-        <div style={{
-          background: "rgba(0,6,0,0.92)",
-          border: `1px solid ${error ? "#ff2244" : "rgba(0,255,65,0.6)"}`,
-          borderRadius: 2,
-          padding: "36px 32px 28px",
-          boxShadow: error
-            ? "0 0 60px rgba(255,34,68,0.12)"
-            : "0 0 80px rgba(0,255,65,0.1), inset 0 0 40px rgba(0,255,65,0.03)",
-          backdropFilter: "blur(10px)",
-          fontFamily: '"JetBrains Mono", monospace',
-          transition: "border-color 300ms, box-shadow 300ms, opacity 300ms",
-        }}>
-
-          {/* Top ruler */}
-          <div style={{
-            width: "100%", height: 1,
-            background: "linear-gradient(90deg, transparent, #00ff41 30%, #00ff41 70%, transparent)",
-            opacity: 0.4, marginBottom: 24,
-          }} />
-
+      {/* Login card */}
+      <motion.div
+        initial={{ opacity: 0, y: 24, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ type: "spring", stiffness: 300, damping: 28, delay: 0.1 }}
+        style={{
+          position: "relative", zIndex: 10,
+          width: "min(420px, calc(100vw - 40px))",
+        }}
+      >
+        <motion.div
+          animate={{ x: shake ? [-8, 8, -6, 6, -4, 4, 0] : 0 }}
+          transition={{ duration: 0.4 }}
+          style={{
+            background: "rgba(255,255,255,0.92)",
+            border: `1.5px solid ${error ? "rgba(231,76,60,0.3)" : "rgba(33,34,38,0.10)"}`,
+            borderRadius: 20,
+            padding: "36px 36px 28px",
+            boxShadow: error
+              ? "0 8px 40px rgba(231,76,60,0.10), 0 0 0 1px rgba(231,76,60,0.12)"
+              : "0 8px 40px rgba(33,34,38,0.10), 0 0 0 1px rgba(33,34,38,0.06)",
+            backdropFilter: "blur(24px)",
+            WebkitBackdropFilter: "blur(24px)",
+            transition: "border-color 300ms, box-shadow 300ms",
+          }}
+        >
           {/* Brand */}
-          <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{ textAlign: "center", marginBottom: 32 }}>
             <div style={{
-              fontSize: 28,
-              fontWeight: 900,
-              color: "#00ff41",
-              letterSpacing: "0.12em",
-              textShadow: "0 0 20px rgba(0,255,65,0.6), 0 0 40px rgba(0,255,65,0.2)",
-              lineHeight: 1.1,
+              width: 52, height: 52, borderRadius: 14,
+              background: "linear-gradient(135deg, #3279F9 0%, #5A9BFB 100%)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              margin: "0 auto 16px",
+              boxShadow: "0 8px 24px rgba(50,121,249,0.3)",
+              fontSize: 24,
+            }}>
+              ⚓
+            </div>
+            <div style={{
+              fontSize: 20,
+              fontFamily: '"DM Sans", "Google Sans", system-ui, sans-serif',
+              fontWeight: 700,
+              color: "#121317",
+              letterSpacing: "-0.01em",
+              lineHeight: 1.2,
               marginBottom: 4,
             }}>
-              ONE PIECE
+              One Piece Quant
             </div>
             <div style={{
-              fontSize: 12,
-              fontWeight: 600,
-              color: "#00cc33",
-              letterSpacing: "0.3em",
+              fontSize: 11,
+              fontFamily: '"DM Sans", system-ui, sans-serif',
+              fontWeight: 500,
+              color: "#818590",
+              letterSpacing: "0.06em",
               textTransform: "uppercase",
-              textShadow: "0 0 10px rgba(0,204,51,0.4)",
             }}>
-              QUANT TERMINAL
-            </div>
-
-            <div style={{
-              width: "60%", height: 1, margin: "16px auto 0",
-              background: "linear-gradient(90deg, transparent, rgba(0,255,65,0.4), transparent)",
-            }} />
-
-            <div style={{
-              color: "#004d19", fontSize: 9, marginTop: 12,
-              letterSpacing: "0.15em",
-            }}>
-              NSE · BSE · REAL-TIME MARKET INTELLIGENCE
+              NSE · BSE · AI Terminal
             </div>
           </div>
 
           {/* Form */}
           <form onSubmit={handleSubmit} autoComplete="off">
-            <div style={{ marginBottom: 18 }}>
-              <div style={{
-                display: "flex", alignItems: "center", gap: 6,
-                color: error ? "#ff2244" : "#00aa28",
-                fontSize: 9.5, letterSpacing: "0.08em", marginBottom: 8,
+            <div style={{ marginBottom: 16 }}>
+              <label style={{
+                display: "block", marginBottom: 6,
+                fontSize: 11, fontWeight: 600,
+                fontFamily: '"DM Sans", system-ui, sans-serif',
+                color: error ? "#E74C3C" : "#45474D",
+                letterSpacing: "0.04em",
+                transition: "color 200ms",
               }}>
-                <span style={{ opacity: 0.5 }}>&gt;</span>
-                <span>{error ? errorMsg : (locked ? "// TERMINAL LOCKED" : "// ENTER ACCESS PHRASE")}</span>
-                <span style={{ animation: "matrixBlink 1s step-start infinite", color: "#00ff41" }}>█</span>
-              </div>
+                {locked
+                  ? "Terminal locked"
+                  : error
+                    ? errorMsg
+                    : "Enter passphrase to continue"}
+              </label>
               <input
+                ref={inputRef}
                 type="password"
                 value={phrase}
-                disabled={locked}
+                disabled={locked || granted}
                 onChange={e => { setPhrase(e.target.value); if (error) setError(false); }}
-                placeholder="••••••••••••••••••••••••"
-                autoFocus
+                placeholder="••••••••••••••••"
                 autoComplete="new-password"
                 style={{
-                  width: "100%", boxSizing: "border-box",
-                  background: error ? "rgba(255,34,68,0.04)" : "rgba(0,255,65,0.03)",
-                  border: `1px solid ${error ? "rgba(255,34,68,0.6)" : "rgba(0,255,65,0.4)"}`,
-                  borderRadius: 1,
+                  width: "100%",
+                  background: error ? "rgba(231,76,60,0.04)" : "rgba(248,249,252,0.9)",
+                  border: `1.5px solid ${error ? "rgba(231,76,60,0.35)" : "rgba(33,34,38,0.16)"}`,
+                  borderRadius: 10,
                   padding: "12px 14px",
-                  color: error ? "#ff2244" : "#00ff41",
-                  fontFamily: '"JetBrains Mono", monospace',
                   fontSize: 16,
+                  fontFamily: '"JetBrains Mono", monospace',
+                  color: error ? "#E74C3C" : "#121317",
                   outline: "none",
-                  letterSpacing: "0.15em",
-                  caretColor: "#00ff41",
-                  transition: "all 250ms",
-                  boxShadow: error ? "0 0 16px rgba(255,34,68,0.12)" : "none",
+                  letterSpacing: "0.2em",
+                  transition: "all 200ms",
+                  boxSizing: "border-box",
+                  caretColor: "#3279F9",
                 }}
                 onFocus={e => {
                   if (!error) {
-                    e.target.style.borderColor = "#00ff41";
-                    e.target.style.boxShadow = "0 0 16px rgba(0,255,65,0.12)";
+                    e.target.style.borderColor = "rgba(50,121,249,0.5)";
+                    e.target.style.boxShadow = "0 0 0 3px rgba(50,121,249,0.08)";
                   }
                 }}
                 onBlur={e => {
                   if (!error) {
-                    e.target.style.borderColor = "rgba(0,255,65,0.4)";
+                    e.target.style.borderColor = "rgba(33,34,38,0.16)";
                     e.target.style.boxShadow = "none";
                   }
                 }}
               />
-              <div style={{
-                fontSize: 9, marginTop: 5, letterSpacing: "0.06em", minHeight: 14,
-                color: error ? "#ff2244" : "#003311",
-              }}>
-                {error ? "⚠ ACCESS DENIED — INVALID PHRASE. ATTEMPT LOGGED." : "CLASSIFIED SYSTEM — BIOMETRIC VERIFICATION ACTIVE"}
-              </div>
             </div>
 
             <button
               type="submit"
+              disabled={locked || granted || !phrase.trim()}
               style={{
                 width: "100%",
-                background: "transparent",
-                border: "1px solid rgba(0,255,65,0.6)",
-                borderRadius: 1,
+                background: locked || granted || !phrase.trim()
+                  ? "rgba(33,34,38,0.06)"
+                  : "#3279F9",
+                color: locked || granted || !phrase.trim() ? "#9E9EA6" : "#ffffff",
+                border: "none",
+                borderRadius: 9999,
                 padding: "12px 0",
-                color: "#00ff41",
-                fontFamily: '"JetBrains Mono", monospace',
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: "0.22em",
-                cursor: "pointer",
-                textTransform: "uppercase",
-                transition: "all 150ms",
-                textShadow: "0 0 8px rgba(0,255,65,0.4)",
+                fontSize: 13,
+                fontWeight: 600,
+                fontFamily: '"DM Sans", system-ui, sans-serif',
+                letterSpacing: "0.01em",
+                cursor: locked || !phrase.trim() ? "not-allowed" : "pointer",
+                transition: "all 200ms",
+                boxShadow: !locked && !granted && phrase.trim()
+                  ? "0 4px 16px rgba(50,121,249,0.28)"
+                  : "none",
               }}
               onMouseEnter={e => {
-                e.currentTarget.style.background = "rgba(0,255,65,0.07)";
-                e.currentTarget.style.boxShadow = "0 0 24px rgba(0,255,65,0.12)";
-                e.currentTarget.style.borderColor = "#00ff41";
+                if (!locked && !granted && phrase.trim()) {
+                  e.currentTarget.style.background = "#2060E0";
+                  e.currentTarget.style.transform = "translateY(-1px)";
+                  e.currentTarget.style.boxShadow = "0 6px 24px rgba(50,121,249,0.35)";
+                }
               }}
               onMouseLeave={e => {
-                e.currentTarget.style.background = "transparent";
-                e.currentTarget.style.boxShadow = "none";
-                e.currentTarget.style.borderColor = "rgba(0,255,65,0.6)";
+                if (!locked && !granted && phrase.trim()) {
+                  e.currentTarget.style.background = "#3279F9";
+                  e.currentTarget.style.transform = "translateY(0)";
+                  e.currentTarget.style.boxShadow = "0 4px 16px rgba(50,121,249,0.28)";
+                }
               }}
             >
-              [ AUTHENTICATE ]
+              {granted ? "Entering terminal…" : locked ? "Terminal locked" : "Access terminal"}
             </button>
           </form>
 
-          {/* Bottom ruler + footer */}
+          {/* Footer */}
           <div style={{
-            marginTop: 20, paddingTop: 14,
-            borderTop: "1px solid rgba(0,255,65,0.08)",
-            display: "flex", justifyContent: "space-between",
+            marginTop: 20, paddingTop: 16,
+            borderTop: "1px solid rgba(33,34,38,0.07)",
+            display: "flex", justifyContent: "center",
           }}>
-            <span style={{ fontSize: 8, color: "#003311", letterSpacing: "0.05em" }}>
-              UNAUTHORIZED ACCESS PROHIBITED
-            </span>
-            <span style={{ fontSize: 8, color: "#003311", letterSpacing: "0.05em" }}>
-              ALL ACTIVITY MONITORED
+            <span style={{
+              fontSize: 10,
+              fontFamily: '"DM Sans", system-ui, sans-serif',
+              color: "#9E9EA6",
+              letterSpacing: "0.03em",
+            }}>
+              Authorized access only · All activity logged
             </span>
           </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
-      <style>{`
-        @keyframes matrixBlink {
-          0%, 49% { opacity: 1; }
-          50%, 100% { opacity: 0; }
-        }
-        @keyframes matrixScan {
-          from { transform: scaleX(0) translateX(-50%); opacity: 0; }
-          50%  { transform: scaleX(1) translateX(0); opacity: 1; }
-          to   { transform: scaleX(0) translateX(50%); opacity: 0; }
-        }
-      `}</style>
+      {/* Access granted overlay */}
+      <AnimatePresence>
+        {granted && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: "absolute", inset: 0, zIndex: 20,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: "rgba(248,249,252,0.85)",
+              backdropFilter: "blur(12px)",
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 400, damping: 25 }}
+              style={{ textAlign: "center" }}
+            >
+              <div style={{
+                width: 64, height: 64, borderRadius: "50%",
+                background: "linear-gradient(135deg, #3279F9 0%, #27AE60 100%)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                margin: "0 auto 16px",
+                boxShadow: "0 8px 32px rgba(50,121,249,0.35)",
+                fontSize: 28,
+              }}>✓</div>
+              <div style={{
+                fontSize: 16, fontWeight: 700,
+                fontFamily: '"DM Sans", system-ui, sans-serif',
+                color: "#121317", letterSpacing: "-0.01em",
+              }}>
+                Access granted
+              </div>
+              <div style={{ fontSize: 11, color: "#818590", marginTop: 4 }}>
+                Initialising terminal…
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

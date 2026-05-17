@@ -94,13 +94,13 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
         fontFamily: "'JetBrains Mono', monospace",
       },
       grid: {
-        vertLines: { color: "rgba(250,93,41,0.06)", style: LineStyle.Dotted },
-        horzLines: { color: "rgba(250,93,41,0.06)", style: LineStyle.Dotted },
+        vertLines: { color: "rgba(50,121,249,0.06)", style: LineStyle.Dotted },
+        horzLines: { color: "rgba(50,121,249,0.06)", style: LineStyle.Dotted },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: "rgba(250,93,41,0.5)", labelBackgroundColor: "var(--surface)" },
-        horzLine: { color: "rgba(250,93,41,0.5)", labelBackgroundColor: "var(--surface)" },
+        vertLine: { color: "rgba(50,121,249,0.5)", labelBackgroundColor: "var(--surface)" },
+        horzLine: { color: "rgba(50,121,249,0.5)", labelBackgroundColor: "var(--surface)" },
       },
       rightPriceScale: {
         borderColor: "var(--border)",
@@ -122,18 +122,18 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
     });
 
     const candleSeries = chart.addCandlestickSeries({
-      upColor: "#06D6A0",
-      downColor: "#FF4757",
-      borderUpColor: "#06D6A0",
-      borderDownColor: "#FF4757",
-      wickUpColor: "#06D6A0",
-      wickDownColor: "#FF4757",
+      upColor: "#27AE60",
+      downColor: "#E74C3C",
+      borderUpColor: "#27AE60",
+      borderDownColor: "#E74C3C",
+      wickUpColor: "#27AE60",
+      wickDownColor: "#E74C3C",
     });
 
     const volSeries = chart.addHistogramSeries({
       priceFormat: { type: "volume" },
       priceScaleId: "volume",
-      color: "rgba(250,93,41,0.3)",
+      color: "rgba(50,121,249,0.3)",
     });
     chart.priceScale("volume").applyOptions({
       scaleMargins: { top: 0.8, bottom: 0 },
@@ -177,7 +177,7 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
     const volData: HistogramData[] = data.map(d => ({
       time: d.time as any,
       value: d.volume,
-      color: d.close >= d.open ? "rgba(6,214,160,0.35)" : "rgba(255,71,87,0.3)",
+      color: d.close >= d.open ? "rgba(39,174,96,0.35)" : "rgba(231,76,60,0.3)",
     }));
     candleSeriesRef.current.setData(candleData);
     volSeriesRef.current.setData(volData);
@@ -209,7 +209,7 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
             style={{
               width: "min(820px, 90vw)",
               background: "var(--surface)",
-              borderLeft: "1px solid rgba(250,93,41,0.15)",
+              borderLeft: "1px solid rgba(50,121,249,0.15)",
               boxShadow: "-24px 0 80px rgba(0,0,0,0.9)",
             }}
             initial={{ x: "100%" }}
@@ -234,9 +234,9 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
                       fontWeight: 700,
                       padding: "2px 8px",
                       borderRadius: 6,
-                      color: isUp ? "#06D6A0" : "#FF4757",
-                      background: isUp ? "rgba(6,214,160,0.1)" : "rgba(255,71,87,0.1)",
-                      border: `1px solid ${isUp ? "rgba(6,214,160,0.25)" : "rgba(255,71,87,0.25)"}`,
+                      color: isUp ? "#27AE60" : "#E74C3C",
+                      background: isUp ? "rgba(39,174,96,0.1)" : "rgba(231,76,60,0.1)",
+                      border: `1px solid ${isUp ? "rgba(39,174,96,0.25)" : "rgba(231,76,60,0.25)"}`,
                     }}
                   >
                     {isUp ? "▲" : "▼"} {Math.abs(changePct).toFixed(2)}%
@@ -263,14 +263,14 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
               )}
 
               <div className="flex items-center gap-1">
-                {loading && <RefreshCw style={{ width: 13, height: 13, color: "#FA5D29", animation: "spin 1s linear infinite" }} />}
+                {loading && <RefreshCw style={{ width: 13, height: 13, color: "#3279F9", animation: "spin 1s linear infinite" }} />}
                 <a
                   href={`https://www.tradingview.com/chart/?symbol=NSE%3A${cleanSymbol}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-1.5 rounded flex items-center gap-1 transition-colors"
                   style={{ fontSize: "9px", color: "var(--text-3)", letterSpacing: "0.08em", textDecoration: "none" }}
-                  onMouseEnter={e => (e.currentTarget.style.color = "#FA5D29")}
+                  onMouseEnter={e => (e.currentTarget.style.color = "#3279F9")}
                   onMouseLeave={e => (e.currentTarget.style.color = "var(--text-3)")}
                   title="Open in TradingView"
                 >
@@ -304,9 +304,9 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
                     fontWeight: tf.label === t.label ? 700 : 500,
                     padding: "4px 12px",
                     borderRadius: 6,
-                    background: tf.label === t.label ? "rgba(250,93,41,0.15)" : "transparent",
-                    color: tf.label === t.label ? "#FA5D29" : "var(--text-3)",
-                    border: `1px solid ${tf.label === t.label ? "rgba(250,93,41,0.35)" : "transparent"}`,
+                    background: tf.label === t.label ? "rgba(50,121,249,0.15)" : "transparent",
+                    color: tf.label === t.label ? "#3279F9" : "var(--text-3)",
+                    border: `1px solid ${tf.label === t.label ? "rgba(50,121,249,0.35)" : "transparent"}`,
                     cursor: "pointer",
                     transition: "all 150ms",
                   }}
@@ -325,7 +325,7 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
               {loading && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.85)" }}>
                   <div className="flex flex-col items-center gap-3">
-                    <RefreshCw style={{ width: 20, height: 20, color: "#FA5D29", animation: "spin 1s linear infinite" }} />
+                    <RefreshCw style={{ width: 20, height: 20, color: "#3279F9", animation: "spin 1s linear infinite" }} />
                     <span style={{ fontSize: "11px", color: "var(--text-3)", fontFamily: "Inter, sans-serif" }}>Loading chart data...</span>
                   </div>
                 </div>
@@ -350,10 +350,10 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
               >
                 {[
                   { label: "OPEN",  val: `₹${fmtPrice(last.open)}`,  color: "#A0A0BC" },
-                  { label: "HIGH",  val: `₹${fmtPrice(last.high)}`,  color: "#06D6A0" },
-                  { label: "LOW",   val: `₹${fmtPrice(last.low)}`,   color: "#FF4757" },
+                  { label: "HIGH",  val: `₹${fmtPrice(last.high)}`,  color: "#27AE60" },
+                  { label: "LOW",   val: `₹${fmtPrice(last.low)}`,   color: "#E74C3C" },
                   { label: "CLOSE", val: `₹${fmtPrice(last.close)}`, color: "#FFFFFF" },
-                  { label: "VOL",   val: fmtVol(last.volume),         color: "#FA5D29" },
+                  { label: "VOL",   val: fmtVol(last.volume),         color: "#3279F9" },
                 ].map(s => (
                   <div key={s.label} className="flex items-center gap-1.5">
                     <span style={{ fontSize: "9px", color: "var(--text-3)", letterSpacing: "0.1em", fontFamily: "Inter, sans-serif" }}>{s.label}</span>
@@ -363,10 +363,10 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
                 <div className="flex-1" />
                 <div className="flex items-center gap-1.5">
                   {changePct >= 0
-                    ? <TrendingUp style={{ width: 12, height: 12, color: "#06D6A0" }} />
-                    : <TrendingDown style={{ width: 12, height: 12, color: "#FF4757" }} />
+                    ? <TrendingUp style={{ width: 12, height: 12, color: "#27AE60" }} />
+                    : <TrendingDown style={{ width: 12, height: 12, color: "#E74C3C" }} />
                   }
-                  <span style={{ fontSize: "12px", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: changePct >= 0 ? "#06D6A0" : "#FF4757" }}>
+                  <span style={{ fontSize: "12px", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: changePct >= 0 ? "#27AE60" : "#E74C3C" }}>
                     {change >= 0 ? "+" : ""}{fmtPrice(change)} ({changePct >= 0 ? "+" : ""}{changePct.toFixed(2)}%)
                   </span>
                 </div>

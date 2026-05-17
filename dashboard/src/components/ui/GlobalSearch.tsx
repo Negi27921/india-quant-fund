@@ -99,11 +99,11 @@ export function GlobalSearch({ open, onClose, onSelect }: Props) {
   const showPopular = !query;
 
   const sectorColor: Record<string, string> = {
-    IT: "#FA5D29", Banking: "#06D6A0", Finance: "#F39C12",
-    FMCG: "#FBBF24", Healthcare: "#FF4757", Auto: "#FB923C",
+    IT: "#3279F9", Banking: "#27AE60", Finance: "#F39C12",
+    FMCG: "#FBBF24", Healthcare: "#E74C3C", Auto: "#FB923C",
     Energy: "#F97316", Metals: "#94A3B8", Materials: "#84CC16",
     Chemicals: "#2DD4BF", Industrials: "#60A5FA", Telecom: "#C084FC",
-    Consumer: "#FB7185", Defence: "#F59E0B", "Real Estate": "#FA5D29",
+    Consumer: "#FB7185", Defence: "#F59E0B", "Real Estate": "#3279F9",
   };
 
   return (
@@ -133,21 +133,21 @@ export function GlobalSearch({ open, onClose, onSelect }: Props) {
               className="overflow-hidden"
               style={{
                 background: "var(--surface)",
-                border: "1px solid rgba(250,93,41,0.2)",
+                border: "1px solid rgba(50,121,249,0.2)",
                 borderRadius: 12,
-                boxShadow: "0 0 0 1px rgba(250,93,41,0.08), 0 32px 80px rgba(0,0,0,0.2)",
+                boxShadow: "0 0 0 1px rgba(50,121,249,0.08), 0 32px 80px rgba(0,0,0,0.2)",
               }}
             >
               {/* Input */}
               <div className="flex items-center gap-3 px-4 py-3.5" style={{ borderBottom: "1px solid var(--border)" }}>
-                <Search style={{ width: 16, height: 16, color: "#FA5D29", flexShrink: 0 }} />
+                <Search style={{ width: 16, height: 16, color: "#3279F9", flexShrink: 0 }} />
                 <input
                   ref={inputRef}
                   value={query}
                   onChange={e => setQuery(e.target.value.toUpperCase())}
                   placeholder="Search stocks — RELIANCE, HDFC, Infosys..."
                   className="flex-1 bg-transparent outline-none font-mono"
-                  style={{ fontSize: "14px", color: "var(--text-1)", caretColor: "#FA5D29" }}
+                  style={{ fontSize: "14px", color: "var(--text-1)", caretColor: "#3279F9" }}
                 />
                 {query && (
                   <button onClick={() => setQuery("")} style={{ color: "var(--text-3)" }}
@@ -172,8 +172,8 @@ export function GlobalSearch({ open, onClose, onSelect }: Props) {
                         key={stock.symbol}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-all"
                         style={{
-                          background: i === activeIdx ? "rgba(250,93,41,0.08)" : "transparent",
-                          borderLeft: i === activeIdx ? "2px solid #FA5D29" : "2px solid transparent",
+                          background: i === activeIdx ? "rgba(50,121,249,0.08)" : "transparent",
+                          borderLeft: i === activeIdx ? "2px solid #3279F9" : "2px solid transparent",
                         }}
                         onMouseEnter={() => setActiveIdx(i)}
                         onClick={() => handleSelect(stock)}
@@ -184,8 +184,8 @@ export function GlobalSearch({ open, onClose, onSelect }: Props) {
                         <div
                           className="flex items-center justify-center w-8 h-8 rounded-lg shrink-0 font-mono font-bold"
                           style={{
-                            background: `${sectorColor[stock.sector] ?? "#FA5D29"}15`,
-                            color: sectorColor[stock.sector] ?? "#FA5D29",
+                            background: `${sectorColor[stock.sector] ?? "#3279F9"}15`,
+                            color: sectorColor[stock.sector] ?? "#3279F9",
                             fontSize: "9px",
                             letterSpacing: "0.05em",
                           }}
@@ -199,9 +199,9 @@ export function GlobalSearch({ open, onClose, onSelect }: Props) {
                             </span>
                             <span
                               className="px-1.5 py-0.5 rounded"
-                              style={{ fontSize: "8px", color: sectorColor[stock.sector] ?? "#FA5D29",
-                                background: `${sectorColor[stock.sector] ?? "#FA5D29"}15`,
-                                border: `1px solid ${sectorColor[stock.sector] ?? "#FA5D29"}30`,
+                              style={{ fontSize: "8px", color: sectorColor[stock.sector] ?? "#3279F9",
+                                background: `${sectorColor[stock.sector] ?? "#3279F9"}15`,
+                                border: `1px solid ${sectorColor[stock.sector] ?? "#3279F9"}30`,
                                 letterSpacing: "0.08em", fontWeight: 700 }}
                             >
                               {stock.sector}
@@ -239,9 +239,9 @@ export function GlobalSearch({ open, onClose, onSelect }: Props) {
                               key={sym}
                               onClick={() => handleSelectSymbol(sym)}
                               className="font-mono font-semibold px-2.5 py-1 rounded-lg transition-all"
-                              style={{ fontSize: "11px", background: "rgba(250,93,41,0.6)", color: "var(--text-1)",
+                              style={{ fontSize: "11px", background: "rgba(50,121,249,0.6)", color: "var(--text-1)",
                                 border: "1px solid var(--border)" }}
-                              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(250,93,41,0.3)"; e.currentTarget.style.color = "#FA5D29"; }}
+                              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(50,121,249,0.3)"; e.currentTarget.style.color = "#3279F9"; }}
                               onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-1)"; }}
                             >
                               {sym}
@@ -262,10 +262,10 @@ export function GlobalSearch({ open, onClose, onSelect }: Props) {
                             key={sym}
                             onClick={() => handleSelectSymbol(sym)}
                             className="font-mono font-semibold px-2.5 py-1 rounded-lg transition-all"
-                            style={{ fontSize: "11px", background: "rgba(250,93,41,0.06)", color: "#FA5D29",
-                              border: "1px solid rgba(250,93,41,0.15)" }}
-                            onMouseEnter={e => { e.currentTarget.style.background = "rgba(250,93,41,0.12)"; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = "rgba(250,93,41,0.06)"; }}
+                            style={{ fontSize: "11px", background: "rgba(50,121,249,0.06)", color: "#3279F9",
+                              border: "1px solid rgba(50,121,249,0.15)" }}
+                            onMouseEnter={e => { e.currentTarget.style.background = "rgba(50,121,249,0.12)"; }}
+                            onMouseLeave={e => { e.currentTarget.style.background = "rgba(50,121,249,0.06)"; }}
                           >
                             {sym}
                           </button>

@@ -120,11 +120,11 @@ export function AddPositionModal({ open, onClose, mode = "paper" }: Props) {
           >
             <div style={{
               background: "var(--surface)",
-              border: `1px solid ${isLive ? "rgba(6,214,160,0.25)" : "rgba(250,93,41,0.25)"}`,
+              border: `1px solid ${isLive ? "rgba(39,174,96,0.25)" : "rgba(50,121,249,0.25)"}`,
               borderRadius: 12,
               boxShadow: isLive
-                ? "0 0 60px rgba(6,214,160,0.1), 0 24px 80px rgba(0,0,0,0.2)"
-                : "0 0 60px rgba(250,93,41,0.1), 0 24px 80px rgba(0,0,0,0.2)",
+                ? "0 0 60px rgba(39,174,96,0.1), 0 24px 80px rgba(0,0,0,0.2)"
+                : "0 0 60px rgba(50,121,249,0.1), 0 24px 80px rgba(0,0,0,0.2)",
               overflow: "hidden",
             }}>
               {/* Header */}
@@ -135,12 +135,12 @@ export function AddPositionModal({ open, onClose, mode = "paper" }: Props) {
                 background: "var(--surface-2)",
               }}>
                 {isLive
-                  ? <Zap style={{ width: 13, height: 13, color: "#06D6A0" }} />
-                  : <TrendingUp style={{ width: 13, height: 13, color: "#FA5D29" }} />
+                  ? <Zap style={{ width: 13, height: 13, color: "#27AE60" }} />
+                  : <TrendingUp style={{ width: 13, height: 13, color: "#3279F9" }} />
                 }
                 <span style={{
                   fontSize: 10, fontWeight: 700, letterSpacing: "0.14em",
-                  color: isLive ? "#06D6A0" : "#FA5D29",
+                  color: isLive ? "#27AE60" : "#3279F9",
                   fontFamily: "Space Grotesk, sans-serif",
                 }}>
                   {isLive ? "ADD LIVE POSITION" : "ADD PAPER POSITION"}
@@ -179,7 +179,7 @@ export function AddPositionModal({ open, onClose, mode = "paper" }: Props) {
                           exit={{ opacity: 0 }}
                           style={{
                             position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 60,
-                            background: "var(--surface)", border: "1px solid rgba(250,93,41,0.2)",
+                            background: "var(--surface)", border: "1px solid rgba(50,121,249,0.2)",
                             borderRadius: 8, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.9)",
                           }}
                         >
@@ -191,13 +191,13 @@ export function AddPositionModal({ open, onClose, mode = "paper" }: Props) {
                                 padding: "9px 12px", background: "transparent", border: "none",
                                 borderBottom: "1px solid var(--border)", cursor: "pointer", textAlign: "left",
                               }}
-                              onMouseEnter={e => (e.currentTarget.style.background = "rgba(250,93,41,0.07)")}
+                              onMouseEnter={e => (e.currentTarget.style.background = "rgba(50,121,249,0.07)")}
                               onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                               onMouseDown={ev => { ev.preventDefault(); selectStock(s); }}
                             >
-                              <span style={{ fontFamily: "JetBrains Mono, monospace", fontWeight: 700, fontSize: 11, color: "#FA5D29", minWidth: 90 }}>{s.symbol}</span>
+                              <span style={{ fontFamily: "JetBrains Mono, monospace", fontWeight: 700, fontSize: 11, color: "#3279F9", minWidth: 90 }}>{s.symbol}</span>
                               <span style={{ fontSize: 11, color: "var(--text-3)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
-                              <span style={{ fontSize: 9, color: "var(--text-3)", background: "rgba(250,93,41,0.6)", border: "1px solid var(--border)", borderRadius: 10, padding: "1px 7px", whiteSpace: "nowrap" }}>{s.sector}</span>
+                              <span style={{ fontSize: 9, color: "var(--text-3)", background: "rgba(50,121,249,0.6)", border: "1px solid var(--border)", borderRadius: 10, padding: "1px 7px", whiteSpace: "nowrap" }}>{s.sector}</span>
                             </button>
                           ))}
                         </motion.div>
@@ -206,9 +206,9 @@ export function AddPositionModal({ open, onClose, mode = "paper" }: Props) {
                   </div>
                   {selectedStock && (
                     <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#06D6A0", display: "inline-block" }} />
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#27AE60", display: "inline-block" }} />
                       <span style={{ fontSize: 11, color: "var(--text-3)" }}>{selectedStock.name}</span>
-                      <span style={{ fontSize: 9, background: "rgba(250,93,41,0.08)", border: "1px solid rgba(250,93,41,0.15)", borderRadius: 10, padding: "1px 7px", color: "#FA5D29" }}>{selectedStock.sector}</span>
+                      <span style={{ fontSize: 9, background: "rgba(50,121,249,0.08)", border: "1px solid rgba(50,121,249,0.15)", borderRadius: 10, padding: "1px 7px", color: "#3279F9" }}>{selectedStock.sector}</span>
                     </div>
                   )}
                 </div>
@@ -219,14 +219,14 @@ export function AddPositionModal({ open, onClose, mode = "paper" }: Props) {
                     <label style={{ fontSize: 10, fontWeight: 600, color: "var(--text-3)", letterSpacing: "0.1em", display: "block", marginBottom: 6, fontFamily: "Space Grotesk, sans-serif" }}>QUANTITY</label>
                     <input type="number" min="1" value={quantity} onChange={e => setQuantity(e.target.value)}
                       placeholder="e.g. 10" style={FIELD}
-                      onFocus={e => (e.currentTarget.style.borderColor = "#FA5D29")}
+                      onFocus={e => (e.currentTarget.style.borderColor = "#3279F9")}
                       onBlur={e => (e.currentTarget.style.borderColor = "var(--border)")} />
                   </div>
                   <div>
                     <label style={{ fontSize: 10, fontWeight: 600, color: "var(--text-3)", letterSpacing: "0.1em", display: "block", marginBottom: 6, fontFamily: "Space Grotesk, sans-serif" }}>BUY PRICE (₹)</label>
                     <input type="number" min="0.01" step="0.01" value={buyPrice} onChange={e => setBuyPrice(e.target.value)}
                       placeholder="e.g. 2850.00" style={FIELD}
-                      onFocus={e => (e.currentTarget.style.borderColor = "#FA5D29")}
+                      onFocus={e => (e.currentTarget.style.borderColor = "#3279F9")}
                       onBlur={e => (e.currentTarget.style.borderColor = "var(--border)")} />
                   </div>
                 </div>
@@ -237,14 +237,14 @@ export function AddPositionModal({ open, onClose, mode = "paper" }: Props) {
                     <label style={{ fontSize: 10, fontWeight: 600, color: "var(--text-3)", letterSpacing: "0.1em", display: "block", marginBottom: 6, fontFamily: "Space Grotesk, sans-serif" }}>BUY DATE</label>
                     <input type="date" value={buyDate} max={new Date().toISOString().slice(0, 10)}
                       onChange={e => setBuyDate(e.target.value)} style={{ ...FIELD, colorScheme: "dark" }}
-                      onFocus={e => (e.currentTarget.style.borderColor = "#FA5D29")}
+                      onFocus={e => (e.currentTarget.style.borderColor = "#3279F9")}
                       onBlur={e => (e.currentTarget.style.borderColor = "var(--border)")} />
                   </div>
                   <div>
                     <label style={{ fontSize: 10, fontWeight: 600, color: "var(--text-3)", letterSpacing: "0.1em", display: "block", marginBottom: 6, fontFamily: "Space Grotesk, sans-serif" }}>NOTES</label>
                     <input value={notes} onChange={e => setNotes(e.target.value)}
                       placeholder="Target, SL, thesis..." style={FIELD}
-                      onFocus={e => (e.currentTarget.style.borderColor = "#FA5D29")}
+                      onFocus={e => (e.currentTarget.style.borderColor = "#3279F9")}
                       onBlur={e => (e.currentTarget.style.borderColor = "var(--border)")} />
                   </div>
                 </div>
@@ -256,17 +256,17 @@ export function AddPositionModal({ open, onClose, mode = "paper" }: Props) {
                     style={{
                       display: "flex", alignItems: "center", justifyContent: "space-between",
                       padding: "10px 14px", borderRadius: 8,
-                      background: "rgba(250,93,41,0.05)", border: "1px solid rgba(250,93,41,0.15)",
+                      background: "rgba(50,121,249,0.05)", border: "1px solid rgba(50,121,249,0.15)",
                     }}
                   >
                     <span style={{ fontSize: 10, color: "var(--text-3)", letterSpacing: "0.1em", fontFamily: "Space Grotesk, sans-serif" }}>TOTAL CAPITAL DEPLOYED</span>
-                    <span style={{ fontFamily: "JetBrains Mono, monospace", fontWeight: 700, fontSize: 14, color: "#FA5D29" }}>₹{totalCost}</span>
+                    <span style={{ fontFamily: "JetBrains Mono, monospace", fontWeight: 700, fontSize: 14, color: "#3279F9" }}>₹{totalCost}</span>
                   </motion.div>
                 )}
 
                 {/* Error */}
                 {error && (
-                  <div style={{ fontSize: 11, color: "#FF4757", background: "rgba(255,71,87,0.08)", border: "1px solid rgba(255,71,87,0.2)", borderRadius: 6, padding: "8px 12px" }}>
+                  <div style={{ fontSize: 11, color: "#E74C3C", background: "rgba(231,76,60,0.08)", border: "1px solid rgba(231,76,60,0.2)", borderRadius: 6, padding: "8px 12px" }}>
                     {error}
                   </div>
                 )}
@@ -291,10 +291,10 @@ export function AddPositionModal({ open, onClose, mode = "paper" }: Props) {
                     style={{
                       flex: 2, padding: "9px 0", borderRadius: 8, fontSize: 12,
                       background: isLive
-                        ? "linear-gradient(135deg, rgba(6,214,160,0.2), rgba(6,214,160,0.05))"
-                        : "linear-gradient(135deg, rgba(250,93,41,0.2), rgba(250,93,41,0.05))",
-                      border: isLive ? "1px solid rgba(6,214,160,0.4)" : "1px solid rgba(250,93,41,0.4)",
-                      color: isLive ? "#06D6A0" : "#FA5D29",
+                        ? "linear-gradient(135deg, rgba(39,174,96,0.2), rgba(39,174,96,0.05))"
+                        : "linear-gradient(135deg, rgba(50,121,249,0.2), rgba(50,121,249,0.05))",
+                      border: isLive ? "1px solid rgba(39,174,96,0.4)" : "1px solid rgba(50,121,249,0.4)",
+                      color: isLive ? "#27AE60" : "#3279F9",
                       cursor: addMutation.isPending ? "not-allowed" : "pointer",
                       fontFamily: "Space Grotesk, sans-serif", fontWeight: 700,
                       display: "flex", alignItems: "center", justifyContent: "center", gap: 6,

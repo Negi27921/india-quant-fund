@@ -1,7 +1,8 @@
 # Hide pyproject.toml so Vercel uses requirements.txt instead
 # (pyproject.toml has broker deps like NorenRestApiPy that aren't on PyPI for Python 3.12)
 pyproject.toml
-dashboard/
+dashboard/node_modules/
+dashboard/.vite/
 .github/
 tests/
 scripts/

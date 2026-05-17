@@ -101,7 +101,7 @@ export function ExitPositionModal({ open, position, mode, onClose }: Props) {
             {/* Header */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <LogOut size={18} color="#FA5D29" />
+                <LogOut size={18} color="#3279F9" />
                 <span style={{ fontSize: 16, fontWeight: 600, color: "var(--text-1)" }}>
                   Exit Position
                 </span>
@@ -111,8 +111,8 @@ export function ExitPositionModal({ open, position, mode, onClose }: Props) {
                     fontWeight: 600,
                     padding: "2px 8px",
                     borderRadius: 20,
-                    backgroundColor: mode === "paper" ? "rgba(250,93,41,0.12)" : "rgba(6,214,160,0.12)",
-                    color: mode === "paper" ? "#FA5D29" : "#06D6A0",
+                    backgroundColor: mode === "paper" ? "rgba(50,121,249,0.12)" : "rgba(39,174,96,0.12)",
+                    color: mode === "paper" ? "#3279F9" : "#27AE60",
                     textTransform: "uppercase",
                     letterSpacing: "0.06em",
                   }}
@@ -163,7 +163,7 @@ export function ExitPositionModal({ open, position, mode, onClose }: Props) {
                       alignItems: "center",
                       gap: 5,
                       justifyContent: "flex-end",
-                      color: pnlPositive ? "#06D6A0" : "#FF4757",
+                      color: pnlPositive ? "#27AE60" : "#E74C3C",
                       fontWeight: 700,
                       fontSize: 15,
                     }}
@@ -172,7 +172,7 @@ export function ExitPositionModal({ open, position, mode, onClose }: Props) {
                     {pnlPositive ? "+" : ""}
                     {fmtCurrency(position.unrealized_pnl)}
                   </div>
-                  <div style={{ fontSize: 12, color: pnlPositive ? "#06D6A0" : "#FF4757", marginTop: 2 }}>
+                  <div style={{ fontSize: 12, color: pnlPositive ? "#27AE60" : "#E74C3C", marginTop: 2 }}>
                     ({pnlPositive ? "+" : ""}{fmt(position.pnl_pct)}%)
                   </div>
                 </div>
@@ -249,12 +249,12 @@ export function ExitPositionModal({ open, position, mode, onClose }: Props) {
             {exitMutation.isError && (
               <div
                 style={{
-                  backgroundColor: "rgba(255,71,87,0.1)",
-                  border: "1px solid rgba(255,71,87,0.25)",
+                  backgroundColor: "rgba(231,76,60,0.1)",
+                  border: "1px solid rgba(231,76,60,0.25)",
                   borderRadius: 8,
                   padding: "10px 14px",
                   fontSize: 13,
-                  color: "#FF4757",
+                  color: "#E74C3C",
                   marginBottom: 16,
                 }}
               >
@@ -292,13 +292,13 @@ export function ExitPositionModal({ open, position, mode, onClose }: Props) {
                   flex: 1,
                   padding: "11px 0",
                   borderRadius: 8,
-                  border: "1px solid #FA5D29",
+                  border: "1px solid #3279F9",
                   cursor:
                     exitMutation.isPending || quantity <= 0 || quantity >= position.quantity
                       ? "not-allowed"
                       : "pointer",
                   backgroundColor: "transparent",
-                  color: "#FA5D29",
+                  color: "#3279F9",
                   fontWeight: 600,
                   fontSize: 14,
                   opacity:

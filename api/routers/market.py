@@ -50,7 +50,7 @@ def _cached(key: str, ttl: int = 15):
 
 
 def _run(fn, *args, **kwargs):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return loop.run_in_executor(_executor, lambda: fn(*args, **kwargs))
 
 
@@ -334,7 +334,7 @@ NSE_INDEX_SYMBOL_MAP = {
 @router.get("/indices")
 @_cached("indices", ttl=10)
 async def get_indices():
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     # NSE official: real-time, cap at 3s
     nse_data: dict[str, dict] = {}
@@ -386,7 +386,7 @@ async def get_history(
 @router.get("/movers")
 @_cached("movers", ttl=60)
 async def get_movers(limit: int = Query(8, le=20)):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     quotes: list[dict] = []
 
     # NSE official: real-time, instant when available
@@ -405,7 +405,7 @@ async def get_movers(limit: int = Query(8, le=20)):
         try:
             quotes = await asyncio.wait_for(
                 loop.run_in_executor(_executor, _batch_download, NIFTY50),
-                timeout=9.0,
+                timeout=5.0,
             )
         except Exception:
             quotes = []
@@ -495,7 +495,7 @@ def _batch_download_sectors() -> list[dict]:
 @router.get("/sectors")
 @_cached("sectors", ttl=60)
 async def get_sectors():
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     # NSE official: real-time, cap at 3s
     if _NSE_AVAILABLE:
@@ -518,7 +518,7 @@ async def get_sectors():
     try:
         result = await asyncio.wait_for(
             loop.run_in_executor(_executor, _batch_download_sectors),
-            timeout=9.0,
+            timeout=5.0,
         )
         return result
     except Exception:
@@ -560,7 +560,7 @@ async def get_quote(
     tickers: str = Query(..., description="Comma-separated, e.g. RELIANCE.NS,TCS.NS"),
 ):
     ticker_list = [t.strip() for t in tickers.split(",")][:15]
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     results = []
     for ticker in ticker_list:
         # Try NSE official first
@@ -909,7 +909,7 @@ async def search_stocks(
     limit: int = Query(12, le=30),
 ):
     """Smart stock search — tries NSE autocomplete first, falls back to static list."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     # Try NSE official autocomplete
     if _NSE_AVAILABLE and len(q) >= 2:
@@ -954,7 +954,7 @@ async def search_stocks(
 @_cached("watchlist", ttl=20)
 async def get_watchlist():
     """Live quotes for the default watchlist of 20 key NSE stocks."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     quotes: list[dict] = []
 
     if _NSE_AVAILABLE:
@@ -1017,7 +1017,7 @@ async def get_fii_dii():
         pass
 
     # Then try NSE API
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     if _NSE_AVAILABLE:
         try:
             def _fetch_fii_dii():
@@ -1134,7 +1134,7 @@ async def get_fii_sectors():
 @_cached("filings", ttl=120)
 async def get_filings(limit: int = Query(20, le=50)):
     """Recent BSE corporate filings — live from BSE API with fallback."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     try:
         def _fetch_bse_filings():
@@ -1144,7 +1144,7 @@ async def get_filings(limit: int = Query(20, le=50)):
                 "User-Agent": "Mozilla/5.0",
                 "Referer": "https://www.bseindia.com/",
             })
-            with urllib.request.urlopen(req, timeout=8) as r:
+            with urllib.request.urlopen(req, timeout=4) as r:
                 data = _json.loads(r.read())
             items = data.get("Table", [])[:limit]
             results = []
@@ -1161,7 +1161,10 @@ async def get_filings(limit: int = Query(20, le=50)):
                     "has_pdf": bool(item.get("ATTACHMENTNAME", "")),
                 })
             return results
-        result = await loop.run_in_executor(_executor, _fetch_bse_filings)
+        result = await asyncio.wait_for(
+            loop.run_in_executor(_executor, _fetch_bse_filings),
+            timeout=5.0,
+        )
         if result:
             return result
     except Exception:
@@ -1189,7 +1192,7 @@ async def get_filings(limit: int = Query(20, le=50)):
 @_cached("filing_detail", ttl=300)
 async def get_stock_filings(scrip_code: str, limit: int = Query(10, le=30)):
     """Get recent filings for a specific BSE scrip code."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         def _fetch():
             import urllib.request, json as _json
@@ -1207,7 +1210,7 @@ async def get_stock_filings(scrip_code: str, limit: int = Query(10, le=30)):
 @_cached("corp_actions", ttl=600)
 async def get_corporate_actions(symbol: str = Query("", description="NSE symbol to filter")):
     """Corporate actions calendar — dividends, splits, bonuses, rights."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     if _NSE_AVAILABLE and not symbol:
         try:
@@ -1253,7 +1256,7 @@ async def get_corporate_actions(symbol: str = Query("", description="NSE symbol 
 @_cached("adv_dec", ttl=60)
 async def get_advances_declines():
     """Market breadth — total advances, declines, unchanged."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     if _NSE_AVAILABLE:
         try:
             def _fetch():
@@ -1280,7 +1283,7 @@ async def get_advances_declines():
 @_cached("results_cal", ttl=3600)
 async def get_results_calendar():
     """Upcoming quarterly results calendar from NSE."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     if _NSE_AVAILABLE:
         try:
             def _fetch():

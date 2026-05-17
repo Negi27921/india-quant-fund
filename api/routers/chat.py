@@ -226,7 +226,7 @@ def _llm_complete(system: str, user_msg: str, history: list[dict] | None = None)
 
 @router.post("/message", response_model=ChatResponse, dependencies=[Depends(rate_limit_chat)])
 async def chat_message(body: ChatMessage):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     symbol = body.symbol or ""
     user_msg = body.message.strip()
@@ -249,12 +249,12 @@ async def chat_message(body: ChatMessage):
     context_parts: list[str] = []
     sources: list[str] = []
 
-    # yfinance capped at 2s — skip if slow to stay within Vercel's 10s limit
+    # yfinance capped at 1s — skip quickly to preserve budget for LLM within Vercel's 10s limit
     if symbol:
         try:
             stock_context = await asyncio.wait_for(
                 loop.run_in_executor(_executor, _get_stock_context, symbol),
-                timeout=2.0,
+                timeout=1.0,
             )
             if stock_context and "unavailable" not in stock_context:
                 context_parts.append(stock_context)
@@ -270,19 +270,19 @@ async def chat_message(body: ChatMessage):
     if context_parts:
         full_msg = f"Context (live market data):\n{'---'.join(context_parts)}\n\nUser question: {user_msg}"
 
-    # Trim history to last 6 turns to reduce token count and latency
-    trimmed_history = (body.history or [])[-6:] if body.history else None
+    # Trim history to last 4 turns to reduce token count and latency
+    trimmed_history = (body.history or [])[-4:] if body.history else None
 
-    # LLM capped at 8s to guarantee response before Vercel's 10s function limit
+    # LLM capped at 6s — leaves ~4s headroom for Vercel cold start within the 10s function limit
     try:
         reply, provider, latency_ms = await asyncio.wait_for(
             loop.run_in_executor(_executor, _llm_complete, SYSTEM_PROMPT, full_msg, trimmed_history),
-            timeout=8.0,
+            timeout=6.0,
         )
     except asyncio.TimeoutError:
         reply = "The AI is taking longer than usual. Please try again."
         provider = "timeout"
-        latency_ms = 8000
+        latency_ms = 6000
 
     if not sources:
         sources = ["IQF Market Intelligence"]

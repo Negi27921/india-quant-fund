@@ -14,51 +14,47 @@ export function MatrixRain() {
       canvas.height = window.innerHeight;
     };
     setSize();
+    window.addEventListener("resize", setSize);
 
-    const fontSize = 12;
-    const chars = "0123456789₹%+-NIFTYBSESENSEXRELIANCETCSHDFCINFOSYSICICIAXIS";
-    let cols = Math.floor(canvas.width / fontSize);
-    let drops: number[] = Array.from({ length: cols }, () => Math.random() * -80);
-
-    const onResize = () => {
-      setSize();
-      cols = Math.floor(canvas.width / fontSize);
-      drops = Array.from({ length: cols }, () => Math.random() * -80);
-    };
-    window.addEventListener("resize", onResize);
-
-    let frame = 0;
+    let t = 0;
     let raf: number;
 
-    const draw = () => {
-      frame++;
-      if (frame % 3 === 0) {
-        ctx.fillStyle = "rgba(9,9,15,0.08)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.font = `${fontSize}px "JetBrains Mono", monospace`;
+    const orbs = [
+      { x: 0.12, y: 0.25, r: 0.50, speed: 0.0003, phase: 0.0 },
+      { x: 0.78, y: 0.15, r: 0.40, speed: 0.0002, phase: 2.1 },
+      { x: 0.55, y: 0.72, r: 0.35, speed: 0.0004, phase: 4.2 },
+      { x: 0.88, y: 0.78, r: 0.30, speed: 0.0003, phase: 1.0 },
+    ];
 
-        for (let i = 0; i < drops.length; i++) {
-          const ch = chars[Math.floor(Math.random() * chars.length)];
-          const y = drops[i] * fontSize;
-          if (drops[i] > 0 && y < canvas.height) {
-            const alpha = Math.max(0, 1 - (y / canvas.height) * 1.1);
-            ctx.fillStyle = i % 3 === 0
-              ? `rgba(6,214,160,${alpha * 0.35})`
-              : `rgba(250,93,41,${alpha * 0.4})`;
-            ctx.fillText(ch, i * fontSize, y);
-          }
-          if (y > canvas.height && Math.random() > 0.975) drops[i] = 0;
-          drops[i]++;
-        }
+    const draw = () => {
+      t += 1;
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const base = ctx.createLinearGradient(0, 0, w, h);
+      base.addColorStop(0, "#F8F9FC");
+      base.addColorStop(1, "#EFF2F7");
+      ctx.fillStyle = base;
+      ctx.fillRect(0, 0, w, h);
+
+      for (const o of orbs) {
+        const cx = w * (o.x + Math.sin(t * o.speed + o.phase) * 0.08);
+        const cy = h * (o.y + Math.cos(t * o.speed + o.phase) * 0.07);
+        const r  = Math.min(w, h) * o.r;
+        const g  = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+        g.addColorStop(0, "rgba(50,121,249,0.065)");
+        g.addColorStop(1, "rgba(50,121,249,0)");
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, w, h);
       }
+
       raf = requestAnimationFrame(draw);
     };
 
-    draw();
-
+    raf = requestAnimationFrame(draw);
     return () => {
       cancelAnimationFrame(raf);
-      window.removeEventListener("resize", onResize);
+      window.removeEventListener("resize", setSize);
     };
   }, []);
 

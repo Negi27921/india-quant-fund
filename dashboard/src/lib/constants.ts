@@ -8,39 +8,39 @@ const wsBase = import.meta.env.VITE_API_URL
 export const WS_URL = `${wsBase}/ws`;
 
 export const CHART_COLORS = {
-  primary: "#FA5D29",
+  primary: "#3279F9",
   success: "#27AE60",
-  danger: "#E74C3C",
-  warning: "#F39C12",
-  purple: "#F39C12",
-  cyan: "#F39C12",
-  grid: "#E5E7EB",
-  text: "#9CA3AF",
+  danger:  "#E74C3C",
+  warning: "#F59E0B",
+  purple:  "#8B5CF6",
+  cyan:    "#06B6D4",
+  grid:    "rgba(33,34,38,0.08)",
+  text:    "#9E9EA6",
 };
 
 export const SECTOR_COLORS: Record<string, string> = {
-  "Information Technology": "#FA5D29",
-  "Financial Services": "#27AE60",
-  "Healthcare": "#F39C12",
-  "Consumer Goods": "#F59E0B",
-  "Energy": "#E74C3C",
-  "Industrials": "#FA5D29",
-  "Materials": "#F97316",
-  "Real Estate": "#F39C12",
-  "Utilities": "#27AE60",
+  "Information Technology": "#3279F9",
+  "Financial Services":     "#27AE60",
+  "Healthcare":             "#F59E0B",
+  "Consumer Goods":         "#8B5CF6",
+  "Energy":                 "#E74C3C",
+  "Industrials":            "#06B6D4",
+  "Materials":              "#F97316",
+  "Real Estate":            "#10B981",
+  "Utilities":              "#6366F1",
   "Communication Services": "#14B8A6",
-  "Consumer Staples": "#84CC16",
-  "Other": "#6B7280",
+  "Consumer Staples":       "#84CC16",
+  "Other":                  "#6B7280",
 };
 
 export const STRATEGY_COLORS: Record<string, string> = {
   vcp:          "#27AE60",
-  ipo_base:     "#F39C12",
-  rocket_base:  "#FA5D29",
+  ipo_base:     "#F59E0B",
+  rocket_base:  "#3279F9",
   breakout:     "#E74C3C",
-  rsi_reversal: "#FFF083",
-  golden_cross: "#27AE60",
-  multibagger:  "#FA5D29",
+  rsi_reversal: "#8B5CF6",
+  golden_cross: "#06B6D4",
+  multibagger:  "#F97316",
 };
 
 export const STRATEGY_LABELS: Record<string, string> = {
@@ -54,9 +54,9 @@ export const STRATEGY_LABELS: Record<string, string> = {
 };
 
 export const REFETCH_INTERVALS = {
-  realtime: 5_000,
-  fast: 15_000,
-  normal: 30_000,
-  slow: 60_000,
+  realtime:  5_000,
+  fast:     15_000,
+  normal:   30_000,
+  slow:     60_000,
   verySllow: 5 * 60_000,
 };
