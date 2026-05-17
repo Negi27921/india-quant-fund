@@ -32,6 +32,7 @@ import {
   usePaperTrades, useStrategyPnl,
   type PaperPosition,
 } from "@/api/pnl-queries";
+import { useEnvSummary, useAgentConfig } from "@/api/settings-queries";
 import { formatCurrency, formatPct, pctColor, formatDateTime } from "@/lib/utils";
 import { useUIStore } from "@/store/ui";
 import { useLiveStore } from "@/store/live";
@@ -95,6 +96,17 @@ function TabBtn({
   );
 }
 
+// ── Capital stat cell ─────────────────────────────────────────────────────────
+function CapStat({ label, value, color, sub }: { label: string; value: string; color?: string; sub?: string }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <div style={{ fontSize: 9, color: "var(--text-3)", letterSpacing: "0.1em", fontFamily: "var(--font-body)", fontWeight: 700, textTransform: "uppercase" }}>{label}</div>
+      <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, fontWeight: 700, color: color ?? "var(--text-1)", lineHeight: 1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-body)" }}>{sub}</div>}
+    </div>
+  );
+}
+
 // ── HOLDINGS TAB ──────────────────────────────────────────────────────────────
 function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
   equityCurveDays: number;
@@ -110,6 +122,8 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
   const { data: equity, isLoading: equityLoading } = useEquityCurve(equityCurveDays);
   const { data: paperPositions, isLoading: paperLoading } = usePaperPositions();
   const { data: livePositions,  isLoading: liveLoading  } = useLivePositions();
+  const { data: envSummary } = useEnvSummary();
+  const { data: agentConfig } = useAgentConfig();
   const deletePaper = useDeletePaperPosition();
   const deleteLive  = useDeleteLivePosition();
   usePositions();
@@ -119,8 +133,18 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
   const totalCost  = activePositions.reduce((s, p) => s + p.quantity * p.avg_buy_price, 0);
   const totalValue = activePositions.reduce((s, p) => s + p.quantity * (p.current_price ?? p.avg_buy_price), 0);
   const unrealPnl  = totalValue - totalCost;
-  const unrealPct  = totalCost > 0 ? (unrealPnl / totalCost) * 100 : 0;
   const pnlColor   = unrealPnl >= 0 ? "var(--green)" : "var(--red)";
+
+  // Paper portfolio capital calculations (from settings)
+  const baseCapital   = envSummary?.initial_capital ?? 1_000_000;   // ₹10L default
+  const tradeAmount   = agentConfig?.trade_amount    ?? 50_000;
+  const freeCapital   = baseCapital - totalCost;
+  const portfolioVal  = baseCapital + unrealPnl;
+  const deployedPct   = baseCapital > 0 ? (totalCost / baseCapital) * 100 : 0;
+  const portfolioPct  = baseCapital > 0 ? (unrealPnl / baseCapital) * 100 : 0;
+  const portfolioColor = portfolioVal >= baseCapital ? "var(--green)" : "var(--red)";
+
+  const fmtL = (v: number) => `₹${(v / 1e5).toFixed(2)}L`;
 
   return (
     <>
@@ -161,40 +185,20 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
 
       {/* Positions table */}
       <motion.div className="card" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexWrap: "wrap", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <TabBtn active={tab === "paper"} label="PAPER" onClick={() => setTab("paper")} />
-            <TabBtn active={tab === "live"}  label="LIVE"  onClick={() => setTab("live")} />
-            {activePositions.length > 0 && (
-              <span style={{ fontSize: 10, color: "var(--text-3)", marginLeft: 4, fontFamily: "JetBrains Mono, monospace" }}>
-                {activePositions.length} pos
-              </span>
-            )}
-          </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-            {activePositions.length > 0 && (
-              <>
-                <div>
-                  <div style={{ fontSize: 9, color: "var(--text-3)", letterSpacing: "0.1em", fontFamily: "var(--font-body)" }}>INVESTED</div>
-                  <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "var(--text-1)" }}>
-                    ₹{(totalCost / 1e5).toFixed(2)}L
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 9, color: "var(--text-3)", letterSpacing: "0.1em", fontFamily: "var(--font-body)" }}>UNREALISED P&L</div>
-                  <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: pnlColor, fontWeight: 700 }}>
-                    {unrealPnl >= 0 ? "+" : ""}₹{Math.abs(unrealPnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 9, color: "var(--text-3)", letterSpacing: "0.1em", fontFamily: "var(--font-body)" }}>RETURN</div>
-                  <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: pnlColor, fontWeight: 700 }}>
-                    {unrealPct >= 0 ? "+" : ""}{unrealPct.toFixed(2)}%
-                  </div>
-                </div>
-              </>
-            )}
+        {/* ── Tab row + capital summary ── */}
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+          {/* Tab switcher + count */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: tab === "paper" ? 14 : 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <TabBtn active={tab === "paper"} label="PAPER" onClick={() => setTab("paper")} />
+              <TabBtn active={tab === "live"}  label="LIVE"  onClick={() => setTab("live")} />
+              {activePositions.length > 0 && (
+                <span style={{ fontSize: 10, color: "var(--text-3)", marginLeft: 4, fontFamily: "JetBrains Mono, monospace" }}>
+                  {activePositions.length} pos
+                </span>
+              )}
+            </div>
             <button
               onClick={() => setAddOpen(true)}
               style={{
@@ -212,6 +216,76 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
               Add Position
             </button>
           </div>
+
+          {/* ── Paper portfolio capital banner ── */}
+          {tab === "paper" && (
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
+              gap: 12,
+              padding: "12px 14px",
+              background: "rgba(39,174,96,0.03)",
+              border: "1px solid rgba(39,174,96,0.12)",
+              borderRadius: 10,
+            }}>
+              <CapStat
+                label="Base Capital"
+                value={fmtL(baseCapital)}
+                sub="from Settings → Env"
+              />
+              <CapStat
+                label="Deployed"
+                value={fmtL(totalCost)}
+                sub={`${deployedPct.toFixed(1)}% allocated`}
+              />
+              <CapStat
+                label="Free Capital"
+                value={fmtL(freeCapital)}
+                color={freeCapital >= 0 ? "var(--green)" : "var(--red)"}
+                sub="available to trade"
+              />
+              <CapStat
+                label="Portfolio Value"
+                value={fmtL(portfolioVal)}
+                color={portfolioColor}
+                sub={`${portfolioPct >= 0 ? "+" : ""}${portfolioPct.toFixed(2)}% from base`}
+              />
+              <CapStat
+                label="Unrealised P&L"
+                value={`${unrealPnl >= 0 ? "+" : ""}₹${Math.abs(unrealPnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`}
+                color={pnlColor}
+                sub="open positions"
+              />
+              <CapStat
+                label="Trade Size (cfg)"
+                value={`₹${tradeAmount.toLocaleString("en-IN")}`}
+                sub="from Settings → Agent"
+              />
+            </div>
+          )}
+
+          {/* ── Live Dhan summary ── */}
+          {tab === "live" && activePositions.length > 0 && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap",
+              padding: "10px 14px", marginTop: 10,
+              background: "rgba(39,174,96,0.04)",
+              border: "1px solid rgba(39,174,96,0.15)",
+              borderRadius: 10,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <Wifi style={{ width: 10, height: 10, color: "var(--green)" }} />
+                <span style={{ fontSize: 9, color: "var(--green)", fontFamily: "var(--font-body)", fontWeight: 700, letterSpacing: "0.1em" }}>DHAN LIVE</span>
+              </div>
+              <CapStat label="Market Value" value={fmtL(totalValue)} />
+              <CapStat label="Cost Basis" value={fmtL(totalCost)} />
+              <CapStat
+                label="Unrealised P&L"
+                value={`${unrealPnl >= 0 ? "+" : ""}₹${Math.abs(unrealPnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`}
+                color={pnlColor}
+              />
+            </div>
+          )}
         </div>
 
         <div style={{ overflowX: "auto" }}>
