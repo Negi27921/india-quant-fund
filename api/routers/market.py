@@ -977,54 +977,107 @@ async def get_watchlist():
 
 
 @router.get("/fii-dii")
-@_cached("fii_dii", ttl=300)
+@_cached("fii_dii", ttl=21600)  # 6-hour cache per user requirement
 async def get_fii_dii():
-    """Rich FII/DII data from fii-dii-data repository + NSE live."""
+    """FII/DII data: NSE live API first, then local history file, then mock."""
     import json as _json
     from pathlib import Path
 
-    data_dir = Path(__file__).parent.parent / "fii_dii_data"
+    loop = asyncio.get_running_loop()
 
-    # Try local rich history first (69 rows with futures + sentiment)
+    def _map_row(row: dict) -> dict:
+        return {
+            "date": row.get("date", ""),
+            "fii_buy": float(row.get("fii_buy", 0) or 0),
+            "fii_sell": float(row.get("fii_sell", 0) or 0),
+            "fii_net": float(row.get("fii_net", 0) or 0),
+            "dii_buy": float(row.get("dii_buy", 0) or 0),
+            "dii_sell": float(row.get("dii_sell", 0) or 0),
+            "dii_net": float(row.get("dii_net", 0) or 0),
+            "fii_idx_fut_net": float(row.get("fii_idx_fut_net", 0) or 0),
+            "fii_stk_fut_net": float(row.get("fii_stk_fut_net", 0) or 0),
+            "fii_idx_call_net": float(row.get("fii_idx_call_net", 0) or 0),
+            "fii_idx_put_net": float(row.get("fii_idx_put_net", 0) or 0),
+            "pcr": float(row.get("pcr", 0) or 0),
+            "sentiment_score": float(row.get("sentiment_score", 50) or 50),
+            "sentiment": (row.get("_fao_summary") or {}).get("sentiment", row.get("sentiment", "Neutral")),
+            "updated_at": row.get("_updated_at", row.get("updated_at", "")),
+        }
+
+    # ── 1. Try NSE live API (most accurate, fetched once per 6h) ─────────────
+    try:
+        def _fetch_nse_fii_dii():
+            import urllib.request as _ur
+            import json as _j, time as _t
+            # First hit the main page to get cookies
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
+            }
+            session_req = _ur.Request("https://www.nseindia.com/reports/fii-dii", headers=headers)
+            import http.cookiejar as _cj
+            cookie_jar = _cj.CookieJar()
+            opener = _ur.build_opener(_ur.HTTPCookieProcessor(cookie_jar))
+            opener.open(session_req, timeout=6)
+            _t.sleep(0.5)
+
+            api_headers = {**headers,
+                "Accept": "application/json, text/plain, */*",
+                "Referer": "https://www.nseindia.com/reports/fii-dii",
+                "X-Requested-With": "XMLHttpRequest",
+            }
+            api_req = _ur.Request("https://www.nseindia.com/api/fiidiiTradeReact", headers=api_headers)
+            with opener.open(api_req, timeout=6) as r:
+                data = _j.loads(r.read())
+
+            results = []
+            for row in (data if isinstance(data, list) else []):
+                results.append({
+                    "date": row.get("date", ""),
+                    "fii_buy": _sf(row.get("buySell_FII_buy", row.get("fii_buy", 0))),
+                    "fii_sell": _sf(row.get("buySell_FII_sell", row.get("fii_sell", 0))),
+                    "fii_net": _sf(row.get("buySell_FII_net", row.get("fii_net", 0))),
+                    "dii_buy": _sf(row.get("buySell_DII_buy", row.get("dii_buy", 0))),
+                    "dii_sell": _sf(row.get("buySell_DII_sell", row.get("dii_sell", 0))),
+                    "dii_net": _sf(row.get("buySell_DII_net", row.get("dii_net", 0))),
+                    "fii_idx_fut_net": 0, "fii_stk_fut_net": 0,
+                    "fii_idx_call_net": 0, "fii_idx_put_net": 0,
+                    "pcr": 0, "sentiment_score": 50, "sentiment": "Neutral",
+                    "updated_at": "",
+                })
+            return [r for r in results if abs(r.get("fii_net", 0)) > 0 or abs(r.get("dii_net", 0)) > 0]
+
+        nse_rows = await asyncio.wait_for(
+            loop.run_in_executor(_executor, _fetch_nse_fii_dii),
+            timeout=10.0,
+        )
+        if nse_rows:
+            return nse_rows[-60:]
+    except Exception:
+        pass
+
+    # ── 2. Fall back to local history.json (rich data with futures + sentiment) ─
+    data_dir = Path(__file__).parent.parent / "fii_dii_data"
     try:
         history_path = data_dir / "history.json"
         if history_path.exists():
             with open(history_path) as f:
                 file_data = _json.load(f)
-            rows = []
-            for row in file_data:
-                if isinstance(row, dict) and row.get('fii_buy', 0) > 0:
-                    rows.append({
-                        "date": row.get("date", ""),
-                        "fii_buy": float(row.get("fii_buy", 0)),
-                        "fii_sell": float(row.get("fii_sell", 0)),
-                        "fii_net": float(row.get("fii_net", 0)),
-                        "dii_buy": float(row.get("dii_buy", 0)),
-                        "dii_sell": float(row.get("dii_sell", 0)),
-                        "dii_net": float(row.get("dii_net", 0)),
-                        "fii_idx_fut_net": float(row.get("fii_idx_fut_net", 0)),
-                        "fii_stk_fut_net": float(row.get("fii_stk_fut_net", 0)),
-                        "fii_idx_call_net": float(row.get("fii_idx_call_net", 0)),
-                        "fii_idx_put_net": float(row.get("fii_idx_put_net", 0)),
-                        "pcr": float(row.get("pcr", 0)),
-                        "sentiment_score": float(row.get("sentiment_score", 50)),
-                        "sentiment": row.get("_fao_summary", {}).get("sentiment", "Neutral"),
-                        "updated_at": row.get("_updated_at", ""),
-                    })
+            rows = [_map_row(r) for r in file_data if isinstance(r, dict) and r.get("fii_buy", 0) > 0]
             if rows:
-                return rows[-60:]  # last 60 trading days
+                return rows[-60:]
     except Exception:
         pass
 
-    # Then try NSE API
-    loop = asyncio.get_running_loop()
+    # ── 3. Try nsetools library if available ──────────────────────────────────
     if _NSE_AVAILABLE:
         try:
-            def _fetch_fii_dii():
+            def _fetch_fii_dii_nse():
                 url = "https://www.nseindia.com/api/fiidiiTradeReact"
                 data = _nsefetch(url)
                 results = []
-                for row in data:
+                for row in (data if isinstance(data, list) else []):
                     results.append({
                         "date": row.get("date", ""),
                         "fii_buy": _sf(row.get("buySell_FII_buy", 0)),
@@ -1033,17 +1086,13 @@ async def get_fii_dii():
                         "dii_buy": _sf(row.get("buySell_DII_buy", 0)),
                         "dii_sell": _sf(row.get("buySell_DII_sell", 0)),
                         "dii_net": _sf(row.get("buySell_DII_net", 0)),
-                        "fii_idx_fut_net": 0,
-                        "fii_stk_fut_net": 0,
-                        "fii_idx_call_net": 0,
-                        "fii_idx_put_net": 0,
-                        "pcr": 0,
-                        "sentiment_score": 50,
-                        "sentiment": "Neutral",
+                        "fii_idx_fut_net": 0, "fii_stk_fut_net": 0,
+                        "fii_idx_call_net": 0, "fii_idx_put_net": 0,
+                        "pcr": 0, "sentiment_score": 50, "sentiment": "Neutral",
                         "updated_at": "",
                     })
                 return results[-30:] if results else []
-            result = await loop.run_in_executor(_executor, _fetch_fii_dii)
+            result = await loop.run_in_executor(_executor, _fetch_fii_dii_nse)
             valid = [r for r in result if abs(r.get("fii_net", 0)) > 0 or abs(r.get("dii_net", 0)) > 0]
             if valid:
                 return result
