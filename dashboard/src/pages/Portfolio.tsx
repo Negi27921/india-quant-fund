@@ -50,7 +50,7 @@ function pnlCellBg(pct: number): string {
   if (pct === 0) return "rgba(255,255,255,0.03)";
   const t = Math.min(Math.abs(pct) / 3, 1);
   const a = 0.1 + t * 0.45;
-  return pct > 0 ? `rgba(0,255,135,${a})` : `rgba(255,71,87,${a})`;
+  return pct > 0 ? `rgba(39,174,96,${a})` : `rgba(231,76,60,${a})`;
 }
 
 function monthStart(year: number, m: number) {
@@ -85,7 +85,7 @@ function TabBtn({
         padding: "6px 20px", borderRadius: 8, fontSize: 11, fontWeight: 700,
         fontFamily: "var(--font-body)", letterSpacing: "0.1em", cursor: "pointer",
         transition: "all 150ms",
-        background: active ? "rgba(0,255,135,0.08)" : "transparent",
+        background: active ? "rgba(39,174,96,0.08)" : "transparent",
         border: active ? "1px solid var(--accent-border)" : "1px solid transparent",
         color: active ? "var(--accent)" : "var(--text-3)",
       }}
@@ -139,8 +139,8 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
               {DAYS_OPTIONS_EQUITY.map(d => (
                 <button key={d} onClick={() => setEquityCurveDays(d)} style={{
                   fontSize: 10, padding: "2px 8px", borderRadius: 6, cursor: "pointer",
-                  background: equityCurveDays === d ? "rgba(0,255,135,0.1)" : "transparent",
-                  border: equityCurveDays === d ? "1px solid rgba(0,255,135,0.25)" : "1px solid transparent",
+                  background: equityCurveDays === d ? "rgba(39,174,96,0.1)" : "transparent",
+                  border: equityCurveDays === d ? "1px solid rgba(39,174,96,0.25)" : "1px solid transparent",
                   color: equityCurveDays === d ? "var(--accent)" : "var(--text-3)",
                   fontFamily: "var(--font-body)", fontWeight: 600,
                 }}>
@@ -150,7 +150,7 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
             </div>
           </div>
           {equityLoading
-            ? <div style={{ height: 180, background: "rgba(0,255,135,0.03)", borderRadius: 8 }} />
+            ? <div style={{ height: 180, background: "rgba(39,174,96,0.03)", borderRadius: 8 }} />
             : <EquityChart data={equity ?? []} height={180} />}
         </div>
         <div className="card p-4">
@@ -202,9 +202,9 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
                 padding: "7px 14px", borderRadius: 8, fontSize: 11, fontWeight: 700,
                 fontFamily: "var(--font-body)", cursor: "pointer",
                 background: tab === "live"
-                  ? "linear-gradient(135deg, rgba(6,214,160,0.2), rgba(6,214,160,0.05))"
-                  : "rgba(0,255,135,0.08)",
-                border: tab === "live" ? "1px solid rgba(6,214,160,0.4)" : "1px solid var(--accent-border)",
+                  ? "linear-gradient(135deg, rgba(39,174,96,0.2), rgba(39,174,96,0.05))"
+                  : "rgba(39,174,96,0.08)",
+                border: tab === "live" ? "1px solid rgba(39,174,96,0.4)" : "1px solid var(--accent-border)",
                 color: tab === "live" ? "var(--green)" : "var(--accent)",
               }}
             >
@@ -218,7 +218,7 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
           <table className="tbl">
             <thead>
               <tr>
-                {["SYMBOL", "NAME", "SECTOR", "QTY", "AVG BUY", "CMP", "DAYS", "P&L", "RET%", "WT%", "ACTIONS"].map((h, i) => (
+                {["SYMBOL", "NAME", "SECTOR", "QTY", "POS SIZE", "AVG BUY", "CMP", "DAYS", "P&L", "RET%", "WT%", "ACTIONS"].map((h, i) => (
                   <th key={h} className={i >= 3 ? "tbl-th-r" : "tbl-th"} style={{ paddingLeft: i === 0 ? 20 : undefined }}>{h}</th>
                 ))}
               </tr>
@@ -228,16 +228,16 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
                 {activeLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i} className="tbl-row">
-                      {Array.from({ length: 11 }).map((_, j) => (
+                      {Array.from({ length: 12 }).map((_, j) => (
                         <td key={j} className="tbl-cell">
-                          <div style={{ height: 11, borderRadius: 4, background: "rgba(0,255,135,0.1)", width: [80,130,70,40,70,70,40,70,60,50,80][j] }} />
+                          <div style={{ height: 11, borderRadius: 4, background: "rgba(39,174,96,0.1)", width: [80,130,70,40,80,70,70,40,70,60,50,80][j] }} />
                         </td>
                       ))}
                     </tr>
                   ))
                 ) : activePositions.length === 0 ? (
                   <tr>
-                    <td colSpan={11} style={{ textAlign: "center", padding: "48px 20px" }}>
+                    <td colSpan={12} style={{ textAlign: "center", padding: "48px 20px" }}>
                       <div style={{ color: "var(--text-3)", fontSize: 13, marginBottom: 12 }}>
                         No {tab === "paper" ? "paper trading" : "live"} positions yet
                       </div>
@@ -275,6 +275,9 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
                           ) : "—"}
                         </td>
                         <td className="tbl-cell-r">{pos.quantity}</td>
+                        <td className="tbl-cell-r" style={{ color: "var(--text-2)", fontWeight: 600 }}>
+                          ₹{(pos.quantity * pos.avg_buy_price).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                        </td>
                         <td className="tbl-cell-r">₹{pos.avg_buy_price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                         <td className="tbl-cell-r" style={{ color: "var(--text-1)", fontWeight: 600 }}>₹{cmp.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                         <td className="tbl-cell-r" style={{ color: "var(--text-3)" }}>{pos.days_held ?? 0}d</td>
@@ -294,7 +297,7 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
                               <LogOut style={{ width: 11, height: 11 }} />
                             </button>
                             <button title="Delete" onClick={() => tab === "paper" ? deletePaper.mutate(pos.ticker) : deleteLive.mutate(pos.ticker)}
-                              style={{ padding: "4px 6px", borderRadius: 6, background: "rgba(255,71,87,0.08)", border: "1px solid rgba(255,71,87,0.18)", color: "var(--red)", cursor: "pointer" }}>
+                              style={{ padding: "4px 6px", borderRadius: 6, background: "rgba(231,76,60,0.08)", border: "1px solid rgba(231,76,60,0.18)", color: "var(--red)", cursor: "pointer" }}>
                               <Trash2 style={{ width: 11, height: 11 }} />
                             </button>
                           </div>
@@ -466,8 +469,8 @@ function PnLTab() {
                 return (
                   <button key={label} onClick={() => { setMonth(m); setRangeStart(monthStart(year, m)); setRangeEnd(monthEnd(year, m)); }} style={{
                     fontSize: 9, fontFamily: "var(--font-mono)", padding: "3px 7px", borderRadius: 3, cursor: "pointer",
-                    border: isActive ? "1px solid rgba(0,255,135,0.5)" : "1px solid rgba(0,255,135,0.12)",
-                    background: isActive ? "rgba(0,255,135,0.12)" : "rgba(0,255,135,0.02)",
+                    border: isActive ? "1px solid rgba(39,174,96,0.5)" : "1px solid rgba(39,174,96,0.12)",
+                    background: isActive ? "rgba(39,174,96,0.12)" : "rgba(39,174,96,0.02)",
                     color: isActive ? "var(--accent)" : "var(--text-4)", transition: "all 80ms",
                   }}>{label}</button>
                 );
@@ -479,7 +482,7 @@ function PnLTab() {
                   <span style={{ fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-mono)", letterSpacing: "0.06em" }}>{label}</span>
                   <input type="date" value={i === 0 ? rangeStart : rangeEnd}
                     onChange={e => i === 0 ? setRangeStart(e.target.value) : setRangeEnd(e.target.value)}
-                    style={{ background: "rgba(0,255,135,0.03)", border: "1px solid var(--accent-border)", color: "var(--text-1)", fontFamily: "var(--font-mono)", borderRadius: 4, padding: "5px 8px", outline: "none", fontSize: 11 }}
+                    style={{ background: "rgba(39,174,96,0.03)", border: "1px solid var(--accent-border)", color: "var(--text-1)", fontFamily: "var(--font-mono)", borderRadius: 4, padding: "5px 8px", outline: "none", fontSize: 11 }}
                   />
                 </React.Fragment>
               ))}
@@ -661,7 +664,7 @@ function TradesTab() {
             {(["all", "OPEN", "CLOSED"] as const).map(s => (
               <button key={s} onClick={() => setStatusFilter(s)} style={{
                 fontSize: 10, padding: "3px 10px", borderRadius: 6, cursor: "pointer", transition: "all 120ms",
-                background: statusFilter === s ? "rgba(0,255,135,0.08)" : "transparent",
+                background: statusFilter === s ? "rgba(39,174,96,0.08)" : "transparent",
                 border: statusFilter === s ? "1px solid var(--accent-border)" : "1px solid transparent",
                 color: statusFilter === s ? "var(--accent)" : "var(--text-3)", fontFamily: "var(--font-body)", fontWeight: 600,
               }}>{s === "all" ? "ALL" : s}</button>
@@ -755,9 +758,9 @@ function LiveTab() {
           <div style={{ position: "relative", width: 40, height: 40, marginBottom: 12 }}>
             {connected && (
               <>
-                <motion.div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "rgba(0,255,135,0.15)" }}
+                <motion.div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "rgba(39,174,96,0.15)" }}
                   animate={{ scale: [1, 2, 1], opacity: [0.5, 0, 0.5] }} transition={{ duration: 2, repeat: Infinity }} />
-                <motion.div style={{ position: "absolute", inset: 4, borderRadius: "50%", background: "rgba(0,255,135,0.25)" }}
+                <motion.div style={{ position: "absolute", inset: 4, borderRadius: "50%", background: "rgba(39,174,96,0.25)" }}
                   animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }} transition={{ duration: 2, repeat: Infinity, delay: 0.3 }} />
               </>
             )}
@@ -778,7 +781,7 @@ function LiveTab() {
         {/* Big day P&L */}
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
           className="card p-6 flex flex-col items-center justify-center text-center lg:col-span-2"
-          style={{ background: pnlPos ? "rgba(0,255,135,0.03)" : "rgba(255,71,87,0.03)", border: pnlPos ? "1px solid rgba(0,255,135,0.12)" : "1px solid rgba(255,71,87,0.12)" }}>
+          style={{ background: pnlPos ? "rgba(39,174,96,0.03)" : "rgba(231,76,60,0.03)", border: pnlPos ? "1px solid rgba(39,174,96,0.12)" : "1px solid rgba(231,76,60,0.12)" }}>
           <div style={{ fontSize: 10, color: "var(--text-3)", letterSpacing: "0.12em", fontFamily: "var(--font-body)", marginBottom: 8 }}>TODAY'S P&L</div>
           <div style={{ fontSize: 52, fontWeight: 800, fontFamily: "JetBrains Mono, monospace", color: pnlPos ? "var(--green)" : "var(--red)", lineHeight: 1 }}>
             <AnimatedNumber value={live?.day_pnl_pct ?? 0} format={v => `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`} />

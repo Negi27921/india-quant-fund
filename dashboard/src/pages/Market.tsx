@@ -3,16 +3,17 @@ import { motion } from "framer-motion";
 import {
   TrendingUp, Activity, BarChart2,
   ArrowUpRight, ArrowDownRight, Calendar, Zap, Globe2,
-  RefreshCw, FileText, Clock, Filter,
+  RefreshCw, FileText, Clock, Filter, ExternalLink,
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import {
   useMarketIndices, useMarketMovers, useMarketSectors,
   useFiiDiiToday, useAdvancesDeclines, useCorporateActions,
-  useResultsCalendar, useFiiDii, useFilings,
+  useResultsCalendar, useFiiDii, useFilings, usePriceHistory,
   type CorporateAction, type ResultsMeeting, type FiiDiiRow,
   type IndexData, type Filing,
 } from "@/api/market-queries";
+import { MiniChart } from "@/components/charts/MiniChart";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Cell,
 } from "recharts";
@@ -94,16 +95,30 @@ function Card({
   );
 }
 
+// TradingView symbol map for each index key
+const TV_SYMBOLS: Record<string, string> = {
+  nifty50:    "NSE:NIFTY",
+  banknifty:  "NSE:BANKNIFTY",
+  sensex:     "BSE:SENSEX",
+  niftymid50: "NSE:MIDCPNIFTY",
+  niftyit:    "NSE:NIFTYIT",
+};
+
 // ── Index chip ─────────────────────────────────────────────────────────────────
-// padding: 10px 16px (Chakra space-5/space-4), borderRadius: 8px (Chakra lg)
-function IndexChip({ label, data }: { label: string; data?: IndexData }) {
+function IndexChip({ label, data, indexKey }: { label: string; data?: IndexData; indexKey: string }) {
+  const [hovered, setHovered] = useState(false);
+  const { data: history } = usePriceHistory(data?.symbol ?? "", hovered);
+
+  const chartPoints = (history ?? []).map(b => ({ time: b.time as string, value: b.close }));
+  const tvSymbol = TV_SYMBOLS[indexKey];
+
   if (!data) {
     return (
       <div style={{
-        padding: "10px 16px",          /* Chakra space-4 */
+        padding: "10px 16px",
         background: "var(--surface)",
         border: "1px solid var(--border)",
-        borderRadius: 8,               /* Chakra lg */
+        borderRadius: 8,
         flexShrink: 0, minWidth: 120,
       }}>
         <div className="skeleton" style={{ height: 9, width: 64, marginBottom: 6, borderRadius: 3 }} />
@@ -113,44 +128,94 @@ function IndexChip({ label, data }: { label: string; data?: IndexData }) {
   }
   const up = data.change_pct >= 0;
   const color = up ? "var(--green)" : "var(--red)";
+
   return (
-    <div style={{
-      padding: "10px 16px",            /* Chakra space-4 */
-      background: "var(--surface)",
-      border: `1px solid var(--border)`,
-      borderLeft: `3px solid ${color}`,
-      borderRadius: 8,                 /* Chakra lg */
-      flexShrink: 0, minWidth: 130,
-      transition: "box-shadow 150ms ease",
-    }}
-      onMouseEnter={e => (e.currentTarget.style.boxShadow = `0 0 0 1px ${color}40`)}
-      onMouseLeave={e => (e.currentTarget.style.boxShadow = "none")}
-    >
-      {/* Label: uppercase, 9px, tracking-widest */}
-      <div style={{
-        fontSize: 9,
-        fontFamily: "var(--font-body)", fontWeight: 700,
-        color: "var(--text-3)",
-        textTransform: "uppercase", letterSpacing: "0.12em",
-        marginBottom: 4,
-      }}>
-        {label}
-      </div>
-      {/* Value: 14px semibold mono */}
-      <div style={{
-        fontSize: 14,
-        fontFamily: "var(--font-mono)", fontWeight: 700,
-        color: "var(--text-1)", lineHeight: 1, marginBottom: 3,
-      }}>
-        {data.price.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-      </div>
-      {/* Change: 11px semibold mono */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 2,
-        fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 700, color,
-      }}>
-        {up ? <ArrowUpRight style={{ width: 10, height: 10 }} /> : <ArrowDownRight style={{ width: 10, height: 10 }} />}
-        {Math.abs(data.change_pct).toFixed(2)}%
+    <div style={{ position: "relative", flexShrink: 0 }}>
+      {/* Hover popup — mini chart */}
+      {hovered && (
+        <div style={{
+          position: "absolute", bottom: "calc(100% + 8px)", left: "50%",
+          transform: "translateX(-50%)",
+          background: "var(--surface)",
+          border: `1px solid ${color}55`,
+          borderRadius: 10,
+          padding: "10px 10px 6px",
+          zIndex: 200,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+          minWidth: 210,
+          pointerEvents: "none",
+        }}>
+          <div style={{
+            fontSize: 9, fontFamily: "var(--font-body)", fontWeight: 700,
+            color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6,
+          }}>
+            {label} · 30-day
+          </div>
+          {chartPoints.length >= 2
+            ? <MiniChart data={chartPoints} width={190} height={60} color={color} />
+            : <div style={{ height: 60, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div className="skeleton" style={{ width: 190, height: 60, borderRadius: 4 }} />
+              </div>
+          }
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+            marginTop: 6, fontSize: 9, color: "var(--accent)", fontFamily: "var(--font-body)", fontWeight: 600,
+          }}>
+            <ExternalLink style={{ width: 9, height: 9 }} />
+            Click to open TradingView
+          </div>
+        </div>
+      )}
+
+      {/* Chip */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => tvSymbol && window.open(`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tvSymbol)}`, "_blank")}
+        onKeyDown={e => e.key === "Enter" && tvSymbol && window.open(`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tvSymbol)}`, "_blank")}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          padding: "10px 16px",
+          background: "var(--surface)",
+          border: `1px solid var(--border)`,
+          borderLeft: `3px solid ${color}`,
+          borderRadius: 8,
+          minWidth: 130,
+          transition: "box-shadow 150ms ease",
+          cursor: tvSymbol ? "pointer" : "default",
+          boxShadow: hovered ? `0 0 0 1px ${color}40` : "none",
+        }}
+      >
+        {/* Label + TV icon */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4,
+        }}>
+          <div style={{
+            fontSize: 9, fontFamily: "var(--font-body)", fontWeight: 700,
+            color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.12em",
+          }}>
+            {label}
+          </div>
+          {tvSymbol && (
+            <ExternalLink style={{ width: 8, height: 8, color: "var(--text-4)", opacity: hovered ? 1 : 0.4, transition: "opacity 150ms" }} />
+          )}
+        </div>
+        {/* Value */}
+        <div style={{
+          fontSize: 14, fontFamily: "var(--font-mono)", fontWeight: 700,
+          color: "var(--text-1)", lineHeight: 1, marginBottom: 3,
+        }}>
+          {data.price.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </div>
+        {/* Change */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 2,
+          fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 700, color,
+        }}>
+          {up ? <ArrowUpRight style={{ width: 10, height: 10 }} /> : <ArrowDownRight style={{ width: 10, height: 10 }} />}
+          {Math.abs(data.change_pct).toFixed(2)}%
+        </div>
       </div>
     </div>
   );
@@ -454,7 +519,7 @@ function FiiDiiPanel() {
         </div>
       )}
 
-      {/* Chart legend: label uppercase 10px tracking */}
+      {/* Chart legend + source link */}
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <span style={{
           fontSize: 10, fontFamily: "var(--font-body)", fontWeight: 700,
@@ -471,6 +536,20 @@ function FiiDiiPanel() {
             {l.label}
           </div>
         ))}
+        <a
+          href="https://www.nseindia.com/companies-listing/corporate-filings-fii-dii-data"
+          target="_blank" rel="noopener noreferrer"
+          style={{
+            marginLeft: "auto", display: "flex", alignItems: "center", gap: 3,
+            fontSize: 9, color: "var(--text-4)", textDecoration: "none", fontFamily: "var(--font-body)",
+            fontWeight: 600, letterSpacing: "0.06em",
+            transition: "color 150ms",
+          }}
+          onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
+          onMouseLeave={e => (e.currentTarget.style.color = "var(--text-4)")}
+        >
+          <ExternalLink style={{ width: 9, height: 9 }} /> NSE Source
+        </a>
       </div>
 
       {/* Bar chart */}
@@ -1044,6 +1123,7 @@ export function MarketPage() {
             <motion.div key={key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.06 }}>
               <IndexChip
                 label={label}
+                indexKey={key}
                 data={idxLoading ? undefined : (indices as unknown as Record<string, IndexData>)?.[key]}
               />
             </motion.div>
@@ -1100,6 +1180,22 @@ export function MarketPage() {
               icon={<Filter style={{ width: 12, height: 12 }} />}
               accent="var(--amber)"
               style={{ flex: 1, minHeight: 260 }}
+              headerRight={
+                <a
+                  href="https://www.nseindia.com/market-data/sector-indices"
+                  target="_blank" rel="noopener noreferrer"
+                  style={{
+                    display: "flex", alignItems: "center", gap: 3,
+                    fontSize: 9, color: "var(--text-4)", textDecoration: "none",
+                    fontFamily: "var(--font-body)", fontWeight: 600, letterSpacing: "0.06em",
+                    transition: "color 150ms",
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.color = "var(--amber)")}
+                  onMouseLeave={e => (e.currentTarget.style.color = "var(--text-4)")}
+                >
+                  <ExternalLink style={{ width: 9, height: 9 }} /> NSE
+                </a>
+              }
             >
               <SectorPanel data={sectors ?? []} isLoading={sectorsLoading} />
             </Card>

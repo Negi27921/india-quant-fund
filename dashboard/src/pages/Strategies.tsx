@@ -77,7 +77,7 @@ function AllocationBars({
   return (
     <div className="space-y-2.5">
       {allocation.map((a) => {
-        const color = STRATEGY_COLORS[a.strategy] ?? "#FA5D29";
+        const color = STRATEGY_COLORS[a.strategy] ?? "#3279F9";
         const isSelected = selectedStrategy === a.strategy;
         const sharpe = perf?.find((p) => p.strategy === a.strategy)?.sharpe_ratio;
         // Bar fill: weight as % of maxWeight, capped at 80% of container width visually
@@ -118,7 +118,7 @@ function AllocationBars({
                   <span
                     style={{
                       fontSize: "9px",
-                      color: sharpe >= 1 ? "#06D6A0" : sharpe >= 0.5 ? "#FBBF24" : "#FF4757",
+                      color: sharpe >= 1 ? "#27AE60" : sharpe >= 0.5 ? "#FBBF24" : "#E74C3C",
                       fontFamily: "JetBrains Mono",
                     }}
                   >
@@ -158,9 +158,9 @@ function SignalBadge({ value }: { value: number }) {
       className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono font-bold"
       style={{
         fontSize: "10px",
-        background: isBuy ? "rgba(6,214,160,0.12)" : "rgba(255,71,87,0.12)",
-        color: isBuy ? "#06D6A0" : "#FF4757",
-        border: `1px solid ${isBuy ? "rgba(6,214,160,0.3)" : "rgba(255,71,87,0.3)"}`,
+        background: isBuy ? "rgba(39,174,96,0.12)" : "rgba(231,76,60,0.12)",
+        color: isBuy ? "#27AE60" : "#E74C3C",
+        border: `1px solid ${isBuy ? "rgba(39,174,96,0.3)" : "rgba(231,76,60,0.3)"}`,
       }}
     >
       {isBuy
@@ -178,13 +178,13 @@ function SignalsEmptyState() {
       {/* Explanation card */}
       <div
         className="mx-4 mt-4 mb-3 rounded-xl p-4 flex gap-3 items-start"
-        style={{ background: "rgba(250,93,41,0.05)", border: "1px solid rgba(250,93,41,0.15)" }}
+        style={{ background: "rgba(50,121,249,0.05)", border: "1px solid rgba(50,121,249,0.15)" }}
       >
-        <Zap style={{ width: 16, height: 16, color: "#FA5D29", marginTop: 1, flexShrink: 0 }} />
+        <Zap style={{ width: 16, height: 16, color: "#3279F9", marginTop: 1, flexShrink: 0 }} />
         <div>
           <p style={{ fontSize: "12px", color: "#A0A0BC", lineHeight: 1.6 }}>
-            Signal engine generates live <span style={{ color: "#06D6A0" }}>BUY</span> /{" "}
-            <span style={{ color: "#FF4757" }}>SELL</span> signals during market hours.
+            Signal engine generates live <span style={{ color: "#27AE60" }}>BUY</span> /{" "}
+            <span style={{ color: "#E74C3C" }}>SELL</span> signals during market hours.
             Strategies scan Nifty 500 constituents every 15 minutes for qualifying setups.
           </p>
           <p style={{ fontSize: "10px", color: "var(--text-3)", marginTop: 6 }}>
@@ -218,12 +218,12 @@ function SignalsEmptyState() {
                 <tr key={i} className="tbl-row">
                   <td className="tbl-cell-muted" style={{ fontSize: "10px" }}>{sig.date}</td>
                   <td className="tbl-cell">
-                    <span className="font-mono font-semibold" style={{ color: "#FA5D29", fontSize: "11px" }}>
+                    <span className="font-mono font-semibold" style={{ color: "#3279F9", fontSize: "11px" }}>
                       {sig.ticker}
                     </span>
                     <span
                       className="ml-1.5 px-1 py-0.5 rounded"
-                      style={{ fontSize: "8px", background: "rgba(250,93,41,0.1)", color: "#FA5D29", letterSpacing: "0.06em" }}
+                      style={{ fontSize: "8px", background: "rgba(50,121,249,0.1)", color: "#3279F9", letterSpacing: "0.06em" }}
                     >
                       EXAMPLE
                     </span>
@@ -244,8 +244,8 @@ function SignalsEmptyState() {
                   </td>
                   <td className="tbl-cell" style={{ textAlign: "center" }}>
                     {sig.approved
-                      ? <CheckCircle style={{ width: 14, height: 14, color: "#06D6A0", margin: "0 auto" }} />
-                      : <XCircle    style={{ width: 14, height: 14, color: "#FF4757", margin: "0 auto" }} />}
+                      ? <CheckCircle style={{ width: 14, height: 14, color: "#27AE60", margin: "0 auto" }} />
+                      : <XCircle    style={{ width: 14, height: 14, color: "#E74C3C", margin: "0 auto" }} />}
                   </td>
                   <td className="tbl-cell-muted" style={{ fontSize: "10px" }}>
                     {sig.rejection_reason ?? "—"}
@@ -266,6 +266,11 @@ export function StrategiesPage() {
   const [selectedStrategy, setSelectedStrategy] = useState<string | null>(null);
   const [sectorFilter, setSectorFilter]       = useState<string>("ALL");
   const [stockSearch, setStockSearch]         = useState("");
+  // Signal log filters
+  const [sigFromDate, setSigFromDate]         = useState("");
+  const [sigToDate, setSigToDate]             = useState("");
+  const [sigStratFilter, setSigStratFilter]   = useState<string | null>(null);
+  const [sigTickerSearch, setSigTickerSearch] = useState("");
 
   const { openChart } = useUIStore();
 
@@ -298,7 +303,7 @@ export function StrategiesPage() {
           {/* Allocation horizontal bar chart */}
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="card p-5">
             <div className="flex items-center gap-2 mb-1">
-              <div className="w-0.5 h-4 rounded-full" style={{ background: "#FA5D29" }} />
+              <div className="w-0.5 h-4 rounded-full" style={{ background: "#3279F9" }} />
               <h3 className="text-sm font-semibold text-text-primary">Strategy Allocation</h3>
             </div>
             <p className="text-xs text-text-muted mb-4 pl-3">Dynamic Sharpe-weighted capital split</p>
@@ -314,7 +319,7 @@ export function StrategiesPage() {
           {/* Performance cards */}
           <div className="lg:col-span-2">
             <div className="flex items-center gap-2 mb-3">
-              <div className="w-0.5 h-4 rounded-full" style={{ background: "#FA5D29" }} />
+              <div className="w-0.5 h-4 rounded-full" style={{ background: "#3279F9" }} />
               <h3 className="text-sm font-semibold text-text-primary">Strategy Performance</h3>
               <span style={{ fontSize: "10px", color: "var(--text-3)" }}>click to filter stock universe</span>
             </div>
@@ -325,7 +330,7 @@ export function StrategiesPage() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {perf?.map((p, i) => {
-                  const color     = STRATEGY_COLORS[p.strategy] ?? "#FA5D29";
+                  const color     = STRATEGY_COLORS[p.strategy] ?? "#3279F9";
                   const isSelected = selectedStrategy === p.strategy;
                   return (
                     <motion.div
@@ -389,11 +394,11 @@ export function StrategiesPage() {
         >
           {/* Header */}
           <div className="panel-header gap-3 flex-wrap" style={{ paddingLeft: 16 }}>
-            <div className="w-0.5 h-4 rounded-full shrink-0" style={{ background: "#FA5D29" }} />
+            <div className="w-0.5 h-4 rounded-full shrink-0" style={{ background: "#3279F9" }} />
             <Target style={{ width: 12, height: 12, color: "#A0A0BC" }} />
             <span className="panel-title">STOCK UNIVERSE</span>
             {selectedStrategy && (
-              <span style={{ fontSize: "10px", color: "#FA5D29" }}>
+              <span style={{ fontSize: "10px", color: "#3279F9" }}>
                 — {STRATEGY_LABELS[selectedStrategy] ?? selectedStrategy}
               </span>
             )}
@@ -405,15 +410,15 @@ export function StrategiesPage() {
                 className="px-2 py-0.5 rounded-full transition-all"
                 style={{
                   fontSize: "9px", fontWeight: 700, letterSpacing: "0.08em",
-                  background: !selectedStrategy ? "rgba(250,93,41,0.15)" : "rgba(250,93,41,0.5)",
-                  color: !selectedStrategy ? "#FA5D29" : "var(--text-3)",
-                  border: `1px solid ${!selectedStrategy ? "rgba(250,93,41,0.3)" : "rgba(255,255,255,0.06)"}`,
+                  background: !selectedStrategy ? "rgba(50,121,249,0.15)" : "rgba(50,121,249,0.5)",
+                  color: !selectedStrategy ? "#3279F9" : "var(--text-3)",
+                  border: `1px solid ${!selectedStrategy ? "rgba(50,121,249,0.3)" : "rgba(255,255,255,0.06)"}`,
                 }}
               >
                 ALL STRATS
               </button>
               {Object.entries(STRATEGY_LABELS).map(([key, label]) => {
-                const c = STRATEGY_COLORS[key] ?? "#FA5D29";
+                const c = STRATEGY_COLORS[key] ?? "#3279F9";
                 return (
                   <button
                     key={key}
@@ -421,7 +426,7 @@ export function StrategiesPage() {
                     className="px-2 py-0.5 rounded-full transition-all"
                     style={{
                       fontSize: "9px", fontWeight: 700, letterSpacing: "0.08em",
-                      background: selectedStrategy === key ? `${c}22` : "rgba(250,93,41,0.5)",
+                      background: selectedStrategy === key ? `${c}22` : "rgba(50,121,249,0.5)",
                       color: selectedStrategy === key ? c : "var(--text-3)",
                       border: `1px solid ${selectedStrategy === key ? c + "55" : "rgba(255,255,255,0.06)"}`,
                     }}
@@ -447,9 +452,9 @@ export function StrategiesPage() {
                 className="px-2 py-0.5 rounded transition-all"
                 style={{
                   fontSize: "9px", fontWeight: 600,
-                  background: sectorFilter === s ? "rgba(250,93,41,0.1)" : "transparent",
-                  color: sectorFilter === s ? "#FA5D29" : "var(--text-3)",
-                  border: `1px solid ${sectorFilter === s ? "rgba(250,93,41,0.25)" : "transparent"}`,
+                  background: sectorFilter === s ? "rgba(50,121,249,0.1)" : "transparent",
+                  color: sectorFilter === s ? "#3279F9" : "var(--text-3)",
+                  border: `1px solid ${sectorFilter === s ? "rgba(50,121,249,0.25)" : "transparent"}`,
                   borderRadius: 4,
                 }}
               >
@@ -480,10 +485,10 @@ export function StrategiesPage() {
                 style={{ background: "rgba(13,22,36,0.6)", border: "1px solid rgba(255,255,255,0.06)" }}
                 onClick={() => openChart(stock.symbol, stock.name)}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background    = "rgba(250,93,41,0.08)";
-                  e.currentTarget.style.borderColor   = "rgba(250,93,41,0.3)";
+                  e.currentTarget.style.background    = "rgba(50,121,249,0.08)";
+                  e.currentTarget.style.borderColor   = "rgba(50,121,249,0.3)";
                   e.currentTarget.style.transform     = "scale(1.02)";
-                  e.currentTarget.style.boxShadow     = "0 0 12px rgba(250,93,41,0.12)";
+                  e.currentTarget.style.boxShadow     = "0 0 12px rgba(50,121,249,0.12)";
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.background    = "rgba(13,22,36,0.6)";
@@ -497,7 +502,7 @@ export function StrategiesPage() {
                 <div className="flex items-center justify-between">
                   <span
                     className="font-mono font-bold"
-                    style={{ fontSize: "10px", color: "#FA5D29" }}
+                    style={{ fontSize: "10px", color: "#3279F9" }}
                   >
                     {stock.symbol}
                   </span>
@@ -510,7 +515,7 @@ export function StrategiesPage() {
                     className="opacity-0 group-hover:opacity-100 transition-opacity"
                     title={`Open ${stock.symbol} on TradingView`}
                   >
-                    <ExternalLink style={{ width: 8, height: 8, color: "#FA5D29" }} />
+                    <ExternalLink style={{ width: 8, height: 8, color: "#3279F9" }} />
                   </a>
                 </div>
                 <div
@@ -523,7 +528,7 @@ export function StrategiesPage() {
                   className="mt-1 inline-block px-1 rounded"
                   style={{
                     fontSize: "7.5px", color: "var(--text-3)", letterSpacing: "0.06em",
-                    background: "rgba(250,93,41,0.4)", border: "1px solid rgba(255,255,255,0.06)",
+                    background: "rgba(50,121,249,0.4)", border: "1px solid rgba(255,255,255,0.06)",
                   }}
                 >
                   {stock.sector}
@@ -541,7 +546,7 @@ export function StrategiesPage() {
           className="card overflow-hidden"
         >
           <div className="panel-header gap-3 flex-wrap" style={{ paddingLeft: 16 }}>
-            <div className="w-0.5 h-4 rounded-full shrink-0" style={{ background: "#FA5D29" }} />
+            <div className="w-0.5 h-4 rounded-full shrink-0" style={{ background: "#3279F9" }} />
             <Zap style={{ width: 12, height: 12, color: "#A0A0BC" }} />
             <span className="panel-title">SIGNAL LOG</span>
             <div className="flex-1" />
@@ -563,76 +568,177 @@ export function StrategiesPage() {
             </div>
           </div>
 
+          {/* Signal log filter bar */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
+            padding: "7px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)",
+            background: "rgba(8,14,24,0.5)",
+          }}>
+            <Filter style={{ width: 9, height: 9, color: "var(--text-3)", flexShrink: 0 }} />
+            {/* Date range */}
+            <input
+              type="date" value={sigFromDate}
+              onChange={e => setSigFromDate(e.target.value)}
+              title="From date"
+              style={{
+                background: "rgba(13,22,36,0.8)", border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 4, padding: "2px 6px", color: "var(--text-1)",
+                fontFamily: "var(--font-mono)", fontSize: 9, outline: "none",
+                colorScheme: "dark",
+              }}
+            />
+            <span style={{ fontSize: 9, color: "var(--text-4)" }}>→</span>
+            <input
+              type="date" value={sigToDate}
+              onChange={e => setSigToDate(e.target.value)}
+              title="To date"
+              style={{
+                background: "rgba(13,22,36,0.8)", border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 4, padding: "2px 6px", color: "var(--text-1)",
+                fontFamily: "var(--font-mono)", fontSize: 9, outline: "none",
+                colorScheme: "dark",
+              }}
+            />
+            {(sigFromDate || sigToDate) && (
+              <button onClick={() => { setSigFromDate(""); setSigToDate(""); }}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-4)", fontSize: 9, padding: 0 }}>
+                ✕
+              </button>
+            )}
+            <div style={{ width: 1, height: 14, background: "rgba(255,255,255,0.08)", flexShrink: 0 }} />
+            {/* Strategy filter pills */}
+            <button
+              onClick={() => setSigStratFilter(null)}
+              style={{
+                fontSize: "9px", fontWeight: 700, padding: "2px 7px", borderRadius: 9999, border: "1px solid",
+                cursor: "pointer",
+                background: !sigStratFilter ? "rgba(50,121,249,0.15)" : "transparent",
+                color: !sigStratFilter ? "#3279F9" : "var(--text-3)",
+                borderColor: !sigStratFilter ? "rgba(50,121,249,0.3)" : "rgba(255,255,255,0.06)",
+              }}
+            >
+              ALL
+            </button>
+            {Object.entries(STRATEGY_LABELS).map(([key, label]) => {
+              const c = STRATEGY_COLORS[key] ?? "#3279F9";
+              return (
+                <button
+                  key={key}
+                  onClick={() => setSigStratFilter(prev => prev === key ? null : key)}
+                  style={{
+                    fontSize: "9px", fontWeight: 700, padding: "2px 7px", borderRadius: 9999, border: "1px solid",
+                    cursor: "pointer",
+                    background: sigStratFilter === key ? `${c}22` : "transparent",
+                    color: sigStratFilter === key ? c : "var(--text-3)",
+                    borderColor: sigStratFilter === key ? `${c}55` : "rgba(255,255,255,0.06)",
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
+            <div style={{ flex: 1 }} />
+            {/* Ticker search */}
+            <input
+              value={sigTickerSearch}
+              onChange={e => setSigTickerSearch(e.target.value)}
+              placeholder="Search ticker..."
+              style={{
+                background: "rgba(13,22,36,0.8)", border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 4, padding: "2px 8px", color: "var(--text-1)",
+                fontFamily: "var(--font-mono)", fontSize: 9, outline: "none", width: 110,
+              }}
+            />
+          </div>
+
           {sigLoading ? (
             <div className="p-4"><SkeletonTable rows={6} /></div>
           ) : !signals || signals.length === 0 ? (
             <SignalsEmptyState />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th className="tbl-th">Date</th>
-                    <th className="tbl-th">Ticker</th>
-                    <th className="tbl-th">Strategy</th>
-                    <th className="tbl-th-r">Signal</th>
-                    <th className="tbl-th" style={{ textAlign: "center" }}>Approved</th>
-                    <th className="tbl-th">Rejection Reason</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {signals.map((sig, i) => (
-                    <motion.tr
-                      key={`${sig.date}-${sig.ticker}-${sig.strategy}`}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: i * 0.01 }}
-                      className="tbl-row"
-                    >
-                      <td className="tbl-cell-muted" style={{ fontSize: "10px" }}>{formatDate(sig.date)}</td>
-                      <td className="tbl-cell">
-                        <button
-                          className="font-mono font-semibold hover:underline"
-                          style={{ color: "#FA5D29", fontSize: "11px" }}
-                          onClick={() => openChart(
-                            sig.ticker.replace(".NS", "").replace(".BO", ""),
-                            sig.ticker.replace(".NS", "").replace(".BO", ""),
-                          )}
+          ) : (() => {
+            const filtered = signals.filter(sig => {
+              if (sigStratFilter && sig.strategy !== sigStratFilter) return false;
+              if (sigFromDate && sig.date < sigFromDate) return false;
+              if (sigToDate && sig.date > sigToDate) return false;
+              if (sigTickerSearch) {
+                const q = sigTickerSearch.toUpperCase();
+                if (!sig.ticker.toUpperCase().includes(q)) return false;
+              }
+              return true;
+            });
+            return (
+              <div className="overflow-x-auto">
+                {filtered.length === 0 ? (
+                  <div style={{ padding: "32px 16px", textAlign: "center", color: "var(--text-3)", fontSize: 12 }}>
+                    No signals match the current filters
+                  </div>
+                ) : (
+                  <table className="tbl">
+                    <thead>
+                      <tr>
+                        <th className="tbl-th">Date</th>
+                        <th className="tbl-th">Ticker</th>
+                        <th className="tbl-th">Strategy</th>
+                        <th className="tbl-th-r">Signal</th>
+                        <th className="tbl-th" style={{ textAlign: "center" }}>Approved</th>
+                        <th className="tbl-th">Rejection Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((sig, i) => (
+                        <motion.tr
+                          key={`${sig.date}-${sig.ticker}-${sig.strategy}`}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ delay: i * 0.01 }}
+                          className="tbl-row"
                         >
-                          {sig.ticker.replace(".NS", "").replace(".BO", "")}
-                        </button>
-                      </td>
-                      <td className="tbl-cell">
-                        <div className="flex items-center gap-1.5">
-                          <div
-                            className="w-1.5 h-1.5 rounded-full"
-                            style={{ background: STRATEGY_COLORS[sig.strategy] ?? "#6B7280" }}
-                          />
-                          <span style={{ fontSize: "11px", color: "#A0A0BC" }}>
-                            {STRATEGY_LABELS[sig.strategy] ?? sig.strategy}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="tbl-cell-r">
-                        <SignalBadge value={sig.signal} />
-                      </td>
-                      <td className="tbl-cell" style={{ textAlign: "center" }}>
-                        {sig.approved
-                          ? <CheckCircle style={{ width: 14, height: 14, color: "#06D6A0", margin: "0 auto" }} />
-                          : <XCircle    style={{ width: 14, height: 14, color: "#FF4757", margin: "0 auto" }} />}
-                      </td>
-                      <td
-                        className="tbl-cell-muted"
-                        style={{ fontSize: "10px", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                      >
-                        {sig.rejection_reason ?? "—"}
-                      </td>
-                    </motion.tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                          <td className="tbl-cell-muted" style={{ fontSize: "10px" }}>{formatDate(sig.date)}</td>
+                          <td className="tbl-cell">
+                            <button
+                              className="font-mono font-semibold hover:underline"
+                              style={{ color: "#3279F9", fontSize: "11px" }}
+                              onClick={() => openChart(
+                                sig.ticker.replace(".NS", "").replace(".BO", ""),
+                                sig.ticker.replace(".NS", "").replace(".BO", ""),
+                              )}
+                            >
+                              {sig.ticker.replace(".NS", "").replace(".BO", "")}
+                            </button>
+                          </td>
+                          <td className="tbl-cell">
+                            <div className="flex items-center gap-1.5">
+                              <div
+                                className="w-1.5 h-1.5 rounded-full"
+                                style={{ background: STRATEGY_COLORS[sig.strategy] ?? "#6B7280" }}
+                              />
+                              <span style={{ fontSize: "11px", color: "#A0A0BC" }}>
+                                {STRATEGY_LABELS[sig.strategy] ?? sig.strategy}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="tbl-cell-r">
+                            <SignalBadge value={sig.signal} />
+                          </td>
+                          <td className="tbl-cell" style={{ textAlign: "center" }}>
+                            {sig.approved
+                              ? <CheckCircle style={{ width: 14, height: 14, color: "#27AE60", margin: "0 auto" }} />
+                              : <XCircle    style={{ width: 14, height: 14, color: "#E74C3C", margin: "0 auto" }} />}
+                          </td>
+                          <td
+                            className="tbl-cell-muted"
+                            style={{ fontSize: "10px", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                          >
+                            {sig.rejection_reason ?? "—"}
+                          </td>
+                        </motion.tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            );
+          })()}
         </motion.div>
 
       </div>

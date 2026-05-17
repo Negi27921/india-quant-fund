@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   Terminal, ScanSearch, LayoutDashboard,
   Shield, BarChart3, Settings2, ChevronLeft, LogOut,
-  Sun, Moon,
+  Sun, Moon, BookOpen,
 } from "lucide-react";
 import { AUTH_KEY, LOCK_KEY, FAIL_KEY } from "@/pages/Login";
 import { useUIStore } from "@/store/ui";
@@ -17,6 +17,7 @@ const NAV = [
   { to: "/risk",       icon: Shield,          label: "Risk",       end: false },
   { to: "/strategies", icon: BarChart3,       label: "Strategies", end: false },
   { to: "/settings",   icon: Settings2,       label: "Settings",   end: false },
+  { to: "/journal",    icon: BookOpen,        label: "Journal",    end: false },
 ];
 
 const ease = "cubic-bezier(0.25, 0.46, 0.45, 0.94)";

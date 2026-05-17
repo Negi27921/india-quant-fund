@@ -2,12 +2,13 @@ import React, { useState } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { Layout } from "@/components/layout/Layout";
-import { MarketPage }     from "@/pages/Market";
-import { ScreenerPage }   from "@/pages/Screener";
-import { PortfolioPage }  from "@/pages/Portfolio";
-import { RiskPage }       from "@/pages/Risk";
-import { StrategiesPage } from "@/pages/Strategies";
-import { SettingsPage }   from "@/pages/Settings";
+import { MarketPage }          from "@/pages/Market";
+import { ScreenerPage }        from "@/pages/Screener";
+import { PortfolioPage }       from "@/pages/Portfolio";
+import { RiskPage }            from "@/pages/Risk";
+import { StrategiesPage }      from "@/pages/Strategies";
+import { SettingsPage }        from "@/pages/Settings";
+import { TradingJournalPage }  from "@/pages/TradingJournal";
 import { LoginPage, hasValidSession } from "@/pages/Login";
 
 /* ── Error boundary ───────────────────────────────────────────────────────── */
@@ -26,27 +27,36 @@ class ErrorBoundary extends React.Component<
       return (
         <div style={{
           display: "flex", flexDirection: "column", alignItems: "center",
-          justifyContent: "center", height: "100vh", background: "#020407",
-          color: "#00ff87", gap: 16, fontFamily: '"JetBrains Mono", monospace',
+          justifyContent: "center", height: "100vh",
+          background: "#F8F9FC", gap: 16,
+          fontFamily: '"DM Sans", "Google Sans", system-ui, sans-serif',
           padding: 32, textAlign: "center",
         }}>
-          <pre style={{ color: "#f87171", fontSize: 32, margin: 0 }}>// SYSTEM FAULT</pre>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.15em" }}>EXCEPTION CAUGHT</div>
-          <div style={{ fontSize: 11, color: "rgba(0,255,135,0.6)", maxWidth: 480, lineHeight: 1.8 }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: "50%",
+            background: "rgba(231,76,60,0.08)",
+            border: "1px solid rgba(231,76,60,0.22)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 28,
+          }}>⚠</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#121317", letterSpacing: "-0.01em" }}>
+            Something went wrong
+          </div>
+          <div style={{ fontSize: 12, color: "#818590", maxWidth: 480, lineHeight: 1.7 }}>
             {this.state.error.message}
           </div>
           <button
             onClick={() => { this.setState({ error: null }); window.location.href = "/"; }}
             style={{
               marginTop: 8, padding: "10px 28px",
-              background: "transparent", color: "#00ff87",
-              border: "1px solid rgba(0,255,135,0.4)", borderRadius: 6,
-              cursor: "pointer", fontSize: 10, fontWeight: 700,
-              letterSpacing: "0.2em", fontFamily: '"JetBrains Mono", monospace',
-              boxShadow: "0 0 20px rgba(0,255,135,0.1)",
+              background: "#3279F9", color: "#fff",
+              border: "none", borderRadius: 9999,
+              cursor: "pointer", fontSize: 13, fontWeight: 600,
+              fontFamily: '"DM Sans", system-ui, sans-serif',
+              boxShadow: "0 4px 16px rgba(50,121,249,0.3)",
             }}
           >
-            [ RESTART ]
+            Reload Terminal
           </button>
         </div>
       );
@@ -74,6 +84,7 @@ export default function App() {
               <Route path="risk"       element={<RiskPage />} />
               <Route path="strategies" element={<StrategiesPage />} />
               <Route path="settings"   element={<SettingsPage />} />
+              <Route path="journal"    element={<TradingJournalPage />} />
             </Route>
           </Routes>
         </AnimatePresence>

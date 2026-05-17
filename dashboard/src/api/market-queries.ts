@@ -168,6 +168,17 @@ export const useIndexHistory = (
     enabled: !!ticker,
   });
 
+export const usePriceHistory = (ticker: string, enabled = true) =>
+  useQuery({
+    queryKey: ["market", "price-history", ticker],
+    queryFn: () =>
+      api.get<OHLCBar[]>(
+        `/market/history/${encodeURIComponent(ticker)}?period=1mo&interval=1d`
+      ),
+    staleTime: 10 * 60_000,
+    enabled: enabled && !!ticker,
+  });
+
 export const useStockQuote = (tickers: string) =>
   useQuery({
     queryKey: ["market", "quote", tickers],
