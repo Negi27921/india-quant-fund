@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { NSE_STOCKS } from "@/lib/nse-stocks";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   BookOpen, Plus, Trash2, TrendingUp, TrendingDown,
@@ -277,6 +278,7 @@ function AddTradeModal({ open, onClose, onSave, editing }: ModalProps) {
   const [mktCondition, setMktCondition] = useState("");
   const [ruleFollowed, setRuleFollowed] = useState<"Yes" | "No" | "Partial" | "">("");
   const [error, setError]               = useState("");
+  const [showStockSuggestions, setShowStockSuggestions] = useState(false);
   const firstRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -391,8 +393,50 @@ function AddTradeModal({ open, onClose, onSave, editing }: ModalProps) {
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
           <div>
             <label style={LABEL}>Stock Name *</label>
-            <input ref={firstRef} value={stockName} onChange={e => setStockName(e.target.value.toUpperCase())}
-              placeholder="e.g. RELIANCE" style={FIELD} />
+            <div style={{ position: "relative" }}>
+              <input
+                ref={firstRef}
+                type="text"
+                placeholder="Search stock (e.g. RELIANCE, INFY)..."
+                value={stockName}
+                onChange={e => { setStockName(e.target.value.toUpperCase()); setShowStockSuggestions(true); }}
+                onFocus={() => setShowStockSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowStockSuggestions(false), 200)}
+                style={FIELD}
+              />
+              {showStockSuggestions && stockName.length >= 1 && (() => {
+                const q = stockName.toUpperCase();
+                const matches = NSE_STOCKS.filter(s =>
+                  s.symbol.includes(q) || s.name.toUpperCase().includes(q)
+                ).slice(0, 10);
+                if (!matches.length) return null;
+                return (
+                  <div style={{
+                    position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100,
+                    background: "var(--surface)", border: "1px solid var(--border)",
+                    borderRadius: 8, boxShadow: "var(--shadow-lg)", maxHeight: 220, overflowY: "auto",
+                    marginTop: 2,
+                  }}>
+                    {matches.map(s => (
+                      <div
+                        key={s.symbol}
+                        onMouseDown={() => { setStockName(s.symbol); setShowStockSuggestions(false); }}
+                        style={{
+                          padding: "8px 12px", cursor: "pointer", display: "flex", gap: 8, alignItems: "center",
+                          borderBottom: "1px solid var(--border-2)",
+                          transition: "background 100ms",
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "var(--surface-2)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                      >
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "var(--accent)", minWidth: 80 }}>{s.symbol}</span>
+                        <span style={{ fontSize: 11, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>{s.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
           </div>
           <div>
             <label style={LABEL}>Buy Price *</label>

@@ -60,7 +60,15 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
   const [loading, setLoading] = useState(false);
   const [hoverData, setHoverData] = useState<Partial<OHLCV> | null>(null);
   const cleanSymbol = symbol ? symbol.replace(".NS", "").replace(".BO", "").toUpperCase() : "";
-  const yfSymbol = cleanSymbol ? `${cleanSymbol}.NS` : "";
+  const isIndex = cleanSymbol.startsWith("^") || cleanSymbol.includes("^");
+  const yfSymbol = cleanSymbol ? (isIndex ? cleanSymbol : `${cleanSymbol}.NS`) : "";
+  const displaySymbol = cleanSymbol.replace(/^\^/, "");
+
+  const TV_INDEX_MAP: Record<string, string> = {
+    "^NSEI": "NSE:NIFTY", "^NSEBANK": "NSE:BANKNIFTY",
+    "^BSESN": "BSE:SENSEX", "^NSEMDCP50": "NSE:MIDCPNIFTY", "^CNXIT": "NSE:NIFTYIT",
+  };
+  const tvSymbol = TV_INDEX_MAP[cleanSymbol] ?? `NSE:${cleanSymbol}`;
 
   const fetchData = useCallback(async () => {
     if (!yfSymbol) return;
@@ -87,6 +95,7 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
     const el = chartContainerRef.current;
 
     const chart = createChart(el, {
+      autoSize: true,
       layout: {
         background: { type: ColorType.Solid, color: "#000000" },
         textColor: "var(--text-3)",
@@ -149,17 +158,11 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
       }
     });
 
-    const ro = new ResizeObserver(() => {
-      chart.applyOptions({ width: el.clientWidth, height: el.clientHeight });
-    });
-    ro.observe(el);
-
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
     volSeriesRef.current = volSeries;
 
     return () => {
-      ro.disconnect();
       chart.remove();
       chartRef.current = null;
     };
@@ -225,7 +228,7 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3">
                   <span style={{ fontSize: "18px", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: "var(--text-1)", letterSpacing: "0.04em" }}>
-                    {cleanSymbol}
+                    {displaySymbol}
                   </span>
                   <span
                     style={{
@@ -265,7 +268,7 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
               <div className="flex items-center gap-1">
                 {loading && <RefreshCw style={{ width: 13, height: 13, color: "#3279F9", animation: "spin 1s linear infinite" }} />}
                 <a
-                  href={`https://www.tradingview.com/chart/?symbol=NSE%3A${cleanSymbol}`}
+                  href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tvSymbol)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-1.5 rounded flex items-center gap-1 transition-colors"
@@ -334,7 +337,7 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-center">
                     <div style={{ fontSize: "28px", marginBottom: 8 }}>📊</div>
-                    <div style={{ fontSize: "12px", color: "var(--text-3)", fontFamily: "Inter, sans-serif" }}>No chart data for {cleanSymbol}</div>
+                    <div style={{ fontSize: "12px", color: "var(--text-3)", fontFamily: "Inter, sans-serif" }}>No chart data for {displaySymbol}</div>
                     <div style={{ fontSize: "10px", color: "var(--text-3)", marginTop: 4, fontFamily: "Inter, sans-serif" }}>Market may be closed or symbol not found</div>
                   </div>
                 </div>

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import {
   TrendingUp, Activity, BarChart2,
@@ -6,6 +7,7 @@ import {
   RefreshCw, FileText, Clock, Filter, ExternalLink,
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
+import { useUIStore } from "@/store/ui";
 import {
   useMarketIndices, useMarketMovers, useMarketSectors,
   useFiiDiiToday, useAdvancesDeclines, useCorporateActions,
@@ -95,22 +97,14 @@ function Card({
   );
 }
 
-// TradingView symbol map for each index key
-const TV_SYMBOLS: Record<string, string> = {
-  nifty50:    "NSE:NIFTY",
-  banknifty:  "NSE:BANKNIFTY",
-  sensex:     "BSE:SENSEX",
-  niftymid50: "NSE:MIDCPNIFTY",
-  niftyit:    "NSE:NIFTYIT",
-};
-
 // ── Index chip ─────────────────────────────────────────────────────────────────
-function IndexChip({ label, data, indexKey }: { label: string; data?: IndexData; indexKey: string }) {
+function IndexChip({ label, data }: { label: string; data?: IndexData; indexKey: string }) {
   const [hovered, setHovered] = useState(false);
-  const { data: history } = usePriceHistory(data?.symbol ?? "", hovered);
-
+  const chipRef = useRef<HTMLDivElement>(null);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const { openChart } = useUIStore();
+  const { data: history } = usePriceHistory(data?.symbol ?? "", hovered && !!data?.symbol);
   const chartPoints = (history ?? []).map(b => ({ time: b.time as string, value: b.close }));
-  const tvSymbol = TV_SYMBOLS[indexKey];
 
   if (!data) {
     return (
@@ -126,54 +120,61 @@ function IndexChip({ label, data, indexKey }: { label: string; data?: IndexData;
       </div>
     );
   }
+
   const up = data.change_pct >= 0;
   const color = up ? "var(--green)" : "var(--red)";
 
+  const handleMouseEnter = () => {
+    if (chipRef.current) setRect(chipRef.current.getBoundingClientRect());
+    setHovered(true);
+  };
+
   return (
-    <div style={{ position: "relative", flexShrink: 0 }}>
-      {/* Hover popup — mini chart */}
-      {hovered && (
-        <div style={{
-          position: "absolute", bottom: "calc(100% + 8px)", left: "50%",
-          transform: "translateX(-50%)",
-          background: "var(--surface)",
-          border: `1px solid ${color}55`,
-          borderRadius: 10,
-          padding: "10px 10px 6px",
-          zIndex: 200,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-          minWidth: 210,
-          pointerEvents: "none",
-        }}>
-          <div style={{
-            fontSize: 9, fontFamily: "var(--font-body)", fontWeight: 700,
-            color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6,
-          }}>
+    <>
+      {/* Portal hover tooltip */}
+      {hovered && rect && createPortal(
+        <div
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          style={{
+            position: "fixed",
+            top: rect.bottom + 8,
+            left: rect.left + rect.width / 2,
+            transform: "translateX(-50%)",
+            zIndex: 9999,
+            background: "var(--surface)",
+            border: `1px solid ${color}55`,
+            borderRadius: 10,
+            padding: "10px 10px 8px",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+            minWidth: 210,
+            pointerEvents: "auto",
+          }}
+        >
+          <div style={{ fontSize: 9, fontFamily: "var(--font-body)", fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>
             {label} · 30-day
           </div>
           {chartPoints.length >= 2
             ? <MiniChart data={chartPoints} width={190} height={60} color={color} />
             : <div style={{ height: 60, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <div className="skeleton" style={{ width: 190, height: 60, borderRadius: 4 }} />
+                <div style={{ width: 190, height: 60, borderRadius: 4, background: "var(--surface-2)", animation: "pulse 1.5s ease-in-out infinite" }} />
               </div>
           }
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
-            marginTop: 6, fontSize: 9, color: "var(--accent)", fontFamily: "var(--font-body)", fontWeight: 600,
-          }}>
-            <ExternalLink style={{ width: 9, height: 9 }} />
-            Click to open TradingView
+          <div style={{ marginTop: 6, fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-body)", textAlign: "center" }}>
+            Click chip to open full chart
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Chip */}
       <div
+        ref={chipRef}
         role="button"
         tabIndex={0}
-        onClick={() => tvSymbol && window.open(`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tvSymbol)}`, "_blank")}
-        onKeyDown={e => e.key === "Enter" && tvSymbol && window.open(`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tvSymbol)}`, "_blank")}
-        onMouseEnter={() => setHovered(true)}
+        onClick={() => data?.symbol && openChart(data.symbol, label)}
+        onKeyDown={e => e.key === "Enter" && data?.symbol && openChart(data.symbol, label)}
+        onMouseEnter={handleMouseEnter}
         onMouseLeave={() => setHovered(false)}
         style={{
           padding: "10px 16px",
@@ -183,41 +184,25 @@ function IndexChip({ label, data, indexKey }: { label: string; data?: IndexData;
           borderRadius: 8,
           minWidth: 130,
           transition: "box-shadow 150ms ease",
-          cursor: tvSymbol ? "pointer" : "default",
+          cursor: "pointer",
           boxShadow: hovered ? `0 0 0 1px ${color}40` : "none",
         }}
       >
-        {/* Label + TV icon */}
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4,
-        }}>
-          <div style={{
-            fontSize: 9, fontFamily: "var(--font-body)", fontWeight: 700,
-            color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.12em",
-          }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+          <div style={{ fontSize: 9, fontFamily: "var(--font-body)", fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.12em" }}>
             {label}
           </div>
-          {tvSymbol && (
-            <ExternalLink style={{ width: 8, height: 8, color: "var(--text-4)", opacity: hovered ? 1 : 0.4, transition: "opacity 150ms" }} />
-          )}
+          <ExternalLink style={{ width: 8, height: 8, color: "var(--text-4)", opacity: hovered ? 1 : 0.4, transition: "opacity 150ms" }} />
         </div>
-        {/* Value */}
-        <div style={{
-          fontSize: 14, fontFamily: "var(--font-mono)", fontWeight: 700,
-          color: "var(--text-1)", lineHeight: 1, marginBottom: 3,
-        }}>
+        <div style={{ fontSize: 14, fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text-1)", lineHeight: 1, marginBottom: 3 }}>
           {data.price.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </div>
-        {/* Change */}
-        <div style={{
-          display: "flex", alignItems: "center", gap: 2,
-          fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 700, color,
-        }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 2, fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 700, color }}>
           {up ? <ArrowUpRight style={{ width: 10, height: 10 }} /> : <ArrowDownRight style={{ width: 10, height: 10 }} />}
           {Math.abs(data.change_pct).toFixed(2)}%
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -537,7 +522,7 @@ function FiiDiiPanel() {
           </div>
         ))}
         <a
-          href="https://www.nseindia.com/companies-listing/corporate-filings-fii-dii-data"
+          href="https://www.nseindia.com/reports/fii-dii"
           target="_blank" rel="noopener noreferrer"
           style={{
             marginLeft: "auto", display: "flex", alignItems: "center", gap: 3,
