@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ScanSearch, RefreshCw, CheckCircle2, XCircle, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Filter, Loader2, Rocket, Layers, Zap, ArrowUpRight, GitMerge, BarChart3, Globe, ExternalLink, Star } from "lucide-react";
 import { Header } from "@/components/layout/Header";
@@ -339,6 +339,19 @@ export function ScreenerPage() {
     }
   };
 
+  // Auto-trigger scan on mount if last_scan is null or >30 min old
+  useEffect(() => {
+    if (data === undefined) return; // wait for first fetch
+    const shouldScan = !data.last_scan || (() => {
+      const lastScanTime = new Date(data.last_scan).getTime();
+      return Date.now() - lastScanTime > 30 * 60 * 1000;
+    })();
+    if (shouldScan && !data.is_scanning && !scanning) {
+      handleScan();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.last_scan, data?.is_scanning]);
+
   const meta = STRATEGY_META[strategy];
 
   return (
@@ -381,7 +394,7 @@ export function ScreenerPage() {
             {scanning || data?.is_scanning
               ? <Loader2 style={{ width: 14, height: 14, animation: "spin 1s linear infinite" }} />
               : <RefreshCw style={{ width: 14, height: 14 }} />}
-            {scanning ? "Scanning..." : data?.is_scanning ? "Scan Running..." : "Run Scan"}
+            {scanning ? "Scanning..." : data?.is_scanning ? "Scan Running..." : "Refresh Scan"}
           </button>
         </div>
 
@@ -615,6 +628,29 @@ export function ScreenerPage() {
           borderRadius: 14, overflow: "hidden",
           borderTop: `3px solid ${meta.color}`,
         }}>
+          {/* Scan-in-progress banner — shown above stale results */}
+          <AnimatePresence>
+            {(scanning || data?.is_scanning) && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "10px 16px",
+                  background: "var(--accent-dim)",
+                  borderBottom: "1px solid var(--accent-border)",
+                }}
+              >
+                <Loader2 style={{ width: 14, height: 14, color: "var(--accent)", animation: "spin 1s linear infinite", flexShrink: 0 }} />
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--accent)", fontFamily: "var(--font-body)" }}>
+                  Scan in progress — showing last results
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {isLoading ? (
             <motion.div
               initial={{ opacity: 0 }}
@@ -628,20 +664,19 @@ export function ScreenerPage() {
                 <Loader2 style={{ width: 32, height: 32, color: "var(--accent)" }} />
               </motion.div>
               <div style={{ fontFamily: "var(--font-body)", fontSize: 13, color: "var(--text-3)" }}>
-                Scanning {data?.universe_size ?? (universe === "full" ? "2,137" : "503")} stocks for {meta.label} setups...
+                Loading cached results...
               </div>
-              <div style={{ fontSize: 11, color: "var(--text-4)" }}>Runs all batches in parallel — usually 20–40 seconds</div>
             </motion.div>
           ) : results.length === 0 ? (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 80, gap: 12 }}>
               <div style={{ fontSize: 40 }}>🔍</div>
               <div style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 600, color: "var(--text-2)" }}>
-                {data?.is_scanning ? "Scan in progress..." : "No setups found"}
+                {data?.is_scanning ? "First scan in progress..." : "No setups found"}
               </div>
               <div style={{ fontSize: 12, color: "var(--text-4)", textAlign: "center", maxWidth: 320 }}>
                 {data?.is_scanning
-                  ? "Results will appear when the scan completes. This takes ~60 seconds."
-                  : "Try lowering the confidence filter or clicking Run Scan to refresh."}
+                  ? "Results will appear here as soon as the scan completes (~20–60s)."
+                  : "Try lowering the confidence filter or click Refresh Scan."}
               </div>
               {!data?.is_scanning && (
                 <button
@@ -653,7 +688,7 @@ export function ScreenerPage() {
                     fontSize: 12, fontWeight: 600,
                   }}
                 >
-                  Run Scan Now
+                  Refresh Scan
                 </button>
               )}
             </div>

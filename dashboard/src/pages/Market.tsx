@@ -11,14 +11,23 @@ import { useUIStore } from "@/store/ui";
 import {
   useMarketIndices, useMarketMovers, useMarketSectors,
   useFiiDiiToday, useAdvancesDeclines, useCorporateActions,
-  useResultsCalendar, useFiiDii, useFilings, usePriceHistory,
+  useResultsCalendar, useFiiDii, useFilings,
   type CorporateAction, type ResultsMeeting, type FiiDiiRow,
   type IndexData, type Filing,
 } from "@/api/market-queries";
-import { MiniChart } from "@/components/charts/MiniChart";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Cell,
 } from "recharts";
+
+// ── TradingView symbol helpers ─────────────────────────────────────────────────
+const TV_INDEX_MAP: Record<string, string> = {
+  "^NSEI": "NSE:NIFTY", "^NSEBANK": "NSE:BANKNIFTY",
+  "^BSESN": "BSE:SENSEX", "^NSEMDCP50": "NSE:MIDCPNIFTY", "^CNXIT": "NSE:NIFTYIT",
+};
+function toTVSymbol(raw: string): string {
+  const clean = raw.replace(".NS", "").replace(".BO", "").toUpperCase();
+  return TV_INDEX_MAP[clean] ?? TV_INDEX_MAP["^" + clean] ?? `NSE:${clean}`;
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const upDn = (v: number) => (v > 0 ? "▲" : v < 0 ? "▼" : "—");
@@ -103,8 +112,6 @@ function IndexChip({ label, data }: { label: string; data?: IndexData; indexKey:
   const chipRef = useRef<HTMLDivElement>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
   const { openChart } = useUIStore();
-  const { data: history } = usePriceHistory(data?.symbol ?? "", hovered && !!data?.symbol);
-  const chartPoints = (history ?? []).map(b => ({ time: b.time as string, value: b.close }));
 
   if (!data) {
     return (
@@ -123,6 +130,12 @@ function IndexChip({ label, data }: { label: string; data?: IndexData; indexKey:
 
   const up = data.change_pct >= 0;
   const color = up ? "var(--green)" : "var(--red)";
+  const tvSymbol = data.symbol ? toTVSymbol(data.symbol) : "";
+  const isDark = document.documentElement.dataset.theme === "dark";
+  const tvTheme = isDark ? "dark" : "light";
+  const miniUrl = tvSymbol
+    ? `https://www.tradingview.com/widgetembed/?symbol=${encodeURIComponent(tvSymbol)}&interval=D&theme=${tvTheme}&style=2&hide_top_bar=1&hide_legend=1&save_image=0&locale=en`
+    : "";
 
   const handleMouseEnter = () => {
     if (chipRef.current) setRect(chipRef.current.getBoundingClientRect());
@@ -146,20 +159,26 @@ function IndexChip({ label, data }: { label: string; data?: IndexData; indexKey:
             border: `1px solid ${color}55`,
             borderRadius: 10,
             padding: "10px 10px 8px",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-            minWidth: 210,
+            boxShadow: "var(--shadow-lg)",
+            width: 220,
             pointerEvents: "auto",
           }}
         >
           <div style={{ fontSize: 9, fontFamily: "var(--font-body)", fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>
-            {label} · 30-day
+            {label} · TradingView
           </div>
-          {chartPoints.length >= 2
-            ? <MiniChart data={chartPoints} width={190} height={60} color={color} />
-            : <div style={{ height: 60, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <div style={{ width: 190, height: 60, borderRadius: 4, background: "var(--surface-2)", animation: "pulse 1.5s ease-in-out infinite" }} />
-              </div>
-          }
+          {miniUrl && (
+            <iframe
+              key={tvSymbol}
+              src={miniUrl}
+              width={200}
+              height={120}
+              frameBorder={0}
+              allowTransparency
+              title={`${label} mini chart`}
+              style={{ display: "block", border: "none", borderRadius: 4 }}
+            />
+          )}
           <div style={{ marginTop: 6, fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-body)", textAlign: "center" }}>
             Click chip to open full chart
           </div>

@@ -4,6 +4,7 @@ import {
   TrendingUp, TrendingDown, Zap, Activity, Target,
   Filter, ExternalLink, CheckCircle, XCircle,
 } from "lucide-react";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { Header } from "@/components/layout/Header";
 import { KillSwitchBanner } from "@/components/ui/KillSwitchBanner";
 import { Skeleton, SkeletonCard, SkeletonTable } from "@/components/ui/Skeleton";
@@ -66,7 +67,7 @@ function AllocationBars({
   if (!allocation || allocation.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-32 gap-2">
-        <Activity style={{ width: 20, height: 20, color: "rgba(255,255,255,0.06)" }} />
+        <Activity style={{ width: 20, height: 20, color: "var(--border-2)" }} />
         <p style={{ fontSize: "11px", color: "var(--text-3)" }}>No allocation data yet</p>
       </div>
     );
@@ -89,8 +90,8 @@ function AllocationBars({
             onClick={() => onSelect(isSelected ? null : a.strategy)}
             className="w-full text-left rounded-lg px-3 py-2.5 transition-all"
             style={{
-              background: isSelected ? `${color}12` : "rgba(13,22,36,0.5)",
-              border: `1px solid ${isSelected ? color + "40" : "rgba(255,255,255,0.06)"}`,
+              background: isSelected ? `${color}12` : "var(--surface-2)",
+              border: `1px solid ${isSelected ? color + "40" : "var(--border)"}`,
             }}
           >
             {/* Top row: label + weight */}
@@ -102,7 +103,7 @@ function AllocationBars({
                 />
                 <span
                   className="font-semibold uppercase tracking-wide"
-                  style={{ fontSize: "10px", color: isSelected ? color : "#A0A0BC", letterSpacing: "0.08em" }}
+                  style={{ fontSize: "10px", color: isSelected ? color : "var(--text-2)", letterSpacing: "0.08em" }}
                 >
                   {STRATEGY_LABELS[a.strategy] ?? a.strategy}
                 </span>
@@ -115,26 +116,28 @@ function AllocationBars({
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {sharpe !== undefined && (
-                  <span
-                    style={{
-                      fontSize: "9px",
-                      color: sharpe >= 1 ? "#27AE60" : sharpe >= 0.5 ? "#FBBF24" : "#E74C3C",
-                      fontFamily: "JetBrains Mono",
-                    }}
-                  >
-                    SR {sharpe.toFixed(2)}
-                  </span>
+                  <Tooltip content="Sharpe Ratio — risk-adjusted return. >1 = good, >2 = excellent. Measures return per unit of volatility.">
+                    <span
+                      style={{
+                        fontSize: "9px",
+                        color: sharpe >= 1 ? "var(--green)" : sharpe >= 0.5 ? "var(--amber)" : "var(--red)",
+                        fontFamily: "JetBrains Mono",
+                      }}
+                    >
+                      SR {sharpe.toFixed(2)}
+                    </span>
+                  </Tooltip>
                 )}
                 <span
                   className="font-mono font-bold"
-                  style={{ fontSize: "11px", color: "#FFFFFF" }}
+                  style={{ fontSize: "11px", color: "var(--text-1)" }}
                 >
                   {a.weight.toFixed(1)}%
                 </span>
               </div>
             </div>
             {/* Bar */}
-            <div className="h-1 rounded-full overflow-hidden" style={{ background: "rgba(13,22,36,0.8)" }}>
+            <div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--surface-3)" }}>
               <motion.div
                 className="h-full rounded-full"
                 style={{ background: color, boxShadow: isSelected ? `0 0 6px ${color}80` : "none" }}
@@ -158,9 +161,9 @@ function SignalBadge({ value }: { value: number }) {
       className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono font-bold"
       style={{
         fontSize: "10px",
-        background: isBuy ? "rgba(39,174,96,0.12)" : "rgba(231,76,60,0.12)",
-        color: isBuy ? "#27AE60" : "#E74C3C",
-        border: `1px solid ${isBuy ? "rgba(39,174,96,0.3)" : "rgba(231,76,60,0.3)"}`,
+        background: isBuy ? "var(--green-dim)" : "var(--red-dim)",
+        color: isBuy ? "var(--green)" : "var(--red)",
+        border: `1px solid ${isBuy ? "var(--green-border)" : "var(--red-border)"}`,
       }}
     >
       {isBuy
@@ -178,13 +181,13 @@ function SignalsEmptyState() {
       {/* Explanation card */}
       <div
         className="mx-4 mt-4 mb-3 rounded-xl p-4 flex gap-3 items-start"
-        style={{ background: "rgba(50,121,249,0.05)", border: "1px solid rgba(106,98,86,0.15)" }}
+        style={{ background: "var(--accent-dim)", border: "1px solid var(--accent-border)" }}
       >
         <Zap style={{ width: 16, height: 16, color: "var(--accent)", marginTop: 1, flexShrink: 0 }} />
         <div>
-          <p style={{ fontSize: "12px", color: "#A0A0BC", lineHeight: 1.6 }}>
-            Signal engine generates live <span style={{ color: "#27AE60" }}>BUY</span> /{" "}
-            <span style={{ color: "#E74C3C" }}>SELL</span> signals during market hours.
+          <p style={{ fontSize: "12px", color: "var(--text-2)", lineHeight: 1.6 }}>
+            Signal engine generates live <span style={{ color: "var(--green)" }}>BUY</span> /{" "}
+            <span style={{ color: "var(--red)" }}>SELL</span> signals during market hours.
             Strategies scan Nifty 500 constituents every 15 minutes for qualifying setups.
           </p>
           <p style={{ fontSize: "10px", color: "var(--text-3)", marginTop: 6 }}>
@@ -234,7 +237,7 @@ function SignalsEmptyState() {
                         className="w-1.5 h-1.5 rounded-full"
                         style={{ background: STRATEGY_COLORS[sig.strategy] ?? "#6B7280" }}
                       />
-                      <span style={{ fontSize: "11px", color: "#A0A0BC" }}>
+                      <span style={{ fontSize: "11px", color: "var(--text-2)" }}>
                         {STRATEGY_LABELS[sig.strategy] ?? sig.strategy}
                       </span>
                     </div>
@@ -244,8 +247,8 @@ function SignalsEmptyState() {
                   </td>
                   <td className="tbl-cell" style={{ textAlign: "center" }}>
                     {sig.approved
-                      ? <CheckCircle style={{ width: 14, height: 14, color: "#27AE60", margin: "0 auto" }} />
-                      : <XCircle    style={{ width: 14, height: 14, color: "#E74C3C", margin: "0 auto" }} />}
+                      ? <CheckCircle style={{ width: 14, height: 14, color: "var(--green)", margin: "0 auto" }} />
+                      : <XCircle    style={{ width: 14, height: 14, color: "var(--red)", margin: "0 auto" }} />}
                   </td>
                   <td className="tbl-cell-muted" style={{ fontSize: "10px" }}>
                     {sig.rejection_reason ?? "—"}
@@ -353,9 +356,11 @@ export function StrategiesPage() {
                             {STRATEGY_LABELS[p.strategy] ?? p.strategy}
                           </span>
                         </div>
-                        <Badge variant={p.sharpe_ratio >= 1 ? "success" : p.sharpe_ratio >= 0.5 ? "warning" : "danger"}>
-                          SR {p.sharpe_ratio.toFixed(2)}
-                        </Badge>
+                        <Tooltip content="Sharpe Ratio — risk-adjusted return. >1 = good, >2 = excellent. Measures return per unit of volatility.">
+                          <Badge variant={p.sharpe_ratio >= 1 ? "success" : p.sharpe_ratio >= 0.5 ? "warning" : "danger"}>
+                            SR {p.sharpe_ratio.toFixed(2)}
+                          </Badge>
+                        </Tooltip>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
@@ -395,7 +400,7 @@ export function StrategiesPage() {
           {/* Header */}
           <div className="panel-header gap-3 flex-wrap" style={{ paddingLeft: 16 }}>
             <div className="w-0.5 h-4 rounded-full shrink-0" style={{ background: "var(--accent)" }} />
-            <Target style={{ width: 12, height: 12, color: "#A0A0BC" }} />
+            <Target style={{ width: 12, height: 12, color: "var(--text-2)" }} />
             <span className="panel-title">STOCK UNIVERSE</span>
             {selectedStrategy && (
               <span style={{ fontSize: "10px", color: "var(--accent)" }}>
@@ -410,9 +415,9 @@ export function StrategiesPage() {
                 className="px-2 py-0.5 rounded-full transition-all"
                 style={{
                   fontSize: "9px", fontWeight: 700, letterSpacing: "0.08em",
-                  background: !selectedStrategy ? "rgba(106,98,86,0.15)" : "rgba(106,98,86,0.5)",
-                  color: !selectedStrategy ? "var(--accent)" : "var(--text-3)",
-                  border: `1px solid ${!selectedStrategy ? "rgba(106,98,86,0.3)" : "rgba(255,255,255,0.06)"}`,
+                  background: !selectedStrategy ? "var(--accent)" : "var(--surface-2)",
+                  color: !selectedStrategy ? "var(--bg)" : "var(--text-3)",
+                  border: `1px solid ${!selectedStrategy ? "var(--accent)" : "var(--border)"}`,
                 }}
               >
                 ALL STRATS
@@ -426,9 +431,9 @@ export function StrategiesPage() {
                     className="px-2 py-0.5 rounded-full transition-all"
                     style={{
                       fontSize: "9px", fontWeight: 700, letterSpacing: "0.08em",
-                      background: selectedStrategy === key ? `${c}22` : "rgba(106,98,86,0.5)",
-                      color: selectedStrategy === key ? c : "var(--text-3)",
-                      border: `1px solid ${selectedStrategy === key ? c + "55" : "rgba(255,255,255,0.06)"}`,
+                      background: selectedStrategy === key ? c : "var(--surface-2)",
+                      color: selectedStrategy === key ? "#fff" : "var(--text-3)",
+                      border: `1px solid ${selectedStrategy === key ? c : "var(--border)"}`,
                     }}
                   >
                     {label}
@@ -441,7 +446,7 @@ export function StrategiesPage() {
           {/* Sector + search filter bar */}
           <div
             className="px-4 py-2 flex items-center gap-1.5 flex-wrap"
-            style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(8,14,24,0.5)" }}
+            style={{ borderBottom: "1px solid var(--border)", background: "var(--surface-2)" }}
           >
             <Filter style={{ width: 9, height: 9, color: "var(--text-3)", marginRight: 2 }} />
             <span style={{ fontSize: "9px", color: "var(--text-3)", letterSpacing: "0.1em", marginRight: 4 }}>SECTOR:</span>
@@ -452,9 +457,9 @@ export function StrategiesPage() {
                 className="px-2 py-0.5 rounded transition-all"
                 style={{
                   fontSize: "9px", fontWeight: 600,
-                  background: sectorFilter === s ? "rgba(106,98,86,0.1)" : "transparent",
+                  background: sectorFilter === s ? "var(--accent-dim)" : "transparent",
                   color: sectorFilter === s ? "var(--accent)" : "var(--text-3)",
-                  border: `1px solid ${sectorFilter === s ? "rgba(106,98,86,0.25)" : "transparent"}`,
+                  border: `1px solid ${sectorFilter === s ? "var(--accent-border)" : "transparent"}`,
                   borderRadius: 4,
                 }}
               >
@@ -482,17 +487,17 @@ export function StrategiesPage() {
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: Math.min(i * 0.006, 0.25) }}
                 className="relative group rounded-lg px-2.5 py-2 cursor-pointer transition-all"
-                style={{ background: "rgba(13,22,36,0.6)", border: "1px solid rgba(255,255,255,0.06)" }}
+                style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
                 onClick={() => openChart(stock.symbol, stock.name)}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background    = "rgba(106,98,86,0.08)";
-                  e.currentTarget.style.borderColor   = "rgba(106,98,86,0.3)";
+                  e.currentTarget.style.background    = "var(--card-hover)";
+                  e.currentTarget.style.borderColor   = "var(--accent-border)";
                   e.currentTarget.style.transform     = "scale(1.02)";
-                  e.currentTarget.style.boxShadow     = "0 0 12px rgba(106,98,86,0.12)";
+                  e.currentTarget.style.boxShadow     = "var(--shadow-sm)";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background    = "rgba(13,22,36,0.6)";
-                  e.currentTarget.style.borderColor   = "rgba(255,255,255,0.06)";
+                  e.currentTarget.style.background    = "var(--surface-2)";
+                  e.currentTarget.style.borderColor   = "var(--border)";
                   e.currentTarget.style.transform     = "scale(1)";
                   e.currentTarget.style.boxShadow     = "none";
                 }}
@@ -528,7 +533,7 @@ export function StrategiesPage() {
                   className="mt-1 inline-block px-1 rounded"
                   style={{
                     fontSize: "7.5px", color: "var(--text-3)", letterSpacing: "0.06em",
-                    background: "rgba(106,98,86,0.4)", border: "1px solid rgba(255,255,255,0.06)",
+                    background: "var(--surface-3)", border: "1px solid var(--border)",
                   }}
                 >
                   {stock.sector}
@@ -547,7 +552,7 @@ export function StrategiesPage() {
         >
           <div className="panel-header gap-3 flex-wrap" style={{ paddingLeft: 16 }}>
             <div className="w-0.5 h-4 rounded-full shrink-0" style={{ background: "var(--accent)" }} />
-            <Zap style={{ width: 12, height: 12, color: "#A0A0BC" }} />
+            <Zap style={{ width: 12, height: 12, color: "var(--text-2)" }} />
             <span className="panel-title">SIGNAL LOG</span>
             <div className="flex-1" />
             <div className="flex items-center gap-1">
@@ -571,8 +576,8 @@ export function StrategiesPage() {
           {/* Signal log filter bar */}
           <div style={{
             display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
-            padding: "7px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)",
-            background: "rgba(8,14,24,0.5)",
+            padding: "7px 14px", borderBottom: "1px solid var(--border)",
+            background: "var(--surface-2)",
           }}>
             <Filter style={{ width: 9, height: 9, color: "var(--text-3)", flexShrink: 0 }} />
             {/* Date range */}
@@ -581,10 +586,9 @@ export function StrategiesPage() {
               onChange={e => setSigFromDate(e.target.value)}
               title="From date"
               style={{
-                background: "rgba(13,22,36,0.8)", border: "1px solid rgba(255,255,255,0.08)",
+                background: "var(--surface)", border: "1px solid var(--border)",
                 borderRadius: 4, padding: "2px 6px", color: "var(--text-1)",
                 fontFamily: "var(--font-mono)", fontSize: 9, outline: "none",
-                colorScheme: "dark",
               }}
             />
             <span style={{ fontSize: 9, color: "var(--text-4)" }}>→</span>
@@ -593,10 +597,9 @@ export function StrategiesPage() {
               onChange={e => setSigToDate(e.target.value)}
               title="To date"
               style={{
-                background: "rgba(13,22,36,0.8)", border: "1px solid rgba(255,255,255,0.08)",
+                background: "var(--surface)", border: "1px solid var(--border)",
                 borderRadius: 4, padding: "2px 6px", color: "var(--text-1)",
                 fontFamily: "var(--font-mono)", fontSize: 9, outline: "none",
-                colorScheme: "dark",
               }}
             />
             {(sigFromDate || sigToDate) && (
@@ -605,16 +608,16 @@ export function StrategiesPage() {
                 ✕
               </button>
             )}
-            <div style={{ width: 1, height: 14, background: "rgba(255,255,255,0.08)", flexShrink: 0 }} />
+            <div style={{ width: 1, height: 14, background: "var(--border-2)", flexShrink: 0 }} />
             {/* Strategy filter pills */}
             <button
               onClick={() => setSigStratFilter(null)}
               style={{
                 fontSize: "9px", fontWeight: 700, padding: "2px 7px", borderRadius: 9999, border: "1px solid",
                 cursor: "pointer",
-                background: !sigStratFilter ? "rgba(106,98,86,0.15)" : "transparent",
-                color: !sigStratFilter ? "var(--accent)" : "var(--text-3)",
-                borderColor: !sigStratFilter ? "rgba(106,98,86,0.3)" : "rgba(255,255,255,0.06)",
+                background: !sigStratFilter ? "var(--accent)" : "transparent",
+                color: !sigStratFilter ? "var(--bg)" : "var(--text-3)",
+                borderColor: !sigStratFilter ? "var(--accent)" : "var(--border)",
               }}
             >
               ALL
@@ -628,9 +631,9 @@ export function StrategiesPage() {
                   style={{
                     fontSize: "9px", fontWeight: 700, padding: "2px 7px", borderRadius: 9999, border: "1px solid",
                     cursor: "pointer",
-                    background: sigStratFilter === key ? `${c}22` : "transparent",
-                    color: sigStratFilter === key ? c : "var(--text-3)",
-                    borderColor: sigStratFilter === key ? `${c}55` : "rgba(255,255,255,0.06)",
+                    background: sigStratFilter === key ? c : "transparent",
+                    color: sigStratFilter === key ? "#fff" : "var(--text-3)",
+                    borderColor: sigStratFilter === key ? c : "var(--border)",
                   }}
                 >
                   {label}
@@ -644,7 +647,7 @@ export function StrategiesPage() {
               onChange={e => setSigTickerSearch(e.target.value)}
               placeholder="Search ticker..."
               style={{
-                background: "rgba(13,22,36,0.8)", border: "1px solid rgba(255,255,255,0.08)",
+                background: "var(--surface)", border: "1px solid var(--border)",
                 borderRadius: 4, padding: "2px 8px", color: "var(--text-1)",
                 fontFamily: "var(--font-mono)", fontSize: 9, outline: "none", width: 110,
               }}
@@ -712,7 +715,7 @@ export function StrategiesPage() {
                                 className="w-1.5 h-1.5 rounded-full"
                                 style={{ background: STRATEGY_COLORS[sig.strategy] ?? "#6B7280" }}
                               />
-                              <span style={{ fontSize: "11px", color: "#A0A0BC" }}>
+                              <span style={{ fontSize: "11px", color: "var(--text-2)" }}>
                                 {STRATEGY_LABELS[sig.strategy] ?? sig.strategy}
                               </span>
                             </div>
@@ -722,8 +725,8 @@ export function StrategiesPage() {
                           </td>
                           <td className="tbl-cell" style={{ textAlign: "center" }}>
                             {sig.approved
-                              ? <CheckCircle style={{ width: 14, height: 14, color: "#27AE60", margin: "0 auto" }} />
-                              : <XCircle    style={{ width: 14, height: 14, color: "#E74C3C", margin: "0 auto" }} />}
+                              ? <CheckCircle style={{ width: 14, height: 14, color: "var(--green)", margin: "0 auto" }} />
+                              : <XCircle    style={{ width: 14, height: 14, color: "var(--red)", margin: "0 auto" }} />}
                           </td>
                           <td
                             className="tbl-cell-muted"

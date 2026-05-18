@@ -127,74 +127,74 @@
   --shadow-green:  0 4px 16px rgba(39,174,96,0.20);
 }
 
-/* ── Dark Mode — Stone Paper Warm Charcoal ──────────────────────────────── */
+/* ── Dark Mode — Violet / Blue Glass ────────────────────────────────────── */
 [data-theme="dark"] {
-  /* Surfaces — warm near-black (not pure black) */
-  --bg:        #0F0E0C;
-  --surface:   #1A1917;
-  --surface-2: #262320;
-  --surface-3: #2E2B27;
-  --overlay:   rgba(15,14,12,0.97);
+  /* Surfaces — deep near-black with blue tint */
+  --bg:        #0a0a0f;
+  --surface:   rgba(255, 255, 255, 0.035);
+  --surface-2: rgba(255, 255, 255, 0.06);
+  --surface-3: rgba(255, 255, 255, 0.09);
+  --overlay:   rgba(10, 10, 15, 0.97);
 
-  /* Olive accent — lightened for dark */
-  --accent:        #A0947F;
-  --accent-hover:  #B3A894;
-  --accent-dim:    rgba(160,148,127,0.12);
-  --accent-border: rgba(160,148,127,0.28);
-  --accent-dark:   #857A6D;
+  /* Violet accent */
+  --accent:        #a78bfa;
+  --accent-hover:  #c4b5fd;
+  --accent-dim:    rgba(167, 139, 250, 0.12);
+  --accent-border: rgba(167, 139, 250, 0.35);
+  --accent-dark:   #7c3aed;
 
-  /* Financial semantic — bright for dark */
-  --green:        #22C55E;
-  --green-hover:  #16A34A;
-  --green-dim:    rgba(34,197,94,0.10);
-  --green-border: rgba(34,197,94,0.26);
-  --green-dark:   #15803D;
+  /* Financial semantic — vivid for dark */
+  --green:        #34d399;
+  --green-hover:  #10b981;
+  --green-dim:    rgba(52, 211, 153, 0.10);
+  --green-border: rgba(52, 211, 153, 0.26);
+  --green-dark:   #059669;
 
-  --red:          #F87171;
-  --red-dim:      rgba(248,113,113,0.10);
-  --red-border:   rgba(248,113,113,0.26);
+  --red:          #f87171;
+  --red-dim:      rgba(248, 113, 113, 0.10);
+  --red-border:   rgba(248, 113, 113, 0.26);
 
-  --amber:        #FBBF24;
-  --amber-dim:    rgba(251,191,36,0.10);
-  --amber-border: rgba(251,191,36,0.26);
+  --amber:        #f59e0b;
+  --amber-dim:    rgba(245, 158, 11, 0.10);
+  --amber-border: rgba(245, 158, 11, 0.26);
 
-  --yellow:        #A0947F;
-  --yellow-dark:   #6A6256;
-  --yellow-dim:    rgba(160,148,127,0.10);
-  --yellow-border: rgba(160,148,127,0.26);
+  --yellow:        #a78bfa;
+  --yellow-dark:   #7c3aed;
+  --yellow-dim:    rgba(167, 139, 250, 0.10);
+  --yellow-border: rgba(167, 139, 250, 0.26);
 
-  /* Borders — warm Stone Paper dark family */
-  --border:        rgba(235,231,231,0.07);
-  --border-2:      rgba(235,231,231,0.11);
-  --border-strong: rgba(235,231,231,0.17);
-  --border-accent: rgba(160,148,127,0.30);
-  --border-green:  rgba(34,197,94,0.28);
-  --border-red:    rgba(248,113,113,0.28);
+  /* Borders — crisp white-alpha */
+  --border:        rgba(255, 255, 255, 0.08);
+  --border-2:      rgba(255, 255, 255, 0.12);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-accent: rgba(167, 139, 250, 0.35);
+  --border-green:  rgba(52, 211, 153, 0.28);
+  --border-red:    rgba(248, 113, 113, 0.28);
 
-  /* Typography — Stone Paper cream family */
-  --text-1: #EBE7E7;
-  --text-2: #C5BEB5;
-  --text-3: #9A9490;
-  --text-4: #635D57;
+  /* Typography */
+  --text-1: #f5f5f7;
+  --text-2: #d4d4d8;
+  --text-3: #a1a1aa;
+  --text-4: #71717a;
 
   /* Layout */
-  --sidebar-bg:     #0F0E0C;
-  --sidebar-border: rgba(235,231,231,0.06);
-  --card-bg:        #1A1917;
-  --card-hover:     #262320;
-  --input-bg:       #1A1917;
-  --input-border:   rgba(235,231,231,0.12);
+  --sidebar-bg:     #0a0a0f;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --card-bg:        linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.015));
+  --card-hover:     linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+  --input-bg:       rgba(255, 255, 255, 0.04);
+  --input-border:   rgba(255, 255, 255, 0.12);
 
-  /* Shadows — deep warm */
-  --shadow-sm:     0 1px 3px rgba(0,0,0,0.70);
-  --shadow-md:     0 4px 16px rgba(0,0,0,0.80);
-  --shadow-lg:     0 8px 40px rgba(0,0,0,0.90), 0 0 0 1px rgba(235,231,231,0.04);
-  --shadow-accent: 0 4px 24px rgba(160,148,127,0.30);
-  --shadow-yellow: 0 4px 16px rgba(160,148,127,0.20);
-  --shadow-green:  0 4px 16px rgba(34,197,94,0.25);
+  /* Shadows */
+  --shadow-sm:     0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-md:     0 4px 12px rgba(0, 0, 0, 0.40);
+  --shadow-lg:     0 8px 32px rgba(0, 0, 0, 0.50), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --shadow-accent: 0 4px 24px rgba(167, 139, 250, 0.30);
+  --shadow-yellow: 0 4px 16px rgba(167, 139, 250, 0.20);
+  --shadow-green:  0 4px 16px rgba(52, 211, 153, 0.25);
 }
 
-/* ── Ambient background orbs — olive tones ──────────────────────────────── */
+/* ── Ambient background orbs ────────────────────────────────────────────── */
 @keyframes orb-drift-1 {
   0%,100% { transform: translate(0,0) scale(1); }
   33%  { transform: translate(40px,-30px) scale(1.06); }
@@ -229,15 +229,15 @@ body::after {
   z-index: 0;
 }
 [data-theme="dark"] body::before {
-  background: radial-gradient(ellipse, rgba(160,148,127,0.07) 0%, transparent 68%);
+  background: radial-gradient(ellipse, rgba(167,139,250,0.06) 0%, transparent 68%);
 }
 [data-theme="dark"] body::after {
-  background: radial-gradient(ellipse, rgba(160,148,127,0.05) 0%, transparent 68%);
+  background: radial-gradient(ellipse, rgba(96,165,250,0.04) 0%, transparent 68%);
 }
 
-/* ── Dark body — warm charcoal gradient (Stone Paper dark) ─────────────── */
+/* ── Dark body — deep violet-black ─────────────────────────────────────── */
 [data-theme="dark"] body {
-  background: radial-gradient(ellipse at top left, #171412 0%, #0F0E0C 55%, #13120F 100%);
+  background: #0a0a0f;
 }
 
 /* ── Keyframes ──────────────────────────────────────────────────────────── */
@@ -449,7 +449,7 @@ html, body {
   .input::placeholder { color: var(--text-4); }
 
   /* ── Tables ── */
-  .tbl { width:100%; border-collapse:collapse; }
+  .tbl { width:100%; border-collapse:collapse; table-layout: fixed; }
   .tbl thead tr {
     border-bottom: 1.5px solid var(--border);
     background: var(--surface-2);
@@ -481,6 +481,9 @@ html, body {
     padding: 10px 14px;
     white-space: nowrap;
     font-feature-settings: "tnum";
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .tbl-cell-r     { @apply tbl-cell; text-align:right; }
   .tbl-cell-muted { @apply tbl-cell; color:var(--text-3); font-family:var(--font-body); }
@@ -556,11 +559,15 @@ html, body {
     background: transparent;
     color: var(--text-3);
   }
-  .pill:hover { color:var(--text-1); border-color:var(--border-2); }
-  .pill.active {
+  .pill:hover {
+    color: var(--text-1);
+    border-color: var(--accent);
     background: var(--accent-dim);
-    border-color: var(--accent-border);
-    color: var(--accent);
+  }
+  .pill.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
   }
 
   /* ── Typography — Stone Paper hierarchy ── */
@@ -667,6 +674,42 @@ html, body {
 [data-theme="dark"] .tab-item.active {
   box-shadow: 0 2px 8px rgba(160,148,127,0.28);
 }
+
+/* ── Grid background + top glow (dark mode only) ───────────────────────── */
+.grid-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+  background-position: -1px -1px;
+  mask-image: radial-gradient(ellipse 100% 70% at 50% 0%, #000 30%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 100% 70% at 50% 0%, #000 30%, transparent 80%);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+[data-theme="dark"] .grid-bg { opacity: 0.55; }
+
+.glow-top {
+  position: fixed;
+  z-index: 0;
+  pointer-events: none;
+  top: -260px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 900px;
+  height: 520px;
+  filter: blur(70px);
+  background:
+    radial-gradient(closest-side, rgba(167,139,250,0.55), transparent 70%),
+    radial-gradient(closest-side at 30% 50%, rgba(96,165,250,0.35), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+[data-theme="dark"] .glow-top { opacity: 0.55; }
 
 /* ── Recharts overrides ─────────────────────────────────────────────────── */
 .recharts-tooltip-wrapper { outline:none !important; }
