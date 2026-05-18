@@ -11,12 +11,15 @@
 
 ## What It Does
 
-- **Screens 2,137 NSE stocks** across 7 strategies, 3× daily
-- **Paper trades ₹25,000/pick** on every ≥95% confidence signal automatically
+- **Screens 500–2,137 NSE stocks** across 7 strategies with sub-second cached responses
+- **Never-block scan architecture** — HTTP returns immediately with stale/cached data; fresh scans run in the background and persist to Supabase
+- **Paper trades ₹25,000/pick** on every ≥70% confidence signal automatically
 - **Self-improving AI agent** (Hermes-style) analyses win rates and improves strategies daily
 - **10 PM daily Telegram + email report** with performance, insights, and top picks
-- **Real-time dashboard** — market data, screener, portfolio, risk, strategies
+- **Real-time dashboard** — market data, screener, portfolio, risk, strategies, earnings results
 - **Kill switch + target/SL** on every paper trade, automatic exit tracking
+- **Earnings Results page** — earningspulse-style rating cards (Excellent → Weak) with metric trends
+- **AI Chatbot** — Groq → Gemini → OpenRouter fallback, <9s total timeout budget
 
 ---
 
@@ -42,9 +45,10 @@
     ▼                        ▼                        ▼
 FastAPI Backend        React Dashboard          Telegram Bot
 onepiece-labs.vercel   luffy-labs.vercel        Daily alerts
-9 API routers          6 pages                  Trade exits
-WebSocket              Matrix theme             10PM report
-Groq AI chat           TanStack Query
+9 API routers          8 pages                  Trade exits
+WebSocket              Luxury dark theme        10PM report
+Groq/Gemini AI chat    TanStack Query
+Screener cache         Framer Motion
 ```
 
 ---
@@ -96,32 +100,40 @@ python scripts/daily_report.py
 
 ## Screener Strategies
 
-| Strategy | Key Conditions | Target | SL | Hold Days |
-|----------|---------------|--------|-----|-----------|
-| **VCP** | Volatility contraction, volume dry-up, tight base | 8% | 4% | 15 |
-| **IPO Base** | Recent IPO (<2yr), tight range, volume recovery | 12% | 5% | 20 |
-| **Rocket Base** | Short tight base after >30% move, breakout vol | 15% | 6% | 10 |
-| **Breakout** | 52W high, 3× avg volume, RSI 55–75 | 7% | 3% | 10 |
-| **RSI Reversal** | RSI <35→50 reversal, above SMA200, vol pickup | 6% | 3% | 7 |
-| **Golden Cross** | EMA50 crosses above EMA200, rising volume | 10% | 4% | 20 |
-| **Multibagger** | 11-condition scan (below) | 20% | 7% | 30 |
+| Strategy | Key Conditions | Data Period | SL | Hold Days |
+|----------|---------------|------------|-----|-----------|
+| **VCP** | 4-wave volatility contraction, drying volume, EMA stack | 60d | 4% | 15 |
+| **IPO Base** | Recent IPO (<4mo data), tight 15d range, vol dry-up | 60d | 6% | 20 |
+| **Rocket Base** | 60%+ move in 90d, correction ≤20%, vol contracting | 120d | 10% | 10 |
+| **Breakout** | Near 52W high (<3%), vol surge 1.8×, range expansion | 260d | 8% | 10 |
+| **RSI Reversal** | RSI recovered from <33, positive divergence, vol surge | 60d | 6% | 7 |
+| **Golden Cross** | EMA20 crossed EMA50 (≤10d ago), SMA200 slope ↑ | 260d | 8% | 20 |
+| **Multibagger / CUSTOM** | 12-condition deep scan (below) | 260d | 15% | 30 |
 
-### Multibagger 11 Conditions (≥10/11 = 95% confidence)
+### Multibagger 12 Conditions (confidence = conditions_passed / 12 × 100)
 ```
-1.  EMA Stack:        EMA9 > EMA20 > EMA50
-2.  Above SMA200:     Price > SMA200
-3.  SMA200 Slope:     Rising >0.3% per 30 days
-4.  RSI Zone:         55 ≤ RSI ≤ 78
-5.  Recovery:         +15% from 90-day low
-6.  Not Overextended: Within 40% of 52W High
-7.  Base Forming:     20d range < 30% of 52W range
-8.  Inst. Accum:      5d vol > 20d vol × 1.1
-9.  Vol Re-entry:     3d avg ≥ 20d avg × 1.5
-10. Not Extended:     LTP within 20% of EMA50
-11. Liquidity:        Avg volume > 75,000 shares
+Technical DNA (from price analysis of 16 actual FY25-26 winners):
+1.  EMA Stack:             EMA9 > EMA20 > EMA50
+2.  Above SMA200:          Price > SMA200
+3.  SMA200 Slope:          Rising over 10d
+4.  RSI Sweet Spot:        55 ≤ RSI ≤ 78
+5.  Recovery from Low:     +15% from 90-day swing low
+6.  Within 40% of 52W High
+7.  Base Forming:          20d range < 30%
+
+Fundamental Proxies (from concall/rating/announcement research):
+8.  Revenue Accel Proxy:   90d momentum > ½ × 180d (stock pricing in order wins)
+9.  Inst. Accumulation:    5d avg vol > 20d avg vol (post-rating/concall buying)
+10. Volume Re-entry:       3d avg ≥ 1.5× 20d avg
+11. Not Extended:          Price within 20% of EMA50 (entry zone, not chasing)
+12. Liquidity:             Avg volume > 75,000 shares
 ```
 
-**Confidence = conditions_passed / 11 × 100. Only ≥95% (≥10/11) passes.**
+### Scan Performance
+- **Nifty 500 (503 stocks):** ~30–60s first scan, instant from cache thereafter
+- **Full NSE (2,137 stocks):** ~3–8 min first scan, instant from cache (4h TTL)
+- **Cache architecture:** in-process memory → Supabase PostgreSQL (survives serverless restarts)
+- **Never-block GET:** `/screener/results` always responds instantly; scans run in background threads
 
 ---
 
@@ -131,10 +143,12 @@ python scripts/daily_report.py
 
 **Rules:**
 - Fixed **₹25,000 per trade**
-- Only stocks with confidence **≥ 95%**
+- Only stocks with confidence **≥ 70%** (Strong tier)
 - Max **30 open trades** simultaneously
 - **Kill switch**: halt new trades if daily realised loss > 15%
 - Auto-exit on: **target hit** / **SL hit** / held past **hold_days**
+
+**Frontend tracking:** High-confidence screener results are auto-recorded in browser localStorage as paper trades with real-time P&L, SL/TP monitoring, and per-strategy breakdown cards.
 
 **Supabase table:** `paper_trades`
 
@@ -165,6 +179,35 @@ save_strategy_insight(strategy, insight, action, win_rate)  # persist learning
 
 ---
 
+## AI Chatbot
+
+**Endpoint:** `POST /api/chat/message`
+
+**Fallback chain with strict timeouts:**
+1. **Groq** (Llama 3.3 70B) — 5s timeout, max 800 tokens
+2. **Gemini Flash** — 6s timeout, max 800 tokens
+3. **OpenRouter** (Claude Haiku / Mistral) — 6s timeout
+4. **Helpful fallback message** if all fail
+
+Total asyncio budget: 8.5s (safely within Vercel 10s limit)
+
+Context injected: live indices, FII/DII flows, sector performance, screener status, market regime.
+
+---
+
+## Earnings Results Page
+
+**Route:** `/results`
+
+Earningspulse.ai-style quarterly earnings analysis dashboard:
+- **Rating system:** Excellent / Great / Good / Ok / Weak
+- **Metric cards:** Revenue, Other Income, Operating Profit, OPM%, PAT, EPS with QoQ/YoY change
+- **Mini trend charts:** Revenue, PAT, EPS inline bar sparklines
+- **Filters:** Rating pills, search, sort (time/rating/sales/PAT), grid/list toggle
+- **Live data:** Backend at `/api/market/quarterly-results`; falls back to curated sample data
+
+---
+
 ## Daily Report (10 PM IST)
 
 **Script:** `scripts/daily_report.py`
@@ -172,11 +215,11 @@ save_strategy_insight(strategy, insight, action, win_rate)  # persist learning
 Sent via: **Telegram** + **Email (Resend)**
 
 Report sections:
-1. Screener hits per strategy (≥95% confidence count)
+1. Screener hits per strategy (≥70% confidence count)
 2. Paper trading today (exits, PNL, win rate, open exposure)
 3. 30-day win rates by strategy
 4. Strategy agent insights
-5. Top picks for tomorrow (≥97% confidence)
+5. Top picks for tomorrow (≥90% confidence)
 
 **Failure handling:** Telegram fails → email error alert; Email fails → Telegram error alert
 
@@ -199,35 +242,41 @@ Report sections:
 
 ### Screener
 ```
-GET  /api/screener/results?strategy=vcp&universe=nifty500
-POST /api/screener/scan?strategy=multibagger&universe=full
-GET  /api/screener/status
+GET  /api/screener/results?strategy=vcp&universe=nifty500   # instant (cached)
+GET  /api/screener/results?strategy=multibagger&universe=full
+POST /api/screener/scan?strategy=multibagger&universe=nifty500  # force refresh
+GET  /api/screener/status   # cache state for all strategies
 ```
+
+**Strategies:** `vcp` | `ipo_base` | `rocket_base` | `breakout` | `rsi_reversal` | `golden_cross` | `multibagger` | `custom` (alias for multibagger)
 
 ### Market
 ```
-GET /api/market/indices      # Nifty 50, Sensex, Bank Nifty
-GET /api/market/fii-dii      # FII/DII flows + 69-day history
-GET /api/market/movers       # Top gainers/losers
-GET /api/market/sectors      # Sector performance
-GET /api/market/filings      # BSE corporate filings feed
+GET /api/market/indices          # Nifty 50, Sensex, Bank Nifty, Nifty IT, Midcap
+GET /api/market/global-indices   # GIFT NIFTY, Brent Crude, Dow Jones
+GET /api/market/fii-dii          # FII/DII flows + 69-day history
+GET /api/market/movers           # Top gainers/losers
+GET /api/market/sectors          # Sector performance
+GET /api/market/filings          # BSE corporate filings feed
+GET /api/market/history/{ticker} # OHLCV candlestick data (lightweight-charts)
+GET /api/market/quarterly-results # Earnings results with ratings
 ```
 
 ### Portfolio / Trades / Risk
 ```
-GET /api/portfolio/summary   # Value, P&L, drawdown
-GET /api/portfolio/positions # Holdings list
-GET /api/trades/history      # Trade blotter
-GET /api/risk/metrics        # VaR, Sharpe, drawdown
+GET /api/portfolio/summary       # Value, P&L, drawdown
+GET /api/portfolio/positions     # Holdings list
+GET /api/trades/history          # Trade blotter (filterable by status, date)
+GET /api/risk/metrics            # VaR, Sharpe, drawdown
 GET /api/strategies/performance  # Per-strategy stats
 ```
 
 ### AI + System
 ```
-POST /api/chat/message       # AI chat with live market context
-POST /api/telegram           # Telegram webhook
-GET  /health                 # Health check
-WS   /ws                     # Live P&L WebSocket (5s interval)
+POST /api/chat/message           # AI chat with live market context
+POST /api/telegram               # Telegram webhook
+GET  /health                     # Health check
+WS   /ws                         # Live P&L WebSocket (5s interval)
 ```
 
 ---
@@ -236,12 +285,25 @@ WS   /ws                     # Live P&L WebSocket (5s interval)
 
 | Route | Page | Features |
 |-------|------|---------|
-| `/` | Market Terminal | Indices, FII/DII, sector heatmap, top movers, BSE filings |
-| `/screener` | Screener | 7 strategies, confidence badges, Supabase cache, force-scan |
+| `/` | Market Terminal | Indices chips (Indian + Global), FII/DII flows, sector heatmap, top movers, BSE filings feed, AI chatbot |
+| `/screener` | Screener | 7 strategies + CUSTOM, confidence badges, Supabase cache, background scan, paper trade auto-recording |
 | `/portfolio` | Portfolio | HOLDINGS \| P&L \| TRADES \| LIVE tabs |
-| `/risk` | Risk | VaR, drawdown chart, sector exposure, kill switch |
+| `/results` | Earnings Results | Quarterly results with Excellent/Great/Good/Ok/Weak ratings, metric trends, mini charts |
 | `/strategies` | Strategies | Per-strategy performance + signal cards |
-| `/settings` | Settings | Paper/live toggle, kill switch, thresholds |
+| `/journal` | Trading Journal | Trade notes and analysis |
+| `/settings` | Settings | Trading Agent Config \| Connections & Alerts \| Risk Monitor (3-tab, Risk merged here) |
+
+---
+
+## Chart System
+
+OHLCV charts use **TradingView lightweight-charts** (native, no iframe):
+- Data sourced from backend `/api/market/history/{ticker}` via yfinance
+- Timeframes: 5m, 15m, 1h, 1D, 1W, 1M
+- Candlestick + volume bars on separate price scale
+- "Open in TradingView" external link preserved
+- Slide-in drawer with spring animation
+- Works for all NSE stocks + indices (^NSEI, BZ=F, ^DJI)
 
 ---
 
@@ -279,7 +341,7 @@ CREATE TABLE IF NOT EXISTS strategy_notes (
   updated_at  DATE
 );
 
--- Screener cache (if not exists)
+-- Screener cache (survived serverless restarts)
 CREATE TABLE IF NOT EXISTS screener_cache (
   strategy    TEXT NOT NULL,
   universe    TEXT NOT NULL,
@@ -298,12 +360,13 @@ CREATE TABLE IF NOT EXISTS screener_cache (
 |--------|--------|---------|
 | `SUPABASE_URL` | ✅ Set | Database URL |
 | `SUPABASE_KEY` | ✅ Set | Database service key |
-| `RESEND_API_KEY` | ✅ Set | Email (re_faPbhjDX...) |
-| `REPORT_EMAIL` | ✅ Set | negi2950@gmail.com |
+| `RESEND_API_KEY` | ✅ Set | Email |
+| `REPORT_EMAIL` | ✅ Set | Recipient email |
 | `TELEGRAM_BOT_TOKEN` | ✅ Set | Bot token |
 | `TELEGRAM_CHAT_ID` | ✅ Set | Chat ID |
-| `GROQ_API_KEY` | ⚠️ Add | Strategy agent LLM |
-| `OPENROUTER_API_KEY` | Optional | LLM fallback |
+| `GROQ_API_KEY` | ✅ Set | AI chat + strategy agent |
+| `GEMINI_API_KEY` | ✅ Set | AI chat fallback #1 |
+| `OPENROUTER_API_KEY` | Optional | AI chat fallback #2 |
 
 ---
 
@@ -313,28 +376,27 @@ CREATE TABLE IF NOT EXISTS screener_cache (
 |-------|-----------|
 | Backend | FastAPI + Python 3.11, Vercel serverless |
 | Frontend | React 19 + Vite + TypeScript + Tailwind + Framer Motion |
-| Charts | Recharts |
+| Charts | TradingView lightweight-charts (OHLCV candlesticks) + Recharts (analytics) |
 | Server state | TanStack Query v5 |
 | UI state | Zustand |
 | Database | Supabase (PostgreSQL cloud) |
-| Local cache | DuckDB |
-| AI Chat | Groq Llama 3.3 70B → DeepSeek → Gemini → OpenRouter |
-| AI Agent | Groq + OpenRouter (Hermes tool-calling) |
+| AI Chat | Groq Llama 3.3 70B → Gemini Flash → OpenRouter (cascading fallback, <9s) |
+| AI Agent | Groq + OpenRouter (Hermes tool-calling architecture) |
+| Market data | yfinance (batch downloads, 500 stocks / batch) |
 | Email | Resend API |
 | Notifications | Telegram Bot API |
 | Scheduling | GitHub Actions cron |
-| Brokers | Dhan API (primary) + Shoonya/Finvasia (failover) |
+| Brokers | Zerodha Kite API (MCP integration) |
 
 ---
 
-## Design
+## Performance Notes
 
-- **Background:** `#020407` (space black)
-- **Primary:** `#00ff87` (matrix green)
-- **Font:** JetBrains Mono
-- **Style:** Matrix/space terminal, glassmorphism cards
-- **Logo:** Luffy straw hat silhouette in matrix green (`/favicon.svg`)
-- **Title:** Luffy Labs | One Piece Quant Terminal
+- **Vercel hobby plan:** 10s function timeout — all endpoints designed to return in <2s
+- **Screener:** GET /results never blocks; scans run in ThreadPoolExecutor background threads
+- **AI chat:** 3-provider fallback with per-provider 5-6s timeout, total budget 8.5s
+- **Caching:** 4h in-process + Supabase persistence; stale-while-revalidate pattern
+- **yfinance batching:** 100 tickers per `yf.download()` call with `threads=True`
 
 ---
 

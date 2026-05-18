@@ -17,6 +17,7 @@ import {
   Bot,
   RefreshCw as RefreshIcon,
   Save,
+  Shield,
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { KillSwitchBanner } from "@/components/ui/KillSwitchBanner";
@@ -34,18 +35,25 @@ import {
   type ProbeResult,
   type AgentConfig,
 } from "@/api/settings-queries";
-import { formatCurrency } from "@/lib/utils";
+import { useRiskMetrics, useRiskLimits, useDrawdownHistory, useKillSwitchStatus } from "@/api/queries";
+import { DrawdownChart } from "@/components/charts/DrawdownChart";
+import { StatCard } from "@/components/ui/StatCard";
+import { formatCurrency, formatPct } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
 // ── Tier badges ───────────────────────────────────────────────────────────────
 function TierBadge({ tier }: { tier: string }) {
-  const map: Record<string, string> = {
-    free:  "bg-success/10 text-success border border-success/20",
-    paid:  "bg-warning/10 text-warning border border-warning/20",
-    local: "bg-primary/10 text-primary border border-primary/20",
+  const styles: Record<string, React.CSSProperties> = {
+    free:  { background: "var(--green-dim)", color: "var(--green)", border: "1px solid var(--green-border)" },
+    paid:  { background: "var(--amber-dim)", color: "var(--amber)", border: "1px solid var(--amber-border)" },
+    local: { background: "var(--accent-dim)", color: "var(--accent)", border: "1px solid var(--accent-border)" },
   };
   return (
-    <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full uppercase tracking-wider", map[tier] ?? map.paid)}>
+    <span style={{
+      fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 9999,
+      textTransform: "uppercase", letterSpacing: "0.08em",
+      ...( styles[tier] ?? styles.paid ),
+    }}>
       {tier === "local" ? "local" : tier === "free" ? "free" : "paid"}
     </span>
   );
@@ -127,10 +135,8 @@ function LLMSection() {
               <motion.div
                 key={p.id}
                 layout
-                className={cn(
-                  "card overflow-hidden transition-all",
-                  isActive && "border-primary/30 bg-primary/5"
-                )}
+                className="card overflow-hidden transition-all"
+                style={isActive ? { borderColor: "var(--accent-border)", background: "var(--accent-dim)" } : {}}
               >
                 {/* Header row */}
                 <button
@@ -138,10 +144,11 @@ function LLMSection() {
                   onClick={() => setExpanded(expanded === p.id ? null : p.id)}
                 >
                   {/* Active indicator */}
-                  <div className={cn(
-                    "w-2 h-2 rounded-full shrink-0",
-                    isActive ? "bg-primary" : p.has_key ? "bg-success/50" : "bg-bg-overlay"
-                  )} />
+                  <div style={{
+                    width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+                    background: isActive ? "var(--accent)" : p.has_key ? "var(--green)" : "var(--surface-3)",
+                    opacity: p.has_key && !isActive ? 0.5 : 1,
+                  }} />
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -161,10 +168,10 @@ function LLMSection() {
                     {probeResult ? (
                       <div className="flex items-center gap-1.5">
                         <StatusIcon status={probeResult.status as "ok"} />
-                        <span className={cn(
-                          "text-xs",
-                          probeResult.status === "ok" ? "text-success" : "text-danger"
-                        )}>
+                        <span style={{
+                          fontSize: 12,
+                          color: probeResult.status === "ok" ? "var(--green)" : "var(--red)",
+                        }}>
                           {probeResult.status}
                         </span>
                       </div>
@@ -188,7 +195,7 @@ function LLMSection() {
                       animate={{ height: "auto", opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
                       transition={{ duration: 0.2 }}
-                      className="border-t border-border bg-bg-elevated px-4 py-3 space-y-3"
+                      style={{ borderTop: "1px solid var(--border)", background: "var(--surface-2)", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 12 }}
                     >
                       {/* Key preview */}
                       {p.has_key && p.key_preview && (
@@ -202,7 +209,7 @@ function LLMSection() {
 
                       {/* Probe error */}
                       {probeResult?.error && (
-                        <div className="text-xs text-danger bg-danger/10 rounded p-2 font-mono">
+                        <div style={{ fontSize: 12, color: "var(--red)", background: "var(--red-dim)", borderRadius: 6, padding: "8px", fontFamily: "var(--font-mono)" }}>
                           {probeResult.error}
                         </div>
                       )}
@@ -214,12 +221,12 @@ function LLMSection() {
                           {p.models.map((m) => (
                             <span
                               key={m}
-                              className={cn(
-                                "text-[10px] font-mono px-2 py-0.5 rounded border",
-                                m === p.model
-                                  ? "border-primary/40 text-primary bg-primary/10"
-                                  : "border-border text-text-muted bg-bg-overlay"
-                              )}
+                              style={{
+                                fontSize: 10, fontFamily: "var(--font-mono)", padding: "1px 8px", borderRadius: 4,
+                                border: `1px solid ${m === p.model ? "var(--accent-border)" : "var(--border)"}`,
+                                color: m === p.model ? "var(--accent)" : "var(--text-3)",
+                                background: m === p.model ? "var(--accent-dim)" : "var(--surface-3)",
+                              }}
                             >
                               {m}
                             </span>
@@ -241,8 +248,8 @@ function LLMSection() {
                       )}
 
                       {/* .env instruction */}
-                      <div className="bg-bg-overlay rounded p-2 text-[10px] font-mono text-text-muted space-y-0.5">
-                        <p className="text-text-secondary font-semibold mb-1">.env</p>
+                      <div style={{ background: "var(--surface-3)", borderRadius: 6, padding: 8, fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-3)" }}>
+                        <p style={{ color: "var(--text-2)", fontWeight: 600, marginBottom: 4 }}>.env</p>
                         {p.id === "groq"     && <><p>GROQ_API_KEY=gsk_…</p><p>GROQ_MODEL={p.model}</p><p>LLM_PROVIDER=groq</p></>}
                         {p.id === "deepseek" && <><p>DEEPSEEK_API_KEY=sk-…</p><p>LLM_PROVIDER=deepseek</p></>}
                         {p.id === "gemini"   && <><p>GEMINI_API_KEY=AIza…</p><p>LLM_PROVIDER=gemini</p></>}
@@ -279,14 +286,14 @@ function BrokersSection() {
       ) : (
         <div className="space-y-2">
           {data?.map((b) => (
-            <div key={b.id} className={cn(
-              "card p-4 flex items-center gap-4",
-              b.has_key ? "border-success/20" : "border-border"
-            )}>
-              <div className={cn(
-                "w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold",
-                b.has_key ? "bg-success/10 text-success" : "bg-bg-overlay text-text-muted"
-              )}>
+            <div key={b.id} className="card p-4 flex items-center gap-4"
+              style={{ borderColor: b.has_key ? "var(--green-border)" : "var(--border)" }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 12, fontWeight: 700,
+                background: b.has_key ? "var(--green-dim)" : "var(--surface-3)",
+                color: b.has_key ? "var(--green)" : "var(--text-3)",
+              }}>
                 {b.label[0]}
               </div>
               <div className="flex-1">
@@ -347,10 +354,9 @@ function AlertsSection() {
       ) : (
         <div className="space-y-2">
           {/* Telegram */}
-          <div className={cn(
-            "card p-4 space-y-3",
-            data?.telegram.configured ? "border-success/20" : "border-border"
-          )}>
+          <div className="card p-4 space-y-3"
+            style={{ borderColor: data?.telegram.configured ? "var(--green-border)" : "var(--border)" }}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-text-primary">Telegram</span>
@@ -386,10 +392,11 @@ function AlertsSection() {
                   initial={{ opacity: 0, y: -4 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
-                  className={cn(
-                    "text-xs p-2 rounded flex items-center gap-2",
-                    testResult.ok ? "bg-success/10 text-success" : "bg-danger/10 text-danger"
-                  )}
+                  style={{
+                    fontSize: 12, padding: 8, borderRadius: 6, display: "flex", alignItems: "center", gap: 8,
+                    background: testResult.ok ? "var(--green-dim)" : "var(--red-dim)",
+                    color: testResult.ok ? "var(--green)" : "var(--red)",
+                  }}
                 >
                   {testResult.ok ? (
                     <><CheckCircle className="w-3.5 h-3.5" /> Message delivered successfully</>
@@ -401,8 +408,8 @@ function AlertsSection() {
             </AnimatePresence>
 
             {!data?.telegram.configured && (
-              <div className="text-xs text-text-muted space-y-1 bg-bg-elevated rounded p-3">
-                <p className="font-medium text-text-secondary">Setup steps:</p>
+              <div style={{ fontSize: 12, color: "var(--text-3)", background: "var(--surface-2)", borderRadius: 6, padding: 12 }}>
+                <p style={{ fontWeight: 600, color: "var(--text-2)", marginBottom: 4 }}>Setup steps:</p>
                 <p>1. Message <span className="text-primary">@BotFather</span> → /newbot</p>
                 <p>2. Copy the token → add to <code className="text-warning">.env</code> as <code>TELEGRAM_BOT_TOKEN</code></p>
                 <p>3. Send a message to your bot, then visit:</p>
@@ -421,10 +428,9 @@ function AlertsSection() {
           </div>
 
           {/* Email */}
-          <div className={cn(
-            "card p-4",
-            data?.email.configured ? "border-success/20" : "border-border"
-          )}>
+          <div className="card p-4"
+            style={{ borderColor: data?.email.configured ? "var(--green-border)" : "var(--border)" }}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-text-primary">Email (SMTP)</span>
@@ -476,16 +482,20 @@ function EnvSection() {
           <table className="w-full">
             <tbody>
               {rows.map((row, i) => (
-                <tr key={i} className="border-b border-border last:border-0 hover:bg-bg-elevated transition-colors">
-                  <td className="px-4 py-2.5 text-xs text-text-muted w-40">{row.label}</td>
-                  <td className={cn(
-                    "px-4 py-2.5 text-xs",
-                    row.mono ? "font-mono text-text-primary" : "text-text-primary",
-                    row.label === "Paper Trading" && !data?.paper_trading && "text-danger font-semibold"
-                  )}>
+                <tr key={i} style={{ borderBottom: "1px solid var(--border)", transition: "background 100ms" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "var(--surface-2)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                >
+                  <td style={{ padding: "10px 16px", fontSize: 12, color: "var(--text-3)", fontFamily: "var(--font-body)", width: 160 }}>{row.label}</td>
+                  <td style={{
+                    padding: "10px 16px", fontSize: 12,
+                    fontFamily: row.mono ? "var(--font-mono)" : "var(--font-body)",
+                    color: row.label === "Paper Trading" && !data?.paper_trading ? "var(--red)" : "var(--text-1)",
+                    fontWeight: row.label === "Paper Trading" && !data?.paper_trading ? 700 : 400,
+                  }}>
                     {row.value}
                   </td>
-                  <td className="px-4 py-2.5 w-8">
+                  <td style={{ padding: "10px 16px", width: 32 }}>
                     {row.mono && <CopyButton text={row.value} />}
                   </td>
                 </tr>
@@ -582,16 +592,17 @@ function TradingAgentSection() {
                   <button
                     key={s}
                     onClick={() => toggleStrategy(s)}
-                    className={cn(
-                      "text-left p-2.5 rounded-lg border text-xs transition-all",
-                      active
-                        ? "border-primary/40 bg-primary/5 text-text-primary"
-                        : "border-border bg-bg-elevated text-text-muted opacity-60"
-                    )}
+                    style={{
+                      textAlign: "left", padding: 10, borderRadius: 8, fontSize: 12, transition: "all 150ms",
+                      border: `1px solid ${active ? "var(--accent-border)" : "var(--border)"}`,
+                      background: active ? "var(--accent-dim)" : "var(--surface-2)",
+                      color: active ? "var(--text-1)" : "var(--text-3)",
+                      opacity: active ? 1 : 0.7, cursor: "pointer",
+                    }}
                   >
-                    <div className="font-semibold mb-1">{strategyLabels[s]}</div>
+                    <div style={{ fontWeight: 600, marginBottom: 4, fontFamily: "var(--font-body)" }}>{strategyLabels[s]}</div>
                     {params && (
-                      <div className="text-[10px] text-text-muted font-mono">
+                      <div style={{ fontSize: 10, color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>
                         TP +{params.target_pct}% · SL -{params.sl_pct}% · {params.hold_days}d
                       </div>
                     )}
@@ -618,53 +629,202 @@ function TradingAgentSection() {
   );
 }
 
+// ── Risk Monitor section (merged from Risk page) ──────────────────────────────
+function LimitBar({ label, value, limit, unit = "%" }: { label: string; value: number; limit: number; unit?: string }) {
+  const pct = Math.min((value / limit) * 100, 100);
+  const isDanger = value >= limit;
+  const isWarn   = value >= limit * 0.75;
+  const valColor = isDanger ? "var(--red)" : isWarn ? "var(--amber)" : "var(--text-1)";
+  const barColor = isDanger ? "var(--red)" : isWarn ? "var(--amber)" : "var(--accent)";
+  return (
+    <div style={{ padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ fontSize: 12, color: "var(--text-2)", fontFamily: "var(--font-body)" }}>{label}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 12, fontFamily: "var(--font-mono)", fontWeight: 600, color: valColor }}>
+            {value.toFixed(2)}{unit}
+          </span>
+          <span style={{ fontSize: 11, color: "var(--text-3)" }}>/ {limit}{unit}</span>
+          {isDanger ? <XCircle style={{ width: 13, height: 13, color: "var(--red)" }} /> :
+           isWarn   ? <AlertTriangle style={{ width: 13, height: 13, color: "var(--amber)" }} /> :
+                      <CheckCircle style={{ width: 13, height: 13, color: "var(--green)" }} />}
+        </div>
+      </div>
+      <div style={{ height: 5, borderRadius: 9999, background: "var(--surface-3)", overflow: "hidden" }}>
+        <motion.div
+          style={{ height: "100%", borderRadius: 9999, background: barColor }}
+          initial={{ width: 0 }} animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function RiskSection() {
+  const { data: risk, isLoading: riskLoading } = useRiskMetrics();
+  const { data: limits } = useRiskLimits();
+  const { data: dd } = useDrawdownHistory(90);
+  const { data: ks } = useKillSwitchStatus();
+  const ksActive = ks?.active;
+
+  return (
+    <section className="space-y-4">
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Shield style={{ width: 15, height: 15, color: "var(--accent)" }} />
+        <h2 style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-body)" }}>
+          Risk Monitor
+        </h2>
+      </div>
+
+      {/* Kill switch */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderRadius: 10,
+        border: `1px solid ${ksActive ? "rgba(248,113,113,0.3)" : "rgba(34,197,94,0.3)"}`,
+        background: ksActive ? "rgba(248,113,113,0.07)" : "rgba(34,197,94,0.06)",
+      }}>
+        {ksActive
+          ? <XCircle style={{ width: 22, height: 22, color: "var(--red)", flexShrink: 0 }} />
+          : <CheckCircle style={{ width: 22, height: 22, color: "var(--green)", flexShrink: 0 }} />}
+        <div style={{ flex: 1 }}>
+          <p style={{ fontSize: 13, fontWeight: 600, color: ksActive ? "var(--red)" : "var(--green)", fontFamily: "var(--font-body)" }}>
+            Kill Switch: {ksActive ? "ACTIVE — Trading Halted" : "Inactive — Normal Operation"}
+          </p>
+          {ks?.reason && <p style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>{ks.reason}</p>}
+        </div>
+        <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", padding: "3px 10px", borderRadius: 9999, background: ksActive ? "var(--red)" : "var(--green)", color: "#fff" }}>
+          {ksActive ? "HALTED" : "LIVE"}
+        </span>
+      </div>
+
+      {/* KPI grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        {riskLoading ? Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="skeleton" style={{ height: 80, borderRadius: 10 }} />
+        )) : (
+          <>
+            <StatCard label="Current Drawdown" value={<span style={{ color: "var(--red)" }}>{formatPct(-(risk?.drawdown_pct ?? 0))}</span>} subValue={`Alert: ${risk?.drawdown_alert}% | Limit: ${risk?.drawdown_limit}%`} variant={(risk?.drawdown_pct ?? 0) >= (risk?.drawdown_limit ?? 12) ? "danger" : "default"} delay={0} />
+            <StatCard label="Daily P&L" value={<span style={{ color: (risk?.daily_loss_pct ?? 0) >= 0 ? "var(--green)" : "var(--red)" }}>{formatPct(risk?.daily_loss_pct ?? 0)}</span>} subValue={`Limit: -${risk?.daily_loss_limit}%`} delay={0.05} />
+            <StatCard label="Sharpe (63d)" value={<span style={{ color: (risk?.rolling_sharpe_63d ?? 0) >= 1 ? "var(--green)" : "var(--amber)" }}>{(risk?.rolling_sharpe_63d ?? 0).toFixed(2)}</span>} subValue="Annualised, RFR 6.5%" delay={0.1} />
+            <StatCard label="Max Position" value={`${risk?.max_position_pct ?? 0}%`} subValue={`Sector cap: ${risk?.max_sector_pct ?? 0}%`} delay={0.15} />
+          </>
+        )}
+      </div>
+
+      {/* Drawdown chart + limit bars */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div className="card" style={{ padding: 16 }}>
+          <p style={{ fontSize: 11, fontWeight: 600, color: "var(--text-2)", marginBottom: 12 }}>Drawdown (90d)</p>
+          <DrawdownChart data={dd ?? []} alertLevel={risk?.drawdown_alert} limitLevel={risk?.drawdown_limit} height={140} />
+        </div>
+        <div className="card" style={{ padding: 16 }}>
+          <p style={{ fontSize: 11, fontWeight: 600, color: "var(--text-2)", marginBottom: 8 }}>Limit Utilisation</p>
+          {risk ? (
+            <>
+              <LimitBar label="Portfolio Drawdown" value={Math.abs(risk.drawdown_pct)} limit={risk.drawdown_limit} />
+              <LimitBar label="Daily Loss" value={Math.abs(Math.min(0, risk.daily_loss_pct))} limit={risk.daily_loss_limit} />
+              <LimitBar label="Max Position" value={risk.position_utilization_pct ?? 0} limit={risk.max_position_pct} />
+              <LimitBar label="Sector Exposure" value={risk.sector_utilization_pct ?? 0} limit={risk.max_sector_pct} />
+            </>
+          ) : Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="skeleton" style={{ height: 40, borderRadius: 6, marginBottom: 10 }} />
+          ))}
+        </div>
+      </div>
+
+      {/* Risk config limits */}
+      {limits && (
+        <div className="card" style={{ padding: 16 }}>
+          <p style={{ fontSize: 10, fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>
+            Risk Configuration (risk_limits.yaml)
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+            {Object.entries(limits).map(([section, vals]) => (
+              <div key={section} style={{ background: "var(--surface-2)", borderRadius: 8, padding: 12 }}>
+                <p style={{ fontSize: 9, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700, marginBottom: 8 }}>{section}</p>
+                {Object.entries(vals as Record<string, number>).map(([k, v]) => (
+                  <div key={k} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "3px 0" }}>
+                    <span style={{ fontSize: 11, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>{k.replace(/_/g, " ")}</span>
+                    <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-1)" }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
+type SettingsTab = "agent" | "connections" | "risk";
+
 export function SettingsPage() {
+  const [tab, setTab] = useState<SettingsTab>("agent");
+
+  const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
+    { id: "agent",       label: "Trading Agent Config", icon: <Bot style={{ width: 13, height: 13 }} /> },
+    { id: "connections", label: "Connections & Alerts",  icon: <Wifi style={{ width: 13, height: 13 }} /> },
+    { id: "risk",        label: "Risk Monitor",          icon: <Shield style={{ width: 13, height: 13 }} /> },
+  ];
+
   return (
     <div className="flex flex-col min-h-screen">
       <KillSwitchBanner />
-      <Header title="Settings" subtitle="Connections, providers, and environment" />
-      <div className="flex-1 p-6">
-        <div className="max-w-3xl mx-auto space-y-8">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            <TradingAgentSection />
-          </motion.div>
+      <Header title="Settings & Configuration" subtitle="Trading agent · providers · risk limits" />
+      <div className="flex-1 p-6 overflow-y-auto">
+        <div className="max-w-3xl mx-auto">
+          {/* Tab bar */}
+          <div style={{ display: "flex", gap: 4, marginBottom: 24, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: 4 }}>
+            {tabs.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                style={{
+                  flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                  padding: "8px 14px", borderRadius: 7, cursor: "pointer",
+                  fontSize: 12, fontWeight: 600, fontFamily: "var(--font-body)",
+                  border: "none", transition: "all 150ms",
+                  background: tab === t.id ? "var(--accent)" : "transparent",
+                  color: tab === t.id ? "#fff" : "var(--text-3)",
+                }}
+              >
+                {t.icon} {t.label}
+              </button>
+            ))}
+          </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.04 }}
-          >
-            <LLMSection />
-          </motion.div>
+          {tab === "agent" && (
+            <div className="space-y-8">
+              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+                <TradingAgentSection />
+              </motion.div>
+              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }}>
+                <LLMSection />
+              </motion.div>
+            </div>
+          )}
 
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.07 }}
-          >
-            <BrokersSection />
-          </motion.div>
+          {tab === "connections" && (
+            <div className="space-y-8">
+              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+                <BrokersSection />
+              </motion.div>
+              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }}>
+                <AlertsSection />
+              </motion.div>
+              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+                <EnvSection />
+              </motion.div>
+            </div>
+          )}
 
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.14 }}
-          >
-            <AlertsSection />
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.21 }}
-          >
-            <EnvSection />
-          </motion.div>
+          {tab === "risk" && (
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+              <RiskSection />
+            </motion.div>
+          )}
         </div>
       </div>
     </div>

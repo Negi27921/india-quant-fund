@@ -123,8 +123,8 @@ def _groq_complete(system: str, user_msg: str, history: list[dict] | None = None
     r = _req.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        json={"model": model, "messages": messages, "temperature": 0.3, "max_tokens": 1200},
-        timeout=25,
+        json={"model": model, "messages": messages, "temperature": 0.3, "max_tokens": 800},
+        timeout=5,
     )
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"]
@@ -152,9 +152,9 @@ def _gemini_complete(system: str, user_msg: str, history: list[dict] | None = No
         json={
             "system_instruction": {"parts": [{"text": system}]},
             "contents": contents,
-            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1200},
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 800},
         },
-        timeout=30,
+        timeout=6,
     )
     r.raise_for_status()
     return r.json()["candidates"][0]["content"]["parts"][0]["text"]
@@ -277,12 +277,12 @@ async def chat_message(body: ChatMessage):
     try:
         reply, provider, latency_ms = await asyncio.wait_for(
             loop.run_in_executor(_executor, _llm_complete, SYSTEM_PROMPT, full_msg, trimmed_history),
-            timeout=6.0,
+            timeout=8.5,
         )
     except asyncio.TimeoutError:
-        reply = "The AI is taking longer than usual. Please try again."
+        reply = "IQF Market Intelligence: AI response took too long. This is a temporary issue — Groq and Gemini are being retried. Please send your message again."
         provider = "timeout"
-        latency_ms = 6000
+        latency_ms = 8500
 
     if not sources:
         sources = ["IQF Market Intelligence"]

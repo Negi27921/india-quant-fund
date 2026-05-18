@@ -1,16 +1,6 @@
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-} from "recharts";
-import { format, parseISO } from "date-fns";
+import { useEffect, useRef } from "react";
+import { createChart, ColorType, LineStyle } from "lightweight-charts";
 import type { DrawdownPoint } from "@/api/types";
-import { CHART_COLORS } from "@/lib/constants";
 
 interface DrawdownChartProps {
   data: DrawdownPoint[];
@@ -19,70 +9,120 @@ interface DrawdownChartProps {
   height?: number;
 }
 
+const cssVar = (name: string, fallback = "") =>
+  getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+
 export function DrawdownChart({
   data,
   alertLevel = 8,
   limitLevel = 12,
   height = 180,
 }: DrawdownChartProps) {
-  const chartData = data.map((d) => ({
-    ...d,
-    drawdown_neg: -d.drawdown_pct,
-  }));
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-        <defs>
-          <linearGradient id="ddGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={CHART_COLORS.danger} stopOpacity={0.3} />
-            <stop offset="100%" stopColor={CHART_COLORS.danger} stopOpacity={0.05} />
-          </linearGradient>
-        </defs>
+  useEffect(() => {
+    if (!containerRef.current || data.length === 0) return;
 
-        <CartesianGrid strokeDasharray="3 3" stroke={CHART_COLORS.grid} vertical={false} />
+    const gridColor  = "rgba(255,255,255,0.05)";
+    const textColor  = cssVar("--text-4", "rgba(255,255,255,0.4)");
+    const redColor   = cssVar("--red",   "#f87171");
+    const amberColor = cssVar("--amber", "#fbbf24");
 
-        <XAxis
-          dataKey="date"
-          tickFormatter={(v) => format(parseISO(v), "MMM yy")}
-          tick={{ fontSize: 10, fill: CHART_COLORS.text }}
-          tickLine={false}
-          axisLine={false}
-          interval="preserveStartEnd"
-        />
+    const chart = createChart(containerRef.current, {
+      width: containerRef.current.clientWidth,
+      height,
+      layout: {
+        background: { type: ColorType.Solid, color: "transparent" },
+        textColor,
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 10,
+      },
+      grid: {
+        vertLines: { color: gridColor },
+        horzLines: { color: gridColor },
+      },
+      rightPriceScale: {
+        borderColor: gridColor,
+        textColor,
+        scaleMargins: { top: 0.08, bottom: 0.08 },
+      },
+      leftPriceScale: { visible: false },
+      timeScale: {
+        borderColor: gridColor,
+        fixLeftEdge: true,
+        fixRightEdge: true,
+      },
+      crosshair: {
+        horzLine: { color: "rgba(255,255,255,0.2)", width: 1, style: LineStyle.Dashed },
+        vertLine: { color: "rgba(255,255,255,0.2)", width: 1, style: LineStyle.Dashed },
+      },
+      handleScroll: false,
+      handleScale: false,
+    });
 
-        <YAxis
-          domain={[-limitLevel * 1.2, 0]}
-          tickFormatter={(v) => `${v.toFixed(0)}%`}
-          tick={{ fontSize: 10, fill: CHART_COLORS.text }}
-          tickLine={false}
-          axisLine={false}
-          width={40}
-        />
+    // Drawdown area (negative values)
+    const ddSeries = chart.addAreaSeries({
+      lineColor: redColor,
+      topColor: `${redColor}06`,
+      bottomColor: `${redColor}44`,
+      lineWidth: 1,
+      invertFilledArea: true,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerVisible: true,
+      crosshairMarkerRadius: 3,
+      priceFormat: {
+        type: "custom",
+        formatter: (v: number) => `${v.toFixed(1)}%`,
+        minMove: 0.1,
+      },
+    });
 
-        <Tooltip
-          formatter={(v: number) => [`${v.toFixed(2)}%`, "Drawdown"]}
-          labelFormatter={(l) => format(parseISO(l as string), "dd MMM yyyy")}
-          contentStyle={{
-            background: "#171A21",
-            border: "1px solid #1E2028",
-            borderRadius: "8px",
-            fontSize: 12,
-          }}
-        />
+    // drawdown_pct is stored as positive — invert for display
+    ddSeries.setData(
+      data.map(d => ({
+        time: d.date as `${number}-${number}-${number}`,
+        value: -d.drawdown_pct,
+      }))
+    );
 
-        <ReferenceLine y={-alertLevel} stroke={CHART_COLORS.warning} strokeDasharray="4 2" strokeWidth={1} />
-        <ReferenceLine y={-limitLevel} stroke={CHART_COLORS.danger} strokeDasharray="4 2" strokeWidth={1} />
+    // Alert line
+    ddSeries.createPriceLine({
+      price: -alertLevel,
+      color: amberColor,
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
+      axisLabelVisible: true,
+      title: `Alert −${alertLevel}%`,
+    });
 
-        <Area
-          type="monotone"
-          dataKey="drawdown_neg"
-          stroke={CHART_COLORS.danger}
-          strokeWidth={1.5}
-          fill="url(#ddGradient)"
-          dot={false}
-        />
-      </AreaChart>
-    </ResponsiveContainer>
-  );
+    // Limit line
+    ddSeries.createPriceLine({
+      price: -limitLevel,
+      color: redColor,
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
+      axisLabelVisible: true,
+      title: `Limit −${limitLevel}%`,
+    });
+
+    chart.timeScale().fitContent();
+
+    const ro = new ResizeObserver(() => {
+      if (containerRef.current) {
+        chart.applyOptions({ width: containerRef.current.clientWidth });
+      }
+    });
+    ro.observe(containerRef.current);
+
+    return () => {
+      ro.disconnect();
+      chart.remove();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, height, alertLevel, limitLevel]);
+
+  if (!data.length) return null;
+
+  return <div ref={containerRef} style={{ width: "100%", height }} />;
 }

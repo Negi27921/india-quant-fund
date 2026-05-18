@@ -125,12 +125,15 @@
   --shadow-accent: 0 4px 20px rgba(106,98,86,0.22);
   --shadow-yellow: 0 4px 16px rgba(106,98,86,0.18);
   --shadow-green:  0 4px 16px rgba(39,174,96,0.20);
+  /* Glow aliases for StatCard */
+  --red-glow:      rgba(192,57,43,0.15);
+  --green-glow:    rgba(39,174,96,0.15);
 }
 
 /* ── Dark Mode — Violet / Blue Glass ────────────────────────────────────── */
 [data-theme="dark"] {
-  /* Surfaces — deep near-black with blue tint */
-  --bg:        #0a0a0f;
+  /* Surfaces — jet black with violet tint */
+  --bg:        #06060b;
   --surface:   rgba(255, 255, 255, 0.035);
   --surface-2: rgba(255, 255, 255, 0.06);
   --surface-3: rgba(255, 255, 255, 0.09);
@@ -178,12 +181,12 @@
   --text-4: #71717a;
 
   /* Layout */
-  --sidebar-bg:     #0a0a0f;
+  --sidebar-bg:     #06060b;
   --sidebar-border: rgba(255, 255, 255, 0.06);
-  --card-bg:        linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.015));
-  --card-hover:     linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
-  --input-bg:       rgba(255, 255, 255, 0.04);
-  --input-border:   rgba(255, 255, 255, 0.12);
+  --card-bg:        linear-gradient(160deg, rgba(255,255,255,0.055), rgba(255,255,255,0.018));
+  --card-hover:     linear-gradient(160deg, rgba(255,255,255,0.075), rgba(255,255,255,0.028));
+  --input-bg:       rgba(255, 255, 255, 0.045);
+  --input-border:   rgba(255, 255, 255, 0.10);
 
   /* Shadows */
   --shadow-sm:     0 1px 2px rgba(0, 0, 0, 0.30);
@@ -192,6 +195,9 @@
   --shadow-accent: 0 4px 24px rgba(167, 139, 250, 0.30);
   --shadow-yellow: 0 4px 16px rgba(167, 139, 250, 0.20);
   --shadow-green:  0 4px 16px rgba(52, 211, 153, 0.25);
+  /* Glow aliases for StatCard */
+  --red-glow:      rgba(248, 113, 113, 0.18);
+  --green-glow:    rgba(52, 211, 153, 0.18);
 }
 
 /* ── Ambient background orbs ────────────────────────────────────────────── */
@@ -235,9 +241,9 @@ body::after {
   background: radial-gradient(ellipse, rgba(96,165,250,0.04) 0%, transparent 68%);
 }
 
-/* ── Dark body — deep violet-black ─────────────────────────────────────── */
+/* ── Dark body — jet black ──────────────────────────────────────────────── */
 [data-theme="dark"] body {
-  background: #0a0a0f;
+  background: #06060b;
 }
 
 /* ── Keyframes ──────────────────────────────────────────────────────────── */
@@ -259,8 +265,10 @@ html, body {
   font-family: var(--font-body);
   font-size: 14px;
   line-height: 1.5;
+  font-feature-settings: "cv11", "ss01", "ss03";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   overflow: hidden;
   height: 100vh;
 }
@@ -272,7 +280,8 @@ html, body {
 ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 * { scrollbar-width: thin; scrollbar-color: var(--border-2) transparent; }
 
-::selection { background: var(--accent-dim); color: var(--text-1); }
+::selection { background: rgba(167,139,250,0.28); color: #fff; }
+[data-theme="light"] ::selection { background: rgba(106,98,86,0.18); color: var(--text-1); }
 
 /* ── Components ─────────────────────────────────────────────────────────── */
 @layer components {
@@ -662,17 +671,81 @@ html, body {
   /* ── Condition badges ── */
   .cond-pass { @apply badge-green; }
   .cond-fail { @apply badge-gray; opacity:0.6; }
+
+  /* ── Badge semantic variants (mapped to CSS vars, theme-aware) ── */
+  .badge-success { @apply badge; background: var(--green-dim); color: var(--green); border: 1px solid var(--green-border); }
+  .badge-danger  { @apply badge; background: var(--red-dim);   color: var(--red);   border: 1px solid var(--red-border); }
+  .badge-warning { @apply badge; background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber-border); }
+  .badge-primary { @apply badge; background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent-border); }
+  .badge-neutral { @apply badge; background: var(--surface-2); color: var(--text-3); border: 1px solid var(--border); }
 }
 
 /* ── Dark mode component overrides ─────────────────────────────────────── */
-[data-theme="dark"] .card-yellow  { background: linear-gradient(135deg, rgba(160,148,127,0.08) 0%, var(--surface) 60%); }
-[data-theme="dark"] .card-accent  { background: linear-gradient(135deg, rgba(160,148,127,0.08) 0%, var(--surface) 60%); }
-[data-theme="dark"] .card-green   { background: linear-gradient(135deg, rgba(34,197,94,0.07)   0%, var(--surface) 60%); }
-[data-theme="dark"] .tbl thead tr { background: var(--surface-2); }
-[data-theme="dark"] .tbl-row:hover{ background: var(--accent-dim); }
-[data-theme="dark"] .tab-item:hover{ background:var(--surface-2); color:var(--text-1); }
+
+/* Card glass + top accent line */
+[data-theme="dark"] .card {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+[data-theme="dark"] .card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 10px; right: 10px; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(167,139,250,0.45) 40%, rgba(96,165,250,0.28) 70%, transparent);
+  pointer-events: none;
+  z-index: 1;
+}
+[data-theme="dark"] .card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(167,139,250,0.22);
+}
+
+/* Card tinted variants */
+[data-theme="dark"] .card-yellow  { background: linear-gradient(135deg, rgba(167,139,250,0.09) 0%, rgba(255,255,255,0.02) 60%); }
+[data-theme="dark"] .card-accent  { background: linear-gradient(135deg, rgba(167,139,250,0.09) 0%, rgba(255,255,255,0.02) 60%); }
+[data-theme="dark"] .card-green   { background: linear-gradient(135deg, rgba(52,211,153,0.08)  0%, rgba(255,255,255,0.02) 60%); }
+
+/* Table */
+[data-theme="dark"] .tbl thead tr  { background: var(--surface-2); }
+[data-theme="dark"] .tbl-row:hover { background: var(--accent-dim); }
+
+/* Tabs */
+[data-theme="dark"] .tab-item:hover { background: var(--surface-2); color: var(--text-1); }
 [data-theme="dark"] .tab-item.active {
-  box-shadow: 0 2px 8px rgba(160,148,127,0.28);
+  background: linear-gradient(135deg, rgba(167,139,250,0.22), rgba(96,165,250,0.12));
+  color: var(--text-1);
+  box-shadow: 0 2px 12px rgba(167,139,250,0.28);
+}
+
+/* Buttons */
+[data-theme="dark"] .btn-primary,
+[data-theme="dark"] .btn-yellow {
+  background: linear-gradient(135deg, #a78bfa 0%, #818cf8 50%, #60a5fa 100%);
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(167,139,250,0.35);
+}
+[data-theme="dark"] .btn-primary:hover,
+[data-theme="dark"] .btn-yellow:hover {
+  box-shadow: 0 6px 28px rgba(167,139,250,0.50);
+  transform: translateY(-1px);
+}
+
+/* Input focus ring */
+[data-theme="dark"] .input:focus {
+  border-color: rgba(167,139,250,0.45);
+  box-shadow: 0 0 0 3px rgba(167,139,250,0.12);
+}
+
+/* Section label accent */
+[data-theme="dark"] .section-label {
+  border-bottom-color: var(--accent);
+}
+
+/* Sidebar glass */
+[data-theme="dark"] .sidebar-glass {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  background: rgba(6,6,11,0.92);
 }
 
 /* ── Grid background + top glow (dark mode only) ───────────────────────── */
@@ -691,25 +764,25 @@ html, body {
   opacity: 0;
   transition: opacity 0.4s;
 }
-[data-theme="dark"] .grid-bg { opacity: 0.55; }
+[data-theme="dark"] .grid-bg { opacity: 0.65; }
 
 .glow-top {
   position: fixed;
   z-index: 0;
   pointer-events: none;
-  top: -260px;
+  top: -280px;
   left: 50%;
   transform: translateX(-50%);
-  width: 900px;
-  height: 520px;
-  filter: blur(70px);
+  width: 1000px;
+  height: 560px;
+  filter: blur(80px);
   background:
-    radial-gradient(closest-side, rgba(167,139,250,0.55), transparent 70%),
-    radial-gradient(closest-side at 30% 50%, rgba(96,165,250,0.35), transparent 70%);
+    radial-gradient(closest-side, rgba(167,139,250,0.65), transparent 70%),
+    radial-gradient(closest-side at 30% 50%, rgba(96,165,250,0.40), transparent 70%);
   opacity: 0;
   transition: opacity 0.4s;
 }
-[data-theme="dark"] .glow-top { opacity: 0.55; }
+[data-theme="dark"] .glow-top { opacity: 0.70; }
 
 /* ── Recharts overrides ─────────────────────────────────────────────────── */
 .recharts-tooltip-wrapper { outline:none !important; }

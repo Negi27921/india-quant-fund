@@ -619,10 +619,17 @@ def _run_scan(strategy: str, universe_name: str = "nifty500") -> list[dict]:
     """Download all batches in parallel then evaluate each stock."""
     universe = FULL_UNIVERSE if universe_name == "full" else SCAN_UNIVERSE
 
-    # Strategies needing 1-year lookback use 260d; others are fine with 120d
-    period = "260d" if strategy in ("breakout", "golden_cross", "multibagger") else "120d"
+    # Strategies that need SMA200 (200 bars) require 260d.
+    # VCP, IPO Base, RSI Reversal only need ~60 bars — 60d halves download time.
+    if strategy in ("breakout", "golden_cross", "multibagger"):
+        period = "260d"
+    elif strategy in ("rocket_base",):
+        period = "120d"   # needs 90d rocket move lookback
+    else:
+        period = "60d"    # vcp, ipo_base, rsi_reversal — enough for all lookbacks
 
-    batch_size = 50
+    # Larger batches → fewer yf.download() calls → faster overall
+    batch_size = 100
     batches = [universe[i:i + batch_size] for i in range(0, len(universe), batch_size)]
     all_results: list[dict] = []
 
@@ -641,54 +648,85 @@ def _run_scan(strategy: str, universe_name: str = "nifty500") -> list[dict]:
     return sorted(all_results, key=lambda x: -x["confidence"])
 
 
-def _get_or_scan(strategy: str, universe_name: str = "nifty500") -> list[dict]:
+def _launch_bg_scan(cache_key: str, strategy: str, universe_name: str) -> None:
+    """Submit a background scan to the executor (non-blocking fire-and-forget)."""
+    if cache_key in _scan_running:
+        return  # already running
+
+    _scan_running.add(cache_key)
+
+    def _bg():
+        try:
+            results = _run_scan(strategy, universe_name)
+            _cache[cache_key] = (time.monotonic(), results)
+            _sb_write(strategy, universe_name, results)
+        finally:
+            _scan_running.discard(cache_key)
+
+    _executor.submit(_bg)
+
+
+def _get_or_scan_nonblocking(strategy: str, universe_name: str = "nifty500") -> tuple[list[dict], bool]:
+    """
+    Returns (results, is_scanning) immediately — never blocks on a live scan.
+
+    Priority:
+      1. Fresh in-process cache  → return now, no scan needed
+      2. Supabase cache          → warm in-process cache, return now
+         (if stale but present, serve it and kick off a background refresh)
+      3. Nothing at all          → trigger background scan, return []
+    """
     cache_key = f"{strategy}_{universe_name}"
     now = time.monotonic()
 
-    # 1. In-process memory cache (fastest)
+    # 1. Fresh in-process cache
     if cache_key in _cache:
         ts, data = _cache[cache_key]
         if now - ts < CACHE_TTL:
-            return data
+            return data, cache_key in _scan_running
 
-    # 2. Supabase persistent cache (survives serverless restarts / tab switches)
+    # 2. Supabase persistent cache
     sb_data = _sb_read(strategy, universe_name)
     if sb_data is not None:
-        _cache[cache_key] = (now, sb_data)   # warm in-process cache too
-        return sb_data
+        _cache[cache_key] = (now, sb_data)
+        # If in-process cache had expired, kick off a silent background refresh
+        # so next request after 4h gets updated results without blocking
+        if cache_key not in _scan_running and cache_key in _cache:
+            old_ts = _cache.get(cache_key, (0, []))[0]
+            if now - old_ts >= CACHE_TTL:
+                _launch_bg_scan(cache_key, strategy, universe_name)
+        return sb_data, cache_key in _scan_running
 
-    # 3. Scan is already in flight — return stale data rather than double-scan
-    if cache_key in _scan_running:
-        return _cache.get(cache_key, (0, []))[1]
-
-    # 4. Run a fresh scan
-    _scan_running.add(cache_key)
-    try:
-        results = _run_scan(strategy, universe_name)
-        _cache[cache_key] = (now, results)
-        _sb_write(strategy, universe_name, results)   # persist for next request
-        return results
-    finally:
-        _scan_running.discard(cache_key)
+    # 3. No cache anywhere — trigger background scan, return stale or empty
+    stale = _cache.get(cache_key, (0, []))[1]
+    _launch_bg_scan(cache_key, strategy, universe_name)
+    return stale, True
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────
 
+_STRATEGY_RE = "^(vcp|ipo_base|rocket_base|breakout|rsi_reversal|golden_cross|multibagger|custom)$"
+
 @router.get("/results")
 async def get_screener_results(
-    strategy: str = Query("vcp", pattern="^(vcp|ipo_base|rocket_base|breakout|rsi_reversal|golden_cross|multibagger)$"),
+    strategy: str = Query("vcp", pattern=_STRATEGY_RE),
     min_confidence: int = Query(0, ge=0, le=100),
     min_price: float = Query(0.0, ge=0),
     max_price: float = Query(0.0, ge=0),
     symbol: str = Query("", description="Filter by symbol substring"),
     universe: str = Query("nifty500", pattern="^(nifty500|full)$"),
 ):
-    """Return cached screener results. Auto-triggers a scan if cache is cold."""
-    loop = asyncio.get_event_loop()
-    cache_key = f"{strategy}_{universe}"
-    results = await loop.run_in_executor(_executor, _get_or_scan, strategy, universe)
+    """Return cached screener results instantly. Triggers background scan when cache is cold."""
+    # "custom" is a user-facing alias for the multibagger strategy
+    if strategy == "custom":
+        strategy = "multibagger"
 
-    # Apply filters
+    loop = asyncio.get_event_loop()
+    results, is_scanning = await loop.run_in_executor(
+        _executor, _get_or_scan_nonblocking, strategy, universe
+    )
+
+    cache_key = f"{strategy}_{universe}"
     filtered = [
         r for r in results
         if r["confidence"] >= min_confidence
@@ -697,7 +735,6 @@ async def get_screener_results(
         and (max_price == 0 or r["ltp"] <= max_price)
     ]
 
-    is_scanning = cache_key in _scan_running
     last_scan = None
     if cache_key in _cache:
         ts = _cache[cache_key][0]
@@ -719,27 +756,18 @@ async def get_screener_results(
 
 @router.post("/scan")
 async def trigger_scan(
-    strategy: str = Query("vcp", pattern="^(vcp|ipo_base|rocket_base|breakout|rsi_reversal|golden_cross|multibagger)$"),
+    strategy: str = Query("vcp", pattern=_STRATEGY_RE),
     universe: str = Query("nifty500", pattern="^(nifty500|full)$"),
-    background_tasks: BackgroundTasks = None,
 ):
-    """Force a fresh scan in the background."""
+    """Force a fresh background scan (clears in-process cache first)."""
+    if strategy == "custom":
+        strategy = "multibagger"
+
     cache_key = f"{strategy}_{universe}"
-    if cache_key in _cache:
-        del _cache[cache_key]
+    # Drop stale in-process cache so the next GET returns fresh data
+    _cache.pop(cache_key, None)
+    _launch_bg_scan(cache_key, strategy, universe)
 
-    loop = asyncio.get_event_loop()
-
-    def _bg():
-        _scan_running.add(cache_key)
-        try:
-            results = _run_scan(strategy, universe)
-            _cache[cache_key] = (time.monotonic(), results)
-            _sb_write(strategy, universe, results)
-        finally:
-            _scan_running.discard(cache_key)
-
-    loop.run_in_executor(_executor, _bg)
     active_universe = FULL_UNIVERSE if universe == "full" else SCAN_UNIVERSE
     return {"message": f"Scan triggered for {strategy}", "universe": universe, "universe_size": len(active_universe)}
 

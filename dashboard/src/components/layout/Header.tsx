@@ -123,13 +123,15 @@ export function Header({ title, subtitle }: HeaderProps) {
   const { paperMode, openSearch } = useUIStore();
 
   return (
-    <div style={{ flexShrink: 0, position: "sticky", top: 0, zIndex: 50, borderBottom: "1px solid var(--border)" }}>
+    <div style={{ flexShrink: 0, position: "sticky", top: 0, zIndex: 50 }}>
       {/* ── Ticker strip ── */}
       <div style={{
         display: "flex", alignItems: "center", height: 32,
         padding: "0 12px", overflow: "hidden",
-        background: "var(--surface-2)",
+        background: "var(--surface)",
         borderBottom: "1px solid var(--border)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
       }}>
         <div style={{
           display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
@@ -151,20 +153,29 @@ export function Header({ title, subtitle }: HeaderProps) {
         display: "flex", alignItems: "center", height: 56,
         padding: "0 20px", gap: 16,
         background: "var(--surface)",
-        boxShadow: "0 1px 0 var(--border)",
+        backdropFilter: "blur(16px)",
+        WebkitBackdropFilter: "blur(16px)",
+        borderBottom: "1px solid var(--border)",
       }}>
         {/* Title */}
-        <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 3, height: 22, background: "var(--accent)" }} />
+        <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{
+            width: 3, height: 20, borderRadius: 2,
+            background: "linear-gradient(180deg, #a78bfa, #60a5fa)",
+          }} />
           <div>
             <div style={{
-              fontSize: 16, fontWeight: 700, color: "var(--text-1)",
-              letterSpacing: "0.01em", fontFamily: "var(--font-heading)", fontStyle: "italic",
+              fontSize: 15, fontWeight: 700, color: "var(--text-1)",
+              letterSpacing: "-0.01em", fontFamily: "var(--font-heading)", fontStyle: "italic",
             }}>
               {title}
             </div>
             {subtitle && (
-              <div style={{ fontSize: 9, color: "var(--text-3)", letterSpacing: "0.12em", fontFamily: "var(--font-body)", marginTop: 1, textTransform: "uppercase", fontWeight: 700 }}>
+              <div style={{
+                fontSize: 9, letterSpacing: "0.14em", marginTop: 1,
+                fontFamily: "var(--font-mono)", textTransform: "uppercase", fontWeight: 600,
+                color: "var(--text-4)",
+              }}>
                 {subtitle}
               </div>
             )}
@@ -181,8 +192,8 @@ export function Header({ title, subtitle }: HeaderProps) {
             background: "var(--surface-2)", border: "1.5px solid var(--border)",
             color: "var(--text-3)",
           }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--accent)"; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-3)"; }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(167,139,250,0.4)"; e.currentTarget.style.color = "var(--accent)"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(167,139,250,0.08)"; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--text-3)"; e.currentTarget.style.boxShadow = "none"; }}
         >
           <Search style={{ width: 12, height: 12 }} />
           <span style={{ fontSize: 12, fontFamily: "var(--font-body)", fontWeight: 500 }}>Search stocks...</span>

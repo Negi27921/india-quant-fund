@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import { ArrowUpDown } from "lucide-react";
+import { ArrowUpDown, Filter, X as XIcon } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { KillSwitchBanner } from "@/components/ui/KillSwitchBanner";
 import { SkeletonCard, SkeletonTable } from "@/components/ui/Skeleton";
@@ -19,17 +19,22 @@ export function TradesPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [days, setDays] = useState(30);
   const [sortKey, setSortKey] = useState<"created_at" | "ticker">("created_at");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
-  const { data: orders, isLoading: ordersLoading } = useOrders(statusFilter, 100);
+  const { data: orders, isLoading: ordersLoading } = useOrders(statusFilter, 500);
   const { data: stats, isLoading: statsLoading } = useTradeStats(days);
   const { data: fills } = useFills(days);
 
-  const sorted = orders
-    ? [...orders].sort((a, b) => {
-        if (sortKey === "ticker") return a.ticker.localeCompare(b.ticker);
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      })
-    : [];
+  const sorted = useMemo(() => {
+    let rows = orders ? [...orders] : [];
+    if (fromDate) rows = rows.filter(o => o.created_at.slice(0, 10) >= fromDate);
+    if (toDate)   rows = rows.filter(o => o.created_at.slice(0, 10) <= toDate);
+    return rows.sort((a, b) => {
+      if (sortKey === "ticker") return a.ticker.localeCompare(b.ticker);
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  }, [orders, fromDate, toDate, sortKey]);
 
   const strategyBreakdown = fills
     ? Object.entries(
@@ -136,9 +141,50 @@ export function TradesPage() {
           className="card overflow-hidden"
         >
           <div className="px-5 py-4 border-b border-border flex items-center gap-3 flex-wrap">
-            <h3 className="text-sm font-semibold text-text-primary flex-1">
+            <h3 className="text-sm font-semibold" style={{ color: "var(--text-1)", flex: 1 }}>
               Order History
+              <span style={{ marginLeft: 8, fontSize: 10, color: "var(--text-3)", fontFamily: "var(--font-mono)", fontWeight: 400 }}>
+                {sorted.length} records
+              </span>
             </h3>
+
+            {/* Date range filter */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <Filter style={{ width: 10, height: 10, color: "var(--text-4)" }} />
+              <input
+                type="date"
+                value={fromDate}
+                onChange={e => setFromDate(e.target.value)}
+                style={{
+                  background: "var(--surface-2)", border: "1px solid var(--border)",
+                  borderRadius: 5, padding: "3px 8px", color: "var(--text-1)",
+                  fontFamily: "var(--font-mono)", fontSize: 10, outline: "none",
+                  colorScheme: "dark",
+                }}
+                title="From date"
+              />
+              <span style={{ fontSize: 10, color: "var(--text-4)" }}>→</span>
+              <input
+                type="date"
+                value={toDate}
+                onChange={e => setToDate(e.target.value)}
+                style={{
+                  background: "var(--surface-2)", border: "1px solid var(--border)",
+                  borderRadius: 5, padding: "3px 8px", color: "var(--text-1)",
+                  fontFamily: "var(--font-mono)", fontSize: 10, outline: "none",
+                  colorScheme: "dark",
+                }}
+                title="To date"
+              />
+              {(fromDate || toDate) && (
+                <button
+                  onClick={() => { setFromDate(""); setToDate(""); }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-4)", padding: 2 }}
+                >
+                  <XIcon style={{ width: 11, height: 11 }} />
+                </button>
+              )}
+            </div>
 
             {/* Status filters */}
             <div className="flex items-center gap-1">
@@ -146,12 +192,15 @@ export function TradesPage() {
                 <button
                   key={s}
                   onClick={() => setStatusFilter(s)}
-                  className={cn(
-                    "text-xs px-2.5 py-1 rounded-md capitalize transition-colors",
-                    statusFilter === s
-                      ? "bg-primary/10 text-primary border border-primary/20"
-                      : "text-text-muted hover:text-text-primary bg-bg-elevated"
-                  )}
+                  style={{
+                    fontSize: 10, padding: "3px 8px", borderRadius: 5, cursor: "pointer",
+                    fontFamily: "var(--font-body)", fontWeight: 600, border: "1px solid",
+                    textTransform: "capitalize",
+                    background: statusFilter === s ? "var(--accent-dim)" : "var(--surface-2)",
+                    color: statusFilter === s ? "var(--accent)" : "var(--text-3)",
+                    borderColor: statusFilter === s ? "var(--accent-border)" : "var(--border)",
+                    transition: "all 120ms",
+                  }}
                 >
                   {s.toLowerCase()}
                 </button>
@@ -160,13 +209,16 @@ export function TradesPage() {
 
             {/* Sort */}
             <button
-              onClick={() =>
-                setSortKey((k) => (k === "created_at" ? "ticker" : "created_at"))
-              }
-              className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-primary transition-colors px-2 py-1 rounded-md bg-bg-elevated"
+              onClick={() => setSortKey((k) => (k === "created_at" ? "ticker" : "created_at"))}
+              style={{
+                display: "flex", alignItems: "center", gap: 5,
+                fontSize: 10, padding: "3px 9px", borderRadius: 5, cursor: "pointer",
+                background: "var(--surface-2)", border: "1px solid var(--border)",
+                color: "var(--text-3)", fontFamily: "var(--font-body)", fontWeight: 600,
+              }}
             >
-              <ArrowUpDown className="w-3 h-3" />
-              Sort: {sortKey === "created_at" ? "Time" : "Ticker"}
+              <ArrowUpDown style={{ width: 10, height: 10 }} />
+              {sortKey === "created_at" ? "Time" : "Ticker"}
             </button>
           </div>
 

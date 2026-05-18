@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Send, Bot, User, Loader2, Sparkles } from "lucide-react";
 import { api } from "@/api/client";
 
-interface Message { role: "user" | "assistant"; content: string; sources?: string[]; }
+interface Message { role: "user" | "assistant"; content: string; sources?: string[]; provider?: string; }
 
 const SUGGESTIONS = [
   "Analyse HDFC Bank Q4 results",
@@ -12,6 +12,114 @@ const SUGGESTIONS = [
   "Compare Infosys vs TCS valuation",
   "What are top gainers and why?",
 ];
+
+const SYSTEM_PROMPT = `You are IQF Market Intelligence, an AI analyst specialising in Indian equity markets (NSE/BSE).
+You help with: stock analysis & fundamentals, BSE/NSE filing interpretation, corporate actions & dividends,
+FII/DII flows & market breadth, quarterly results, and trading strategy analysis for Indian markets.
+Be concise, data-driven, and always reference Indian market context. Format responses with bullet points when listing multiple items.`;
+
+async function tryGroq(messages: { role: string; content: string }[]): Promise<string> {
+  const key = import.meta.env.VITE_GROQ_API_KEY;
+  if (!key) throw new Error("no_key");
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+    body: JSON.stringify({
+      model: import.meta.env.VITE_GROQ_MODEL || "llama-3.3-70b-versatile",
+      messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
+      temperature: 0.7,
+      max_tokens: 1024,
+    }),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) throw new Error(`groq_${res.status}`);
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content ?? "";
+}
+
+async function tryGemini(messages: { role: string; content: string }[]): Promise<string> {
+  const key = import.meta.env.VITE_GEMINI_API_KEY;
+  if (!key) throw new Error("no_key");
+  const contents = messages.map(m => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents,
+        generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
+      }),
+      signal: AbortSignal.timeout(30000),
+    }
+  );
+  if (!res.ok) throw new Error(`gemini_${res.status}`);
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+}
+
+async function tryOpenRouter(messages: { role: string; content: string }[]): Promise<string> {
+  const key = import.meta.env.VITE_OPENROUTER_API_KEY;
+  if (!key) throw new Error("no_key");
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${key}`,
+      "HTTP-Referer": window.location.origin,
+      "X-Title": "IQF Market Intelligence",
+    },
+    body: JSON.stringify({
+      model: import.meta.env.VITE_OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free",
+      messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
+      temperature: 0.7,
+      max_tokens: 1024,
+    }),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) throw new Error(`openrouter_${res.status}`);
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content ?? "";
+}
+
+async function sendWithFallback(
+  msg: string,
+  history: { role: string; content: string }[]
+): Promise<{ response: string; sources: string[]; provider: string }> {
+  const messages = [...history, { role: "user", content: msg }];
+
+  // 1. Try backend first
+  try {
+    const res = await api.post<{ response: string; sources: string[]; symbol: string | null }>(
+      "/chat/message", { message: msg, history }
+    );
+    return { response: res.response, sources: res.sources ?? [], provider: "backend" };
+  } catch { /* fall through */ }
+
+  // 2. Try Groq
+  try {
+    const text = await tryGroq(messages);
+    if (text) return { response: text, sources: [], provider: "Groq" };
+  } catch { /* fall through */ }
+
+  // 3. Try Gemini
+  try {
+    const text = await tryGemini(messages);
+    if (text) return { response: text, sources: [], provider: "Gemini" };
+  } catch { /* fall through */ }
+
+  // 4. Try OpenRouter
+  try {
+    const text = await tryOpenRouter(messages);
+    if (text) return { response: text, sources: [], provider: "OpenRouter" };
+  } catch { /* fall through */ }
+
+  throw new Error("all_providers_failed");
+}
 
 function formatMessage(text: string) {
   const lines = text.split("\n");
@@ -71,18 +179,17 @@ export function ChatBot() {
     setLoading(true);
     try {
       const history = messages.map(m => ({ role: m.role, content: m.content }));
-      const res = await api.post<{ response: string; sources: string[]; symbol: string | null }>(
-        "/chat/message",
-        { message: msg, history }
-      );
-      setMessages(prev => [...prev, { role: "assistant", content: res.response, sources: res.sources ?? [] }]);
-    } catch (err) {
-      const isTimeout = String(err).includes("timeout") || String(err).includes("abort");
+      const result = await sendWithFallback(msg, history);
       setMessages(prev => [...prev, {
         role: "assistant",
-        content: isTimeout
-          ? "Request timed out — the AI is warming up. Please try again in a moment."
-          : "Unable to reach the AI backend. Please try again.",
+        content: result.response,
+        sources: result.sources,
+        provider: result.provider,
+      }]);
+    } catch {
+      setMessages(prev => [...prev, {
+        role: "assistant",
+        content: "**All AI providers unavailable.**\n\nTo enable AI analysis, add one of these to your Vercel environment:\n- `VITE_GROQ_API_KEY` — Free at console.groq.com\n- `VITE_GEMINI_API_KEY` — Free at aistudio.google.com\n- `VITE_OPENROUTER_API_KEY` — Free models at openrouter.ai\n\nOr ensure the backend is running and reachable.",
         sources: [],
       }]);
     } finally {
@@ -101,9 +208,9 @@ export function ChatBot() {
           background: "linear-gradient(135deg, var(--accent), var(--amber))",
           border: "none", cursor: "pointer", display: open ? "none" : "flex",
           alignItems: "center", justifyContent: "center",
-          boxShadow: "0 4px 24px rgba(106,98,86,0.5)",
+          boxShadow: "0 4px 24px rgba(167,139,250,0.45)",
         }}
-        whileHover={{ scale: 1.1, boxShadow: "0 6px 32px rgba(106,98,86,0.7)" }}
+        whileHover={{ scale: 1.1, boxShadow: "0 6px 32px rgba(167,139,250,0.65)" }}
         whileTap={{ scale: 0.95 }}
         title="AI Market Assistant"
       >
@@ -120,18 +227,20 @@ export function ChatBot() {
             transition={{ type: "spring", stiffness: 400, damping: 32 }}
             style={{
               position: "fixed", bottom: 24, right: 24, zIndex: 100,
-              width: "min(420px, calc(100vw - 32px))",
-              height: "min(600px, calc(100vh - 48px))",
+              width: "min(440px, calc(100vw - 32px))",
+              height: "min(620px, calc(100vh - 48px))",
               display: "flex", flexDirection: "column",
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
+              background: "rgba(8, 8, 18, 0.97)",
+              backdropFilter: "blur(40px)",
+              WebkitBackdropFilter: "blur(40px)",
+              border: "1px solid rgba(167,139,250,0.25)",
               borderRadius: 20,
-              boxShadow: "0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px var(--accent-border)",
+              boxShadow: "0 32px 100px rgba(0,0,0,0.8), 0 0 0 1px rgba(167,139,250,0.2), inset 0 1px 0 rgba(255,255,255,0.06)",
               overflow: "hidden",
             }}
           >
             {/* Header */}
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid var(--border)", background: "var(--surface-2)", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 16px", borderBottom: "1px solid rgba(167,139,250,0.2)", background: "rgba(15, 12, 32, 0.9)", flexShrink: 0 }}>
               <div style={{ width: 32, height: 32, borderRadius: 10, background: "linear-gradient(135deg, var(--accent), var(--amber))", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <Sparkles style={{ width: 16, height: 16, color: "#fff" }} />
               </div>
@@ -148,17 +257,22 @@ export function ChatBot() {
             </div>
 
             {/* Messages */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ flex: 1, overflowY: "auto", padding: "14px", display: "flex", flexDirection: "column", gap: 12, background: "rgba(6, 6, 14, 0.6)" }}>
               {messages.map((m, i) => (
                 <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", flexDirection: m.role === "user" ? "row-reverse" : "row" }}>
-                  <div style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: m.role === "user" ? "var(--accent-dim)" : "linear-gradient(135deg, var(--accent), var(--amber))" }}>
-                    {m.role === "user" ? <User style={{ width: 13, height: 13, color: "var(--accent)" }} /> : <Bot style={{ width: 13, height: 13, color: "#fff" }} />}
+                  <div style={{ width: 28, height: 28, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: m.role === "user" ? "rgba(167,139,250,0.2)" : "linear-gradient(135deg, #7c3aed, #f59e0b)", border: `1px solid ${m.role === "user" ? "rgba(167,139,250,0.4)" : "transparent"}` }}>
+                    {m.role === "user" ? <User style={{ width: 13, height: 13, color: "#a78bfa" }} /> : <Bot style={{ width: 13, height: 13, color: "#fff" }} />}
                   </div>
-                  <div style={{ maxWidth: "80%", background: m.role === "user" ? "var(--accent-dim)" : "var(--surface-2)", border: `1px solid ${m.role === "user" ? "var(--accent-border)" : "var(--border)"}`, borderRadius: m.role === "user" ? "14px 4px 14px 14px" : "4px 14px 14px 14px", padding: "9px 12px", fontFamily: "var(--font-body)", fontSize: 12.5, color: "var(--text-2)", lineHeight: 1.55 }}>
+                  <div style={{ maxWidth: "82%", background: m.role === "user" ? "rgba(124, 58, 237, 0.22)" : "rgba(255,255,255,0.07)", border: `1px solid ${m.role === "user" ? "rgba(167,139,250,0.35)" : "rgba(255,255,255,0.1)"}`, borderRadius: m.role === "user" ? "14px 4px 14px 14px" : "4px 14px 14px 14px", padding: "10px 13px", fontFamily: "var(--font-body)", fontSize: 12.5, color: "#e4e4e7", lineHeight: 1.6 }}>
                     {formatMessage(m.content)}
                     {m.sources && m.sources.length > 0 && (
                       <div style={{ marginTop: 8, paddingTop: 6, borderTop: "1px solid var(--border)", display: "flex", gap: 4, flexWrap: "wrap" }}>
                         {m.sources.map((s, j) => <span key={j} style={{ fontSize: 9, background: "var(--surface-3)", color: "var(--text-3)", padding: "1px 6px", borderRadius: 4, fontWeight: 600 }}>{s}</span>)}
+                      </div>
+                    )}
+                    {m.provider && m.provider !== "backend" && (
+                      <div style={{ marginTop: 4, fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>
+                        via {m.provider}
                       </div>
                     )}
                   </div>
@@ -166,10 +280,10 @@ export function ChatBot() {
               ))}
               {loading && (
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                  <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, var(--accent), var(--amber))", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg, #7c3aed, #f59e0b)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <Bot style={{ width: 13, height: 13, color: "#fff" }} />
                   </div>
-                  <div style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "4px 14px 14px 14px", padding: "10px 14px", display: "flex", gap: 4, alignItems: "center" }}>
+                  <div style={{ background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "4px 14px 14px 14px", padding: "10px 14px", display: "flex", gap: 4, alignItems: "center" }}>
                     {[0, 1, 2].map(i => (
                       <motion.span
                         key={i}
@@ -186,7 +300,7 @@ export function ChatBot() {
 
             {/* Suggestions (only when no user messages yet) */}
             {messages.length <= 1 && (
-              <div style={{ padding: "6px 14px", display: "flex", gap: 5, flexWrap: "wrap", borderTop: "1px solid var(--border-2)", flexShrink: 0 }}>
+              <div style={{ padding: "8px 14px", display: "flex", gap: 5, flexWrap: "wrap", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0, background: "rgba(8, 8, 18, 0.8)" }}>
                 {SUGGESTIONS.map(s => (
                   <button
                     key={s}
@@ -202,16 +316,16 @@ export function ChatBot() {
             )}
 
             {/* Input */}
-            <div style={{ padding: "10px 12px", borderTop: "1px solid var(--border)", display: "flex", gap: 8, alignItems: "center", flexShrink: 0, background: "var(--surface-2)" }}>
+            <div style={{ padding: "10px 12px", borderTop: "1px solid rgba(167,139,250,0.18)", display: "flex", gap: 8, alignItems: "center", flexShrink: 0, background: "rgba(10, 8, 24, 0.95)" }}>
               <input
                 ref={inputRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && !e.shiftKey && send()}
                 placeholder="Ask about any stock, filing, result..."
-                style={{ flex: 1, background: "var(--surface-3)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 12px", color: "var(--text-1)", fontFamily: "var(--font-body)", fontSize: 12.5, outline: "none" }}
-                onFocus={e => (e.currentTarget.style.borderColor = "var(--accent-border)")}
-                onBlur={e => (e.currentTarget.style.borderColor = "var(--border)")}
+                style={{ flex: 1, background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "9px 13px", color: "#f5f5f7", fontFamily: "var(--font-body)", fontSize: 12.5, outline: "none" }}
+                onFocus={e => (e.currentTarget.style.borderColor = "rgba(167,139,250,0.5)")}
+                onBlur={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)")}
               />
               <button
                 onClick={() => send()}

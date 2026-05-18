@@ -1,18 +1,8 @@
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-} from "recharts";
-import { format, parseISO } from "date-fns";
+import { useEffect, useRef } from "react";
+import { createChart, ColorType, LineStyle } from "lightweight-charts";
 import { motion } from "framer-motion";
 import type { EquityPoint } from "@/api/types";
 import { formatCurrency, formatPct } from "@/lib/utils";
-import { CHART_COLORS } from "@/lib/constants";
 
 interface EquityChartProps {
   data: EquityPoint[];
@@ -20,50 +10,154 @@ interface EquityChartProps {
   showBenchmark?: boolean;
 }
 
-const CustomTooltip = ({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: Array<{ value: number; name: string; color: string }>;
-  label?: string;
-}) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-bg-elevated border border-border rounded-lg p-3 shadow-card text-xs space-y-1.5">
-      <p className="text-text-muted font-medium">
-        {label ? format(parseISO(label), "dd MMM yyyy") : ""}
-      </p>
-      {payload.map((entry) => (
-        <div key={entry.name} className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-1.5">
-            <div
-              className="w-2 h-2 rounded-full"
-              style={{ background: entry.color }}
-            />
-            <span className="text-text-muted capitalize">
-              {entry.name === "portfolio_value" ? "Portfolio" : "Nifty 50"}
-            </span>
-          </div>
-          <span className="font-mono font-medium text-text-primary">
-            {entry.name === "portfolio_value"
-              ? formatCurrency(entry.value, true)
-              : formatPct(entry.value, 2, true)}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-};
+const cssVar = (name: string, fallback = "") =>
+  getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 
 export function EquityChart({ data, height = 280, showBenchmark = true }: EquityChartProps) {
-  if (!data.length) return null;
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const minVal = Math.min(...data.map((d) => d.portfolio_value));
-  const maxVal = Math.max(...data.map((d) => d.portfolio_value));
-  const range = maxVal - minVal;
-  const startVal = data[0]?.portfolio_value ?? 0;
+  useEffect(() => {
+    if (!containerRef.current || data.length === 0) return;
+
+    const textColor   = cssVar("--text-4", "rgba(255,255,255,0.4)");
+    const gridColor   = "rgba(255,255,255,0.05)";
+    const accentColor = cssVar("--accent", "#7c3aed");
+    const greenColor  = cssVar("--green",  "#34d399");
+
+    const chart = createChart(containerRef.current, {
+      width: containerRef.current.clientWidth,
+      height,
+      layout: {
+        background: { type: ColorType.Solid, color: "transparent" },
+        textColor,
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 10,
+      },
+      grid: {
+        vertLines: { color: gridColor },
+        horzLines: { color: gridColor },
+      },
+      rightPriceScale: {
+        borderColor: gridColor,
+        textColor,
+        scaleMargins: { top: 0.08, bottom: 0.08 },
+      },
+      leftPriceScale: {
+        visible: false,
+      },
+      timeScale: {
+        borderColor: gridColor,
+        fixLeftEdge: true,
+        fixRightEdge: true,
+      },
+      crosshair: {
+        horzLine: { color: "rgba(255,255,255,0.2)", width: 1, style: LineStyle.Dashed },
+        vertLine: { color: "rgba(255,255,255,0.2)", width: 1, style: LineStyle.Dashed },
+      },
+      handleScroll: false,
+      handleScale: false,
+    });
+
+    // Portfolio equity area
+    const portfolioSeries = chart.addAreaSeries({
+      lineColor: accentColor,
+      topColor: `${accentColor}44`,
+      bottomColor: `${accentColor}04`,
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerVisible: true,
+      crosshairMarkerRadius: 4,
+      priceFormat: {
+        type: "custom",
+        formatter: (v: number) => formatCurrency(v, true),
+        minMove: 1,
+      },
+    });
+
+    portfolioSeries.setData(
+      data.map(d => ({ time: d.date as `${number}-${number}-${number}`, value: d.portfolio_value }))
+    );
+
+    // Benchmark line (secondary axis)
+    if (showBenchmark && data.some(d => d.benchmark_ret != null)) {
+      const benchSeries = chart.addLineSeries({
+        color: `${greenColor}aa`,
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+        priceFormat: {
+          type: "custom",
+          formatter: (v: number) => formatPct(v, 2, true),
+          minMove: 0.01,
+        },
+        priceScaleId: "benchmark",
+      });
+
+      chart.priceScale("benchmark").applyOptions({
+        scaleMargins: { top: 0.1, bottom: 0.6 },
+        visible: false,
+      });
+
+      benchSeries.setData(
+        data.map(d => ({
+          time: d.date as `${number}-${number}-${number}`,
+          value: d.benchmark_ret ?? 0,
+        }))
+      );
+    }
+
+    chart.timeScale().fitContent();
+
+    // Tooltip overlay
+    const tooltipEl = document.createElement("div");
+    tooltipEl.style.cssText = `
+      position:absolute; top:12px; left:12px; pointer-events:none;
+      background:var(--surface-2); border:1px solid var(--border);
+      border-radius:8px; padding:8px 12px; font-size:11px;
+      font-family:'JetBrains Mono',monospace; display:none; z-index:10;
+      box-shadow:0 4px 16px rgba(0,0,0,0.4);
+    `;
+    containerRef.current.style.position = "relative";
+    containerRef.current.appendChild(tooltipEl);
+
+    chart.subscribeCrosshairMove(param => {
+      if (!param.time || !param.seriesData.size) {
+        tooltipEl.style.display = "none";
+        return;
+      }
+      const pv = param.seriesData.get(portfolioSeries) as { value?: number } | undefined;
+      if (!pv?.value) { tooltipEl.style.display = "none"; return; }
+
+      const dateStr = String(param.time);
+      const pct = ((pv.value - data[0].portfolio_value) / data[0].portfolio_value) * 100;
+      tooltipEl.innerHTML = `
+        <div style="color:var(--text-3);font-size:10px;margin-bottom:4px">${dateStr}</div>
+        <div style="color:var(--text-1);font-weight:700">${formatCurrency(pv.value, true)}</div>
+        <div style="color:${pct >= 0 ? "var(--green)" : "var(--red)"};font-size:10px">
+          ${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%
+        </div>
+      `;
+      tooltipEl.style.display = "block";
+    });
+
+    const ro = new ResizeObserver(() => {
+      if (containerRef.current) {
+        chart.applyOptions({ width: containerRef.current.clientWidth });
+      }
+    });
+    ro.observe(containerRef.current);
+
+    return () => {
+      ro.disconnect();
+      chart.remove();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, height, showBenchmark]);
+
+  if (!data.length) return null;
 
   return (
     <motion.div
@@ -71,91 +165,7 @@ export function EquityChart({ data, height = 280, showBenchmark = true }: Equity
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5, delay: 0.1 }}
     >
-      <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-          <defs>
-            <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={CHART_COLORS.primary} stopOpacity={0.25} />
-              <stop offset="100%" stopColor={CHART_COLORS.primary} stopOpacity={0.0} />
-            </linearGradient>
-            <linearGradient id="benchmarkGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={CHART_COLORS.success} stopOpacity={0.1} />
-              <stop offset="100%" stopColor={CHART_COLORS.success} stopOpacity={0.0} />
-            </linearGradient>
-          </defs>
-
-          <CartesianGrid
-            strokeDasharray="3 3"
-            stroke={CHART_COLORS.grid}
-            vertical={false}
-          />
-
-          <XAxis
-            dataKey="date"
-            tickFormatter={(v) => format(parseISO(v), "MMM yy")}
-            tick={{ fontSize: 10, fill: CHART_COLORS.text }}
-            tickLine={false}
-            axisLine={false}
-            interval="preserveStartEnd"
-          />
-
-          <YAxis
-            yAxisId="left"
-            domain={[minVal - range * 0.05, maxVal + range * 0.05]}
-            tickFormatter={(v) => formatCurrency(v, true)}
-            tick={{ fontSize: 10, fill: CHART_COLORS.text }}
-            tickLine={false}
-            axisLine={false}
-            width={60}
-          />
-
-          {showBenchmark && (
-            <YAxis
-              yAxisId="right"
-              orientation="right"
-              tickFormatter={(v) => `${v > 0 ? "+" : ""}${v.toFixed(1)}%`}
-              tick={{ fontSize: 10, fill: CHART_COLORS.text }}
-              tickLine={false}
-              axisLine={false}
-              width={50}
-            />
-          )}
-
-          <ReferenceLine
-            yAxisId="left"
-            y={startVal}
-            stroke={CHART_COLORS.grid}
-            strokeDasharray="4 2"
-          />
-
-          <Tooltip content={<CustomTooltip />} />
-
-          <Area
-            yAxisId="left"
-            type="monotone"
-            dataKey="portfolio_value"
-            stroke={CHART_COLORS.primary}
-            strokeWidth={2}
-            fill="url(#equityGradient)"
-            dot={false}
-            activeDot={{ r: 4, fill: CHART_COLORS.primary, stroke: "#0A0B0D", strokeWidth: 2 }}
-          />
-
-          {showBenchmark && (
-            <Area
-              yAxisId="right"
-              type="monotone"
-              dataKey="benchmark_ret"
-              stroke={CHART_COLORS.success}
-              strokeWidth={1.5}
-              strokeDasharray="4 2"
-              fill="none"
-              dot={false}
-              activeDot={{ r: 3, fill: CHART_COLORS.success }}
-            />
-          )}
-        </AreaChart>
-      </ResponsiveContainer>
+      <div ref={containerRef} style={{ width: "100%", height, position: "relative" }} />
     </motion.div>
   );
 }

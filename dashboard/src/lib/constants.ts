@@ -9,13 +9,13 @@ export const WS_URL = `${wsBase}/ws`;
 
 export const CHART_COLORS = {
   primary: "var(--accent)",
-  success: "#27AE60",
-  danger:  "#E74C3C",
-  warning: "#F59E0B",
+  success: "var(--green)",
+  danger:  "var(--red)",
+  warning: "var(--amber)",
   purple:  "#8B5CF6",
   cyan:    "#06B6D4",
-  grid:    "rgba(33,34,38,0.08)",
-  text:    "#9E9EA6",
+  grid:    "var(--border)",
+  text:    "var(--text-4)",
 };
 
 export const SECTOR_COLORS: Record<string, string> = {

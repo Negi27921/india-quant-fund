@@ -4,7 +4,7 @@ export type Theme = "light" | "dark";
 
 export function useTheme() {
   const [theme, setTheme] = useState<Theme>(() => {
-    return (localStorage.getItem("iqf-theme") as Theme) ?? "light";
+    return (localStorage.getItem("iqf-theme") as Theme) ?? "dark";
   });
 
   useEffect(() => {

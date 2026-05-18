@@ -11,9 +11,9 @@ import { useUIStore } from "@/store/ui";
 import {
   useMarketIndices, useMarketMovers, useMarketSectors,
   useFiiDiiToday, useAdvancesDeclines, useCorporateActions,
-  useResultsCalendar, useFiiDii, useFilings,
+  useResultsCalendar, useFiiDii, useFilings, useGlobalIndices,
   type CorporateAction, type ResultsMeeting, type FiiDiiRow,
-  type IndexData, type Filing,
+  type IndexData, type Filing, type GlobalIndexData,
 } from "@/api/market-queries";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Cell,
@@ -1015,6 +1015,38 @@ function ResultsCalendarPanel() {
   );
 }
 
+// ── Global index chip (for GIFT NIFTY, Brent, Dow Jones) ──────────────────────
+function GlobalIndexChip({ data }: { data: GlobalIndexData }) {
+  const up = data.change_pct >= 0;
+  const color = up ? "var(--green)" : "var(--red)";
+  return (
+    <div style={{
+      padding: "10px 16px",
+      background: "var(--surface)",
+      border: `1px solid var(--border)`,
+      borderLeft: `3px solid ${color}`,
+      borderRadius: 8, minWidth: 120, flexShrink: 0,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+        <div style={{ fontSize: 9, fontFamily: "var(--font-body)", fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.12em" }}>
+          {data.label}
+        </div>
+        {data.exchange && (
+          <span style={{ fontSize: 8, color: "var(--text-4)", fontFamily: "var(--font-body)" }}>{data.exchange}</span>
+        )}
+      </div>
+      <div style={{ fontSize: 14, fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text-1)", lineHeight: 1, marginBottom: 3 }}>
+        {data.currency === "USD" ? "$" : ""}
+        {data.price.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 2, fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 700, color }}>
+        {up ? <ArrowUpRight style={{ width: 10, height: 10 }} /> : <ArrowDownRight style={{ width: 10, height: 10 }} />}
+        {Math.abs(data.change_pct).toFixed(2)}%
+      </div>
+    </div>
+  );
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────────
 const INDEX_KEYS: { key: string; label: string }[] = [
   { key: "nifty50",    label: "NIFTY 50" },
@@ -1024,13 +1056,19 @@ const INDEX_KEYS: { key: string; label: string }[] = [
   { key: "niftyit",    label: "NIFTY IT" },
 ];
 
-function IndexTable({ indices, loading }: { indices: unknown; loading: boolean }) {
+const GLOBAL_INDEX_KEYS: { key: string; label: string; currency?: string }[] = [
+  { key: "giftnifty",  label: "GIFT NIFTY" },
+  { key: "brentcrude", label: "BRENT CRUDE", currency: "USD" },
+  { key: "dowjones",   label: "DOW JONES",   currency: "USD" },
+];
+
+function IndexTable({ indices, globalIndices, loading }: {
+  indices: unknown; globalIndices?: GlobalIndexData[]; loading: boolean;
+}) {
   const idxMap = indices as Record<string, IndexData> | undefined;
+
   return (
-    <div style={{
-      background: "var(--surface)", border: "1px solid var(--border)",
-      borderRadius: 8, overflow: "hidden",
-    }}>
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ borderBottom: "1px solid var(--border)" }}>
@@ -1045,6 +1083,7 @@ function IndexTable({ indices, loading }: { indices: unknown; loading: boolean }
           </tr>
         </thead>
         <tbody>
+          {/* Indian indices */}
           {INDEX_KEYS.map(({ key, label }) => {
             const d = idxMap?.[key];
             const up = (d?.change_pct ?? 0) >= 0;
@@ -1092,6 +1131,46 @@ function IndexTable({ indices, loading }: { indices: unknown; loading: boolean }
               </tr>
             );
           })}
+          {/* Global indices from IndicesData or GlobalIndexData */}
+          {GLOBAL_INDEX_KEYS.map(({ key, label, currency }) => {
+            const fromIdx = idxMap?.[key];
+            const fromGlobal = (globalIndices ?? []).find(g => g.label === label || g.symbol?.includes(key.toUpperCase()));
+            const price   = fromIdx?.price   ?? fromGlobal?.price;
+            const chgPct  = fromIdx?.change_pct ?? fromGlobal?.change_pct;
+            const chgPts  = fromIdx?.change  ?? fromGlobal?.change;
+            if (price === undefined) return null;
+            const up = (chgPct ?? 0) >= 0;
+            const col = up ? "var(--green)" : "var(--red)";
+            const fmt = currency === "USD"
+              ? (v: number) => `$${v.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+              : (v: number) => v.toLocaleString("en-IN", { minimumFractionDigits: 2 });
+            return (
+              <tr key={key} style={{ borderBottom: "1px solid var(--border-2)", transition: "background 80ms", background: "var(--surface-2)" }}
+                onMouseEnter={e => (e.currentTarget.style.background = "var(--card-hover)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "var(--surface-2)")}
+              >
+                <td style={{ padding: "8px 14px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                    <span style={{ width: 3, height: 18, borderRadius: 9999, background: col, flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-body)" }}>{label}</span>
+                    <span style={{ fontSize: 8, color: "var(--text-4)", fontFamily: "var(--font-body)", background: "var(--surface-3)", padding: "1px 4px", borderRadius: 3 }}>
+                      {currency ?? "INR"}
+                    </span>
+                  </div>
+                </td>
+                <td style={{ padding: "8px 14px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--text-1)" }}>
+                  {fmt(price)}
+                </td>
+                <td style={{ padding: "8px 14px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: col }}>
+                  {up ? "+" : ""}{(chgPct ?? 0).toFixed(2)}%
+                </td>
+                <td style={{ padding: "8px 14px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 11, color: col }}>
+                  {chgPts !== undefined ? `${up ? "+" : ""}${chgPts.toFixed(2)}` : "—"}
+                </td>
+                <td colSpan={3} style={{ padding: "8px 14px", textAlign: "right", fontSize: 10, color: "var(--text-4)", fontFamily: "var(--font-body)" }}>—</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -1101,6 +1180,7 @@ function IndexTable({ indices, loading }: { indices: unknown; loading: boolean }
 export function MarketPage() {
   const { data: indices, isLoading: idxLoading } = useMarketIndices();
   const { data: sectors, isLoading: sectorsLoading } = useMarketSectors();
+  const { data: globalIndices } = useGlobalIndices();
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: "var(--bg)" }}>
@@ -1132,11 +1212,25 @@ export function MarketPage() {
               />
             </motion.div>
           ))}
+          {/* Global index chips (GIFT NIFTY, Brent Crude, Dow Jones) */}
+          {GLOBAL_INDEX_KEYS.map(({ key, label }, idx) => {
+            const fromIdx = (indices as unknown as Record<string, IndexData>)?.[key];
+            const fromGlobal = (globalIndices ?? []).find(g => g.label === label);
+            const data = fromIdx
+              ? { label, price: fromIdx.price, change_pct: fromIdx.change_pct }
+              : fromGlobal;
+            if (!data) return null;
+            return (
+              <motion.div key={key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: (INDEX_KEYS.length + idx) * 0.06 }}>
+                <GlobalIndexChip data={{ ...data, label, symbol: key } as GlobalIndexData} />
+              </motion.div>
+            );
+          })}
         </div>
 
         {/* ── Index detail table ── */}
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-          <IndexTable indices={indices} loading={idxLoading} />
+          <IndexTable indices={indices} globalIndices={globalIndices ?? []} loading={idxLoading} />
         </motion.div>
 
         {/* ── Main grid: 3 columns, gap 16px (Chakra space-4) ── */}

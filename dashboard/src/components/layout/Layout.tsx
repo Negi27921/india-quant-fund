@@ -41,6 +41,10 @@ export function Layout() {
       className="flex h-screen overflow-hidden"
       style={{ background: "var(--bg)" }}
     >
+      {/* Ambient background layers — visible in dark mode */}
+      <div className="grid-bg" aria-hidden="true" />
+      <div className="glow-top" aria-hidden="true" />
+
       <Sidebar />
 
       {/* Main content area */}

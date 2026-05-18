@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { Layout } from "@/components/layout/Layout";
 import { MarketPage }          from "@/pages/Market";
@@ -9,6 +9,7 @@ import { RiskPage }            from "@/pages/Risk";
 import { StrategiesPage }      from "@/pages/Strategies";
 import { SettingsPage }        from "@/pages/Settings";
 import { TradingJournalPage }  from "@/pages/TradingJournal";
+import { ResultsPage }         from "@/pages/Results";
 import { LoginPage, hasValidSession } from "@/pages/Login";
 
 /* ── Error boundary ───────────────────────────────────────────────────────── */
@@ -85,6 +86,8 @@ export default function App() {
               <Route path="strategies" element={<StrategiesPage />} />
               <Route path="settings"   element={<SettingsPage />} />
               <Route path="journal"    element={<TradingJournalPage />} />
+              <Route path="results"    element={<ResultsPage />} />
+              <Route path="risk"       element={<Navigate to="/settings" replace />} />
             </Route>
           </Routes>
         </AnimatePresence>

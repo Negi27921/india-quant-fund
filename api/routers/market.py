@@ -1328,6 +1328,39 @@ async def get_advances_declines():
     return {"advances": adv, "declines": dec, "unchanged": unc, "total": adv + dec + unc, "ratio": round(adv/max(dec,1), 2)}
 
 
+@router.get("/global-indices")
+@_cached("global_indices", ttl=60)
+async def get_global_indices():
+    """Global indices: GIFT NIFTY (proxy), Brent Crude, Dow Jones via yfinance."""
+    loop = asyncio.get_running_loop()
+
+    GLOBAL_TICKERS = [
+        ("GIFT NIFTY",  "^NSEI",  "INR", "NSE IFSC"),
+        ("BRENT CRUDE", "BZ=F",   "USD", "ICE"),
+        ("DOW JONES",   "^DJI",   "USD", "NYSE"),
+    ]
+
+    async def _one(label: str, sym: str, currency: str, exchange: str) -> dict | None:
+        try:
+            d = await asyncio.wait_for(
+                loop.run_in_executor(_executor, _fetch_index, sym),
+                timeout=4.0,
+            )
+            if d and d.get("price", 0) > 0:
+                return {
+                    "label": label, "symbol": sym,
+                    "price": d["price"], "change_pct": d["change_pct"],
+                    "change": d.get("change", 0),
+                    "currency": currency, "exchange": exchange,
+                }
+        except Exception:
+            pass
+        return None
+
+    results = await asyncio.gather(*[_one(*t) for t in GLOBAL_TICKERS])
+    return [r for r in results if r is not None]
+
+
 @router.get("/results-calendar")
 @_cached("results_cal", ttl=3600)
 async def get_results_calendar():

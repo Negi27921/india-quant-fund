@@ -68,7 +68,20 @@ export interface IndicesData {
   sensex: IndexData;
   niftymid50: IndexData;
   niftyit: IndexData;
+  giftnifty?: IndexData;
+  brentcrude?: IndexData;
+  dowjones?: IndexData;
   status: MarketStatus;
+}
+
+export interface GlobalIndexData {
+  symbol: string;
+  label: string;
+  price: number;
+  change: number;
+  change_pct: number;
+  currency?: string;
+  exchange?: string;
 }
 
 export interface StockQuote {
@@ -134,6 +147,14 @@ export const useMarketIndices = () =>
     queryFn: () => api.get<IndicesData>("/market/indices"),
     refetchInterval: REFETCH.indices,
     staleTime: 10_000,
+  });
+
+export const useGlobalIndices = () =>
+  useQuery({
+    queryKey: ["market", "global-indices"],
+    queryFn: () => api.get<GlobalIndexData[]>("/market/global-indices").catch(() => [] as GlobalIndexData[]),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
   });
 
 export const useMarketMovers = (limit = 8) =>
@@ -236,7 +257,7 @@ export interface ScreenerResponse {
   universe_size: number;
 }
 
-type ScreenerStrategy = "vcp" | "ipo_base" | "rocket_base" | "breakout" | "rsi_reversal" | "golden_cross" | "multibagger";
+type ScreenerStrategy = "vcp" | "ipo_base" | "rocket_base" | "breakout" | "rsi_reversal" | "golden_cross" | "multibagger" | "custom";
 
 export const useScreener = (
   strategy: ScreenerStrategy,
@@ -269,3 +290,58 @@ export const useTriggerScan = () => {
   };
   return triggerScan;
 };
+
+// ── Quarterly Results ─────────────────────────────────────────────────────────
+export type Rating = "Excellent" | "Great" | "Good" | "Ok" | "Weak";
+
+export interface MetricValues {
+  qoq: number | null;
+  yoy: number | null;
+  q1: number;
+  q2: number;
+  q3: number;
+}
+
+export interface ResultMetrics {
+  sales: MetricValues;
+  other_income: MetricValues;
+  op: MetricValues;
+  opm: MetricValues;
+  pat: MetricValues;
+  eps: MetricValues;
+}
+
+export interface QuarterlyResult {
+  id: string;
+  symbol: string;
+  ticker?: string;
+  company: string;
+  exchange: string;
+  sector: string;
+  industry: string;
+  quarter: string;
+  report_date: string;
+  report_time: string;
+  rating: Rating;
+  rating_note?: string;
+  insight: string;
+  metrics: ResultMetrics;
+  revenue_trend: number[];
+  pat_trend: number[];
+  eps_trend: number[];
+  quarter_labels: string[];
+  cmp: number | null;
+  market_cap: number;
+  pe: number | null;
+  currency_unit?: string;
+  pdf_url?: string;
+}
+
+export const useQuarterlyResults = () =>
+  useQuery<QuarterlyResult[]>({
+    queryKey: ["market", "quarterly-results"],
+    queryFn: () =>
+      api.get<QuarterlyResult[]>("/market/quarterly-results").catch(() => [] as QuarterlyResult[]),
+    staleTime: 5 * 60_000,
+    refetchInterval: 10 * 60_000,
+  });

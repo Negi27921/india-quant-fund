@@ -15,7 +15,6 @@ import {
   useStrategyAllocation,
 } from "@/api/queries";
 import { formatPct, formatDate } from "@/lib/utils";
-import { cn } from "@/lib/utils";
 import { STRATEGY_COLORS, STRATEGY_LABELS } from "@/lib/constants";
 import { NSE_STOCKS } from "@/lib/nse-stocks";
 import { useUIStore } from "@/store/ui";
@@ -307,9 +306,9 @@ export function StrategiesPage() {
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="card p-5">
             <div className="flex items-center gap-2 mb-1">
               <div className="w-0.5 h-4 rounded-full" style={{ background: "var(--accent)" }} />
-              <h3 className="text-sm font-semibold text-text-primary">Strategy Allocation</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)", margin: 0 }}>Strategy Allocation</h3>
             </div>
-            <p className="text-xs text-text-muted mb-4 pl-3">Dynamic Sharpe-weighted capital split</p>
+            <p style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 16, paddingLeft: 12 }}>Dynamic Sharpe-weighted capital split</p>
             <AllocationBars
               allocation={allocation}
               perf={perf}
@@ -321,10 +320,10 @@ export function StrategiesPage() {
 
           {/* Performance cards */}
           <div className="lg:col-span-2">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-0.5 h-4 rounded-full" style={{ background: "var(--accent)" }} />
-              <h3 className="text-sm font-semibold text-text-primary">Strategy Performance</h3>
-              <span style={{ fontSize: "10px", color: "var(--text-3)" }}>click to filter stock universe</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <div style={{ width: 2, height: 16, borderRadius: 9999, background: "var(--accent)", flexShrink: 0 }} />
+              <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)", margin: 0 }}>Strategy Performance</h3>
+              <span style={{ fontSize: 10, color: "var(--text-3)" }}>· click to filter stock universe</span>
             </div>
             {perfLoading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -352,7 +351,7 @@ export function StrategiesPage() {
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
                           <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
-                          <span className="text-sm font-semibold text-text-primary">
+                          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-1)" }}>
                             {STRATEGY_LABELS[p.strategy] ?? p.strategy}
                           </span>
                         </div>
@@ -364,22 +363,22 @@ export function StrategiesPage() {
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <p className="text-[10px] text-text-muted uppercase tracking-wider">Return</p>
-                          <p className={cn("text-base font-mono font-semibold", p.total_return >= 0 ? "text-success" : "text-danger")}>
+                          <p style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Return</p>
+                          <p style={{ fontSize: 16, fontFamily: "var(--font-mono)", fontWeight: 600, color: p.total_return >= 0 ? "var(--green)" : "var(--red)" }}>
                             {formatPct(p.total_return)}
                           </p>
                         </div>
                         <div>
-                          <p className="text-[10px] text-text-muted uppercase tracking-wider">Max DD</p>
-                          <p className="text-base font-mono font-semibold text-danger">{formatPct(-p.max_drawdown, 2, false)}</p>
+                          <p style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Max DD</p>
+                          <p style={{ fontSize: 16, fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--red)" }}>{formatPct(-p.max_drawdown, 2, false)}</p>
                         </div>
                         <div>
-                          <p className="text-[10px] text-text-muted uppercase tracking-wider">Win Rate</p>
-                          <p className="text-base font-mono font-semibold text-text-primary">{(p.win_rate * 100).toFixed(0)}%</p>
+                          <p style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Win Rate</p>
+                          <p style={{ fontSize: 16, fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--text-1)" }}>{(p.win_rate * 100).toFixed(0)}%</p>
                         </div>
                         <div>
-                          <p className="text-[10px] text-text-muted uppercase tracking-wider">Trades</p>
-                          <p className="text-base font-mono font-semibold text-text-primary">{p.num_trades}</p>
+                          <p style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Trades</p>
+                          <p style={{ fontSize: 16, fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--text-1)" }}>{p.num_trades}</p>
                         </div>
                       </div>
                     </motion.div>
@@ -555,17 +554,19 @@ export function StrategiesPage() {
             <Zap style={{ width: 12, height: 12, color: "var(--text-2)" }} />
             <span className="panel-title">SIGNAL LOG</span>
             <div className="flex-1" />
-            <div className="flex items-center gap-1">
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
               {SIGNAL_DAYS.map((d) => (
                 <button
                   key={d}
                   onClick={() => setSignalDays(d)}
-                  className={cn(
-                    "text-xs px-2.5 py-1 rounded-md transition-colors",
-                    signalDays === d
-                      ? "bg-primary/10 text-primary border border-primary/20"
-                      : "text-text-muted hover:text-text-primary bg-bg-elevated"
-                  )}
+                  style={{
+                    fontSize: 11, padding: "4px 10px", borderRadius: 6, cursor: "pointer",
+                    background: signalDays === d ? "var(--accent-dim)" : "var(--surface-2)",
+                    color: signalDays === d ? "var(--accent)" : "var(--text-3)",
+                    border: `1px solid ${signalDays === d ? "var(--accent-border)" : "var(--border)"}`,
+                    fontFamily: "var(--font-mono)", fontWeight: 600,
+                    transition: "all 120ms",
+                  }}
                 >
                   {d}d
                 </button>

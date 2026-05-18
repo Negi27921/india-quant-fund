@@ -2,8 +2,8 @@ import { NavLink } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Terminal, ScanSearch, LayoutDashboard,
-  Shield, BarChart3, Settings2, ChevronLeft, LogOut,
-  Sun, Moon, BookOpen,
+  BarChart3, Settings2, ChevronLeft, LogOut,
+  Sun, Moon, BookOpen, TrendingUp,
 } from "lucide-react";
 import { AUTH_KEY, LOCK_KEY, FAIL_KEY } from "@/pages/Login";
 import { useUIStore } from "@/store/ui";
@@ -14,10 +14,10 @@ const NAV = [
   { to: "/",           icon: Terminal,        label: "Terminal",   end: true },
   { to: "/screener",   icon: ScanSearch,      label: "Screener",   end: false },
   { to: "/portfolio",  icon: LayoutDashboard, label: "Portfolio",  end: false },
-  { to: "/risk",       icon: Shield,          label: "Risk",       end: false },
+  { to: "/results",    icon: TrendingUp,      label: "Results",    end: false },
   { to: "/strategies", icon: BarChart3,       label: "Strategies", end: false },
-  { to: "/settings",   icon: Settings2,       label: "Settings",   end: false },
   { to: "/journal",    icon: BookOpen,        label: "Journal",    end: false },
+  { to: "/settings",   icon: Settings2,       label: "Settings",   end: false },
 ];
 
 const ease = "cubic-bezier(0.25, 0.46, 0.45, 0.94)";
@@ -43,21 +43,33 @@ export function Sidebar() {
         borderBottom: "1px solid var(--sidebar-border)",
         flexShrink: 0, overflow: "hidden",
       }}>
-        <img
-          src="/favicon.svg"
-          alt="One Piece"
-          style={{ width: 32, height: 32, flexShrink: 0, borderRadius: 6 }}
-        />
+        <div style={{
+          width: 34, height: 34, borderRadius: 9, flexShrink: 0,
+          background: "linear-gradient(135deg, rgba(167,139,250,0.15), rgba(96,165,250,0.08))",
+          border: "1px solid rgba(167,139,250,0.18)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: "0 0 20px rgba(167,139,250,0.12)",
+        }}>
+          <img src="/favicon.svg" alt="One Piece" style={{ width: 22, height: 22 }} />
+        </div>
         <div style={{
           opacity: expanded ? 1 : 0,
           maxWidth: expanded ? 160 : 0,
           overflow: "hidden", whiteSpace: "nowrap",
           transition: `opacity 150ms ${ease}, max-width 200ms ${ease}`,
         }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text-1)", letterSpacing: "0.04em", fontFamily: "var(--font-heading)", fontStyle: "italic" }}>
+          <div style={{
+            fontSize: 14, fontWeight: 700, color: "var(--text-1)",
+            letterSpacing: "-0.01em", fontFamily: "var(--font-heading)", fontStyle: "italic",
+          }}>
             One Piece
           </div>
-          <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: "0.18em", color: "var(--accent)", marginTop: 1, fontFamily: "var(--font-body)", textTransform: "uppercase" }}>
+          <div style={{
+            fontSize: 8, fontWeight: 600, letterSpacing: "0.16em",
+            background: "linear-gradient(90deg, #a78bfa, #60a5fa)",
+            WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
+            marginTop: 1, fontFamily: "var(--font-body)", textTransform: "uppercase",
+          }}>
             Quant Terminal
           </div>
         </div>

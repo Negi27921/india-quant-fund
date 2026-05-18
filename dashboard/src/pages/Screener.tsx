@@ -1,9 +1,94 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ScanSearch, RefreshCw, CheckCircle2, XCircle, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Filter, Loader2, Rocket, Layers, Zap, ArrowUpRight, GitMerge, BarChart3, Globe, ExternalLink, Star } from "lucide-react";
+import { ScanSearch, RefreshCw, CheckCircle2, XCircle, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Filter, Loader2, Rocket, Layers, Zap, ArrowUpRight, GitMerge, BarChart3, Globe, ExternalLink, Star, BookOpen, TrendingUp as PnlIcon, Calendar } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { useScreener, useTriggerScan, type ScreenerResult } from "@/api/market-queries";
 import { useQueryClient } from "@tanstack/react-query";
+
+// ── Paper Trade Types ─────────────────────────────────────────────────────────
+interface PaperTrade {
+  id: string;
+  symbol: string;
+  strategy: Strategy;
+  entry_price: number;
+  entry_time: string;   // ISO string
+  entry_date: string;   // YYYY-MM-DD
+  sl: number;
+  tp1: number;
+  tp2: number;
+  sl_pct: number;
+  confidence: number;
+  current_price: number;
+  last_updated: string;
+  status: "open" | "sl_hit" | "tp1_hit" | "tp2_hit";
+  exit_price?: number;
+  exit_time?: string;
+  pnl_pct?: number;
+}
+
+const PAPER_KEY = "iqf_paper_trades";
+
+function loadPaperTrades(): PaperTrade[] {
+  try { return JSON.parse(localStorage.getItem(PAPER_KEY) || "[]"); } catch { return []; }
+}
+
+function savePaperTrades(trades: PaperTrade[]) {
+  localStorage.setItem(PAPER_KEY, JSON.stringify(trades));
+}
+
+function autoRecordTrade(r: ScreenerResult, strategy: Strategy): PaperTrade | null {
+  const existing = loadPaperTrades();
+  const alreadyOpen = existing.some(t => t.symbol === r.symbol && t.strategy === strategy && t.status === "open");
+  if (alreadyOpen) return null;
+  const now = new Date();
+  const trade: PaperTrade = {
+    id: `${r.symbol}_${strategy}_${now.getTime()}`,
+    symbol: r.symbol,
+    strategy,
+    entry_price: r.ltp,
+    entry_time: now.toISOString(),
+    entry_date: now.toISOString().slice(0, 10),
+    sl: r.sl,
+    tp1: r.tp1,
+    tp2: r.tp2,
+    sl_pct: r.sl_pct,
+    confidence: r.confidence,
+    current_price: r.ltp,
+    last_updated: now.toISOString(),
+    status: "open",
+  };
+  savePaperTrades([trade, ...existing]);
+  return trade;
+}
+
+function updatePaperPrices(results: ScreenerResult[]) {
+  const trades = loadPaperTrades();
+  let changed = false;
+  const priceMap: Record<string, number> = {};
+  results.forEach(r => { priceMap[r.symbol] = r.ltp; });
+  const updated = trades.map(t => {
+    if (t.status !== "open") return t;
+    const price = priceMap[t.symbol];
+    if (!price || price === t.current_price) return t;
+    changed = true;
+    let status: PaperTrade["status"] = "open";
+    let exit_price: number | undefined;
+    let exit_time: string | undefined;
+    let pnl_pct: number | undefined;
+    if (price <= t.sl) {
+      status = "sl_hit"; exit_price = t.sl; exit_time = new Date().toISOString();
+      pnl_pct = ((t.sl - t.entry_price) / t.entry_price) * 100;
+    } else if (price >= t.tp2) {
+      status = "tp2_hit"; exit_price = t.tp2; exit_time = new Date().toISOString();
+      pnl_pct = ((t.tp2 - t.entry_price) / t.entry_price) * 100;
+    } else if (price >= t.tp1) {
+      status = "tp1_hit";
+    }
+    return { ...t, current_price: price, last_updated: new Date().toISOString(), status, exit_price, exit_time, pnl_pct };
+  });
+  if (changed) savePaperTrades(updated);
+  return updated;
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Strategy = "vcp" | "ipo_base" | "rocket_base" | "breakout" | "rsi_reversal" | "golden_cross" | "multibagger";
@@ -298,23 +383,173 @@ function StockRow({ r, strategy, index }: { r: ScreenerResult; strategy: Strateg
   );
 }
 
+// ── Strategy P&L Breakdown card ───────────────────────────────────────────────
+function StratPnlCard({
+  strategyKey, trades, active, onToggle,
+}: {
+  strategyKey: string;
+  trades: PaperTrade[];
+  active: boolean;
+  onToggle: () => void;
+}) {
+  const meta = STRATEGY_META[strategyKey as Strategy];
+  const color = meta?.color ?? "var(--accent)";
+  const closed = trades.filter(t => t.status !== "open" && t.pnl_pct != null);
+  const open   = trades.filter(t => t.status === "open");
+  const won    = closed.filter(t => (t.pnl_pct ?? 0) > 0).length;
+  const totalPnl = closed.reduce((s, t) => s + (t.pnl_pct ?? 0), 0);
+  const openPnl  = open.reduce((s, t) => s + ((t.current_price - t.entry_price) / t.entry_price) * 100, 0);
+  const winRate  = closed.length > 0 ? (won / closed.length) * 100 : 0;
+
+  return (
+    <motion.div
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.97 }}
+      onClick={onToggle}
+      style={{
+        cursor: "pointer", borderRadius: 12, padding: "12px 16px",
+        background: active ? `${color}14` : "var(--surface)",
+        border: `1px solid ${active ? color + "55" : "var(--border)"}`,
+        boxShadow: active ? `0 0 16px ${color}22` : "none",
+        transition: "all 160ms",
+        borderTop: `3px solid ${color}`,
+        minWidth: 140, flex: 1,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+        <span style={{ color, fontSize: 13 }}>{meta?.icon}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-body)" }}>{meta?.label ?? strategyKey}</span>
+        {active && <span style={{ fontSize: 8, fontWeight: 800, background: color, color: "#000", padding: "1px 5px", borderRadius: 4, marginLeft: "auto" }}>FILTER ON</span>}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 12px" }}>
+        <div>
+          <div style={{ fontSize: 9, color: "var(--text-3)", letterSpacing: "0.06em" }}>CLOSED P&L</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: totalPnl >= 0 ? "var(--green)" : "var(--red)", fontFamily: "var(--font-mono)" }}>
+            {totalPnl >= 0 ? "+" : ""}{totalPnl.toFixed(1)}%
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 9, color: "var(--text-3)", letterSpacing: "0.06em" }}>OPEN P&L</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: openPnl >= 0 ? "var(--green)" : "var(--red)", fontFamily: "var(--font-mono)" }}>
+            {openPnl >= 0 ? "+" : ""}{openPnl.toFixed(1)}%
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 9, color: "var(--text-3)", letterSpacing: "0.06em" }}>WIN RATE</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-mono)" }}>
+            {closed.length > 0 ? `${winRate.toFixed(0)}%` : "—"}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 9, color: "var(--text-3)", letterSpacing: "0.06em" }}>TRADES</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-mono)" }}>
+            {open.length}✦ / {closed.length}✓
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Paper Trade Row ───────────────────────────────────────────────────────────
+function PaperTradeRow({ trade }: { trade: PaperTrade }) {
+  const pnlPct = trade.status === "open"
+    ? ((trade.current_price - trade.entry_price) / trade.entry_price) * 100
+    : (trade.pnl_pct ?? 0);
+  const pnlColor = pnlPct > 0 ? "var(--green)" : pnlPct < 0 ? "var(--red)" : "var(--text-3)";
+
+  const statusBadge = {
+    open:    { label: "OPEN",    color: "var(--accent)",  bg: "var(--accent-dim)", border: "var(--accent-border)" },
+    sl_hit:  { label: "SL HIT",  color: "var(--red)",    bg: "var(--red-dim)",    border: "rgba(248,113,113,0.3)" },
+    tp1_hit: { label: "TP1 ✓",   color: "var(--green)",  bg: "var(--green-dim)",  border: "rgba(52,211,153,0.3)" },
+    tp2_hit: { label: "TP2 ✓✓",  color: "var(--green)",  bg: "var(--green-dim)",  border: "rgba(52,211,153,0.3)" },
+  }[trade.status];
+
+  const meta = STRATEGY_META[trade.strategy];
+
+  return (
+    <tr style={{ borderBottom: "1px solid var(--border)", transition: "background 100ms" }}
+      onMouseEnter={e => (e.currentTarget.style.background = "var(--card-hover)")}
+      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+    >
+      <td style={{ padding: "8px 14px" }}>
+        <div style={{ fontFamily: "var(--font-mono)", fontSize: 12.5, fontWeight: 700, color: "var(--text-1)" }}>{trade.symbol}</div>
+        <div style={{ fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-body)", marginTop: 1 }}>
+          {new Date(trade.entry_time).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}
+        </div>
+      </td>
+      <td style={{ padding: "8px 14px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ color: meta?.color ?? "var(--accent)", fontSize: 11 }}>{meta?.icon}</span>
+          <span style={{ fontSize: 11, color: "var(--text-2)", fontFamily: "var(--font-body)" }}>{meta?.label ?? trade.strategy}</span>
+        </div>
+      </td>
+      <td style={{ padding: "8px 14px" }}>
+        <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text-2)" }}>
+          ₹{trade.entry_price.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </div>
+      </td>
+      <td style={{ padding: "8px 14px" }}>
+        <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: pnlColor }}>
+          ₹{trade.current_price.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </div>
+        {trade.status === "open" && (
+          <div style={{ fontSize: 10, color: pnlColor, fontFamily: "var(--font-mono)", display: "flex", alignItems: "center", gap: 2 }}>
+            {pnlPct > 0 ? <TrendingUp style={{ width: 9, height: 9 }} /> : pnlPct < 0 ? <TrendingDown style={{ width: 9, height: 9 }} /> : null}
+            {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%
+          </div>
+        )}
+      </td>
+      <td style={{ padding: "8px 14px" }}>
+        <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: pnlColor }}>
+          {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%
+        </div>
+      </td>
+      <td style={{ padding: "8px 14px" }}>
+        <div style={{ fontSize: 10, color: "var(--red)", fontFamily: "var(--font-mono)" }}>SL ₹{trade.sl.toLocaleString("en-IN")}</div>
+        <div style={{ fontSize: 10, color: "var(--green)", fontFamily: "var(--font-mono)" }}>TP1 ₹{trade.tp1.toLocaleString("en-IN")}</div>
+      </td>
+      <td style={{ padding: "8px 14px" }}>
+        <span style={{
+          fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 99,
+          background: statusBadge.bg, color: statusBadge.color,
+          border: `1px solid ${statusBadge.border}`,
+          fontFamily: "var(--font-body)", letterSpacing: "0.05em",
+        }}>
+          {statusBadge.label}
+        </span>
+        {trade.confidence >= 70 && (
+          <div style={{ fontSize: 8, color: "var(--green)", marginTop: 2, fontFamily: "var(--font-body)" }}>STRONG</div>
+        )}
+      </td>
+    </tr>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export function ScreenerPage() {
   const [strategy, setStrategy] = useState<Strategy>("vcp");
-  const [tab, setTab] = useState<"all" | "matched">("all");
+  const [tab, setTab] = useState<"screener" | "trades">("screener");
   const [universe, setUniverse] = useState<Universe>("full");
   const [minConf, setMinConf] = useState(0);
   const [minPrice, setMinPrice] = useState(0);
   const [maxPrice, setMaxPrice] = useState(0);
   const [symbolFilter, setSymbolFilter] = useState("");
   const [scanning, setScanning] = useState(false);
+  const [stratPnlFilter, setStratPnlFilter] = useState<string | null>(null);
+
+  // Paper trade state
+  const [paperTrades, setPaperTrades] = useState<PaperTrade[]>(loadPaperTrades);
+  const [ptFromDate, setPtFromDate] = useState("");
+  const [ptToDate, setPtToDate] = useState("");
+  const [ptStatusFilter, setPtStatusFilter] = useState<"all" | "open" | "closed">("all");
 
   const triggerScan = useTriggerScan();
   const qc = useQueryClient();
 
   const query = useScreener(
     strategy,
-    tab === "matched" ? 100 : minConf,
+    minConf,
     minPrice,
     maxPrice,
     symbolFilter,
@@ -341,7 +576,7 @@ export function ScreenerPage() {
 
   // Auto-trigger scan on mount if last_scan is null or >30 min old
   useEffect(() => {
-    if (data === undefined) return; // wait for first fetch
+    if (data === undefined) return;
     const shouldScan = !data.last_scan || (() => {
       const lastScanTime = new Date(data.last_scan).getTime();
       return Date.now() - lastScanTime > 30 * 60 * 1000;
@@ -351,6 +586,49 @@ export function ScreenerPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.last_scan, data?.is_scanning]);
+
+  // Poll every 8s while a scan is running so results appear as soon as ready
+  useEffect(() => {
+    if (!data?.is_scanning) return;
+    const id = setInterval(() => {
+      qc.invalidateQueries({ queryKey: ["screener"] });
+    }, 8_000);
+    return () => clearInterval(id);
+  }, [data?.is_scanning, qc]);
+
+  // Auto-record high-confidence screener results as paper trades
+  const autoRecord = useCallback(() => {
+    if (!results.length) return;
+    const highConf = results.filter(r => r.confidence >= 70);
+    let updated = false;
+    highConf.forEach(r => {
+      const recorded = autoRecordTrade(r, strategy);
+      if (recorded) updated = true;
+    });
+    // Also update prices for existing open paper trades
+    const newTrades = updatePaperPrices(results);
+    if (updated || newTrades.some((t, i) => t.current_price !== paperTrades[i]?.current_price)) {
+      setPaperTrades(loadPaperTrades());
+    }
+  }, [results, strategy]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { autoRecord(); }, [autoRecord]);
+
+  // Group paper trades by strategy for P&L breakdown
+  const tradesByStrategy = (Object.keys(STRATEGY_META) as Strategy[]).reduce<Record<string, PaperTrade[]>>((acc, s) => {
+    acc[s] = paperTrades.filter(t => t.strategy === s);
+    return acc;
+  }, {});
+
+  // Filtered paper trades for trade log
+  const filteredPaperTrades = paperTrades.filter(t => {
+    if (stratPnlFilter && t.strategy !== stratPnlFilter) return false;
+    if (ptStatusFilter === "open" && t.status !== "open") return false;
+    if (ptStatusFilter === "closed" && t.status === "open") return false;
+    if (ptFromDate && t.entry_date < ptFromDate) return false;
+    if (ptToDate && t.entry_date > ptToDate) return false;
+    return true;
+  });
 
   const meta = STRATEGY_META[strategy];
 
@@ -441,24 +719,27 @@ export function ScreenerPage() {
             );
           })}
 
-          {/* Matched Only tab */}
-          <button
-            onClick={() => setTab(t => t === "matched" ? "all" : "matched")}
-            style={{
-              display: "flex", alignItems: "center", gap: 7,
-              padding: "8px 16px", borderRadius: 10,
-              background: tab === "matched" ? "var(--green-dim)" : "var(--surface)",
-              border: `1px solid ${tab === "matched" ? "rgba(34,197,94,0.35)" : "var(--border)"}`,
-              color: tab === "matched" ? "var(--green)" : "var(--text-3)",
-              cursor: "pointer", fontFamily: "var(--font-body)",
-              fontSize: 12.5, fontWeight: tab === "matched" ? 700 : 500,
-              marginLeft: "auto",
-              transition: "all 150ms",
-            }}
-          >
-            <CheckCircle2 style={{ width: 13, height: 13 }} />
-            Matched Only
-          </button>
+          {/* Tab switcher */}
+          <div style={{ marginLeft: "auto", display: "flex", gap: 4, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, padding: 3 }}>
+            {([
+              { id: "screener", label: "Screener", icon: <ScanSearch style={{ width: 12, height: 12 }} /> },
+              { id: "trades",   label: `Trades ${paperTrades.length > 0 ? `(${paperTrades.length})` : ""}`, icon: <BookOpen style={{ width: 12, height: 12 }} /> },
+            ] as { id: "screener" | "trades"; label: string; icon: React.ReactNode }[]).map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "6px 14px", borderRadius: 7, cursor: "pointer",
+                  background: tab === t.id ? "var(--accent)" : "transparent",
+                  color: tab === t.id ? "#fff" : "var(--text-3)",
+                  border: "none", fontFamily: "var(--font-body)",
+                  fontSize: 12, fontWeight: tab === t.id ? 700 : 500,
+                  transition: "all 150ms",
+                }}
+              >
+                {t.icon} {t.label}
+              </button>
+            ))}
+          </div>
 
           {/* Universe selector */}
           <button
@@ -590,6 +871,7 @@ export function ScreenerPage() {
           </div>
         </div>
 
+        {tab === "screener" && <>
         {/* Stats row */}
         <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
           {[
@@ -728,6 +1010,155 @@ export function ScreenerPage() {
             </div>
           )}
         </div>
+        </>}
+
+        {/* ── Paper Trades Tab ─────────────────────────────────────────────────── */}
+        {tab === "trades" && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
+            {/* Strategy P&L Breakdown cards — clickable filters */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <PnlIcon style={{ width: 14, height: 14, color: "var(--accent)" }} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-body)", letterSpacing: "0.04em" }}>
+                  STRATEGY P&L BREAKDOWN
+                </span>
+                <span style={{ fontSize: 10, color: "var(--text-3)" }}>· click to filter</span>
+                {stratPnlFilter && (
+                  <button onClick={() => setStratPnlFilter(null)}
+                    style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-3)", background: "none", border: "none", cursor: "pointer" }}>
+                    Clear filter ✕
+                  </button>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {(Object.keys(STRATEGY_META) as Strategy[]).map(s => (
+                  <StratPnlCard
+                    key={s}
+                    strategyKey={s}
+                    trades={tradesByStrategy[s] ?? []}
+                    active={stratPnlFilter === s}
+                    onToggle={() => setStratPnlFilter(prev => prev === s ? null : s)}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Paper Trade Log */}
+            <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden" }}>
+              {/* Header + filters */}
+              <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <BookOpen style={{ width: 14, height: 14, color: "var(--accent)" }} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-body)" }}>
+                  Paper Trade Log
+                </span>
+                <span style={{ fontSize: 10, background: "var(--accent-dim)", color: "var(--accent)", padding: "1px 8px", borderRadius: 99, fontWeight: 700 }}>
+                  {filteredPaperTrades.length} trades
+                </span>
+
+                <div style={{ display: "flex", alignItems: "center", gap: 5, marginLeft: 8 }}>
+                  <Calendar style={{ width: 10, height: 10, color: "var(--text-3)" }} />
+                  {[
+                    { label: "From", value: ptFromDate, onChange: setPtFromDate },
+                    { label: "To",   value: ptToDate,   onChange: setPtToDate },
+                  ].map(f => (
+                    <input key={f.label} type="date" value={f.value}
+                      onChange={e => f.onChange(e.target.value)}
+                      title={f.label}
+                      style={{
+                        background: "var(--surface-2)", border: "1px solid var(--border)",
+                        borderRadius: 4, padding: "2px 6px", color: "var(--text-1)",
+                        fontFamily: "var(--font-mono)", fontSize: 10, outline: "none",
+                        colorScheme: "dark",
+                      }}
+                    />
+                  ))}
+                  {(ptFromDate || ptToDate) && (
+                    <button onClick={() => { setPtFromDate(""); setPtToDate(""); }}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-4)", fontSize: 10 }}>✕</button>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", gap: 4 }}>
+                  {(["all", "open", "closed"] as const).map(s => (
+                    <button key={s} onClick={() => setPtStatusFilter(s)}
+                      style={{
+                        fontSize: 10, padding: "3px 10px", borderRadius: 6, cursor: "pointer",
+                        background: ptStatusFilter === s ? "var(--accent-dim)" : "var(--surface-2)",
+                        color: ptStatusFilter === s ? "var(--accent)" : "var(--text-3)",
+                        border: `1px solid ${ptStatusFilter === s ? "var(--accent-border)" : "var(--border)"}`,
+                        fontFamily: "var(--font-body)", fontWeight: 600,
+                      }}>
+                      {s.charAt(0).toUpperCase() + s.slice(1)}
+                    </button>
+                  ))}
+                </div>
+
+                {paperTrades.length > 0 && (
+                  <button
+                    onClick={() => { savePaperTrades([]); setPaperTrades([]); }}
+                    style={{ marginLeft: "auto", fontSize: 10, color: "var(--red)", background: "none", border: "none", cursor: "pointer" }}
+                  >
+                    Clear All
+                  </button>
+                )}
+              </div>
+
+              {filteredPaperTrades.length === 0 ? (
+                <div style={{ padding: 60, textAlign: "center" }}>
+                  <div style={{ fontSize: 36, marginBottom: 12 }}>📋</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-2)", fontFamily: "var(--font-body)", marginBottom: 6 }}>
+                    No paper trades yet
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-4)", fontFamily: "var(--font-body)", maxWidth: 320, margin: "0 auto" }}>
+                    High-confidence screener results (≥70%) are automatically recorded as paper trades at scan price. Run a scan to get started.
+                  </div>
+                </div>
+              ) : (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
+                        {["Symbol · Entry Time", "Strategy", "Entry ₹", "CMP · Change", "P&L %", "SL / TP1", "Status"].map(h => (
+                          <th key={h} style={{
+                            padding: "8px 14px", textAlign: "left",
+                            fontSize: 9.5, fontWeight: 700, color: "var(--text-3)",
+                            letterSpacing: "0.08em", fontFamily: "var(--font-body)",
+                            textTransform: "uppercase", whiteSpace: "nowrap",
+                          }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredPaperTrades.map(t => <PaperTradeRow key={t.id} trade={t} />)}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <div style={{ padding: "8px 14px", borderTop: "1px solid var(--border)", background: "var(--surface-2)", display: "flex", gap: 16, alignItems: "center" }}>
+                {(() => {
+                  const closed = paperTrades.filter(t => t.status !== "open" && t.pnl_pct != null);
+                  const open   = paperTrades.filter(t => t.status === "open");
+                  const totalPnl = closed.reduce((s, t) => s + (t.pnl_pct ?? 0), 0);
+                  const winRate  = closed.length > 0 ? (closed.filter(t => (t.pnl_pct ?? 0) > 0).length / closed.length) * 100 : 0;
+                  return (
+                    <>
+                      <span style={{ fontSize: 10, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>
+                        Open: <b style={{ color: "var(--accent)" }}>{open.length}</b> &nbsp;
+                        Closed: <b style={{ color: "var(--text-1)" }}>{closed.length}</b> &nbsp;
+                        Closed P&L: <b style={{ color: totalPnl >= 0 ? "var(--green)" : "var(--red)" }}>{totalPnl >= 0 ? "+" : ""}{totalPnl.toFixed(1)}%</b> &nbsp;
+                        Win Rate: <b style={{ color: "var(--text-1)" }}>{closed.length > 0 ? `${winRate.toFixed(0)}%` : "—"}</b>
+                      </span>
+                      <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-4)", fontFamily: "var(--font-body)" }}>
+                        ⚠ Paper trades — educational only. Auto-recorded at screener scan time.
+                      </span>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+          </motion.div>
+        )}
       </div>
     </div>
   );
