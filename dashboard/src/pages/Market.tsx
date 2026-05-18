@@ -563,21 +563,21 @@ function FiiDiiPanel() {
             />
             <Tooltip
               contentStyle={{
-                background: "#050e05",
-                border: "1px solid rgba(0,229,53,0.5)",
+                background: "var(--surface)",
+                border: "1px solid var(--border-2)",
                 borderRadius: 6,
                 fontSize: 11.5,
                 fontFamily: "var(--font-mono)",
-                color: "#e8ffe8",
-                boxShadow: "0 4px 24px rgba(0,0,0,0.8), 0 0 12px rgba(0,229,53,0.08)",
+                color: "var(--text-1)",
+                boxShadow: "var(--shadow-md)",
                 padding: "8px 12px",
               }}
-              labelStyle={{ color: "#00e535", fontWeight: 700, fontSize: 11, letterSpacing: "0.06em", marginBottom: 4 }}
-              itemStyle={{ color: "#e8ffe8", padding: "2px 0" }}
-              cursor={{ fill: "rgba(0,229,53,0.06)" }}
+              labelStyle={{ color: "var(--accent)", fontWeight: 700, fontSize: 11, letterSpacing: "0.06em", marginBottom: 4 }}
+              itemStyle={{ color: "var(--text-2)", padding: "2px 0" }}
+              cursor={{ fill: "var(--accent-dim)" }}
               formatter={(v: number, name: string) => {
                 const label = name === "fii" ? "FII Net" : "DII Net";
-                const color = name === "fii" ? "#60a5fa" : "#4ade80";
+                const color = name === "fii" ? "var(--accent)" : "var(--green)";
                 return [<span style={{ color, fontWeight: 700 }}>{fmtCr(v)}</span>, label];
               }}
             />

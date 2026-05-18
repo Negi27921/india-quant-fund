@@ -13,7 +13,7 @@ interface MiniChartProps {
   color?: string;
 }
 
-export function MiniChart({ data, width = 200, height = 70, color = "#3279F9" }: MiniChartProps) {
+export function MiniChart({ data, width = 200, height = 70, color = "var(--accent)" }: MiniChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

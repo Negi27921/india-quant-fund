@@ -32,8 +32,8 @@ export function MatrixRain() {
       ctx.clearRect(0, 0, w, h);
 
       const base = ctx.createLinearGradient(0, 0, w, h);
-      base.addColorStop(0, "#F8F9FC");
-      base.addColorStop(1, "#EFF2F7");
+      base.addColorStop(0, "#EBE7E7");
+      base.addColorStop(1, "#DAD8D8");
       ctx.fillStyle = base;
       ctx.fillRect(0, 0, w, h);
 
@@ -42,8 +42,8 @@ export function MatrixRain() {
         const cy = h * (o.y + Math.cos(t * o.speed + o.phase) * 0.07);
         const r  = Math.min(w, h) * o.r;
         const g  = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-        g.addColorStop(0, "rgba(50,121,249,0.065)");
-        g.addColorStop(1, "rgba(50,121,249,0)");
+        g.addColorStop(0, "rgba(106,98,86,0.08)");
+        g.addColorStop(1, "rgba(106,98,86,0)");
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, w, h);
       }

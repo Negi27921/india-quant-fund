@@ -101,9 +101,9 @@ export function ChatBot() {
           background: "linear-gradient(135deg, var(--accent), var(--amber))",
           border: "none", cursor: "pointer", display: open ? "none" : "flex",
           alignItems: "center", justifyContent: "center",
-          boxShadow: "0 4px 24px rgba(50,121,249,0.5)",
+          boxShadow: "0 4px 24px rgba(106,98,86,0.5)",
         }}
-        whileHover={{ scale: 1.1, boxShadow: "0 6px 32px rgba(50,121,249,0.7)" }}
+        whileHover={{ scale: 1.1, boxShadow: "0 6px 32px rgba(106,98,86,0.7)" }}
         whileTap={{ scale: 0.95 }}
         title="AI Market Assistant"
       >

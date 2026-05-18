@@ -54,11 +54,11 @@ export function Sidebar() {
           overflow: "hidden", whiteSpace: "nowrap",
           transition: `opacity 150ms ${ease}, max-width 200ms ${ease}`,
         }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text-1)", letterSpacing: "-0.01em" }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text-1)", letterSpacing: "0.04em", fontFamily: "var(--font-heading)", fontStyle: "italic" }}>
             One Piece
           </div>
-          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: "var(--accent)", marginTop: 1 }}>
-            QUANT TERMINAL
+          <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: "0.18em", color: "var(--accent)", marginTop: 1, fontFamily: "var(--font-body)", textTransform: "uppercase" }}>
+            Quant Terminal
           </div>
         </div>
       </div>

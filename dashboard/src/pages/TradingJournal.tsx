@@ -579,7 +579,7 @@ function AddTradeModal({ open, onClose, onSave, editing }: ModalProps) {
             flex: 2, padding: "10px 0", borderRadius: 9999, border: "none",
             background: "var(--accent)", color: "#fff", fontSize: 12, fontWeight: 700,
             cursor: "pointer", fontFamily: "var(--font-body)",
-            boxShadow: "0 4px 14px rgba(50,121,249,0.35)",
+            boxShadow: "0 4px 14px rgba(106,98,86,0.35)",
           }}>
             {editing ? "Save Changes" : "Log Trade"}
           </button>
@@ -829,7 +829,7 @@ export function TradingJournalPage() {
               display: "flex", alignItems: "center", gap: 7, padding: "8px 18px",
               borderRadius: 9999, border: "none", background: "var(--accent)", color: "#fff",
               fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "var(--font-body)",
-              boxShadow: "0 4px 14px rgba(50,121,249,0.3)",
+              boxShadow: "0 4px 14px rgba(106,98,86,0.3)",
             }}>
               <Plus size={13} /> Add Trade
             </button>
@@ -912,7 +912,7 @@ export function TradingJournalPage() {
                         <td style={{ padding: "8px 12px" }}>
                           <span style={{
                             padding: "3px 8px", borderRadius: 9999, fontSize: 9, fontWeight: 700,
-                            background: t.tradeType === "Swing" ? "rgba(50,121,249,0.1)" : "rgba(39,174,96,0.1)",
+                            background: t.tradeType === "Swing" ? "rgba(106,98,86,0.1)" : "rgba(39,174,96,0.1)",
                             color: t.tradeType === "Swing" ? "var(--accent)" : "var(--green)",
                           }}>{t.tradeType}</span>
                         </td>

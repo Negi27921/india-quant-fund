@@ -90,7 +90,7 @@ function GradientCanvas() {
         const cy = h * (o.y + Math.cos(t * o.speed + o.phase) * 0.07);
         const r  = Math.min(w, h) * o.r;
         const g  = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-        g.addColorStop(0, "rgba(50,121,249,0.07)");
+        g.addColorStop(0, "rgba(106,98,86,0.07)");
         g.addColorStop(1, "rgba(50,121,249,0)");
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, w, h);
@@ -210,17 +210,17 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
           <div style={{ textAlign: "center", marginBottom: 32 }}>
             <div style={{
               width: 52, height: 52, borderRadius: 14,
-              background: "linear-gradient(135deg, #3279F9 0%, #5A9BFB 100%)",
+              background: "linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%)",
               display: "flex", alignItems: "center", justifyContent: "center",
               margin: "0 auto 16px",
-              boxShadow: "0 8px 24px rgba(50,121,249,0.3)",
+              boxShadow: "0 8px 24px rgba(106,98,86,0.3)",
               fontSize: 24,
             }}>
               ⚓
             </div>
             <div style={{
               fontSize: 20,
-              fontFamily: '"DM Sans", "Google Sans", system-ui, sans-serif',
+              fontFamily: 'var(--font-body)',
               fontWeight: 700,
               color: "#121317",
               letterSpacing: "-0.01em",
@@ -231,7 +231,7 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
             </div>
             <div style={{
               fontSize: 11,
-              fontFamily: '"DM Sans", system-ui, sans-serif',
+              fontFamily: 'var(--font-body)',
               fontWeight: 500,
               color: "#818590",
               letterSpacing: "0.06em",
@@ -247,7 +247,7 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
               <label style={{
                 display: "block", marginBottom: 6,
                 fontSize: 11, fontWeight: 600,
-                fontFamily: '"DM Sans", system-ui, sans-serif',
+                fontFamily: 'var(--font-body)',
                 color: error ? "#E74C3C" : "#45474D",
                 letterSpacing: "0.04em",
                 transition: "color 200ms",
@@ -279,12 +279,12 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
                   letterSpacing: "0.2em",
                   transition: "all 200ms",
                   boxSizing: "border-box",
-                  caretColor: "#3279F9",
+                  caretColor: "var(--accent)",
                 }}
                 onFocus={e => {
                   if (!error) {
-                    e.target.style.borderColor = "rgba(50,121,249,0.5)";
-                    e.target.style.boxShadow = "0 0 0 3px rgba(50,121,249,0.08)";
+                    e.target.style.borderColor = "rgba(106,98,86,0.5)";
+                    e.target.style.boxShadow = "0 0 0 3px rgba(106,98,86,0.08)";
                   }
                 }}
                 onBlur={e => {
@@ -303,33 +303,33 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
                 width: "100%",
                 background: locked || granted || !phrase.trim()
                   ? "rgba(33,34,38,0.06)"
-                  : "#3279F9",
+                  : "var(--accent)",
                 color: locked || granted || !phrase.trim() ? "#9E9EA6" : "#ffffff",
                 border: "none",
                 borderRadius: 9999,
                 padding: "12px 0",
                 fontSize: 13,
                 fontWeight: 600,
-                fontFamily: '"DM Sans", system-ui, sans-serif',
+                fontFamily: 'var(--font-body)',
                 letterSpacing: "0.01em",
                 cursor: locked || !phrase.trim() ? "not-allowed" : "pointer",
                 transition: "all 200ms",
                 boxShadow: !locked && !granted && phrase.trim()
-                  ? "0 4px 16px rgba(50,121,249,0.28)"
+                  ? "0 4px 16px rgba(106,98,86,0.28)"
                   : "none",
               }}
               onMouseEnter={e => {
                 if (!locked && !granted && phrase.trim()) {
                   e.currentTarget.style.background = "#2060E0";
                   e.currentTarget.style.transform = "translateY(-1px)";
-                  e.currentTarget.style.boxShadow = "0 6px 24px rgba(50,121,249,0.35)";
+                  e.currentTarget.style.boxShadow = "0 6px 24px rgba(106,98,86,0.35)";
                 }
               }}
               onMouseLeave={e => {
                 if (!locked && !granted && phrase.trim()) {
-                  e.currentTarget.style.background = "#3279F9";
+                  e.currentTarget.style.background = "var(--accent)";
                   e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 4px 16px rgba(50,121,249,0.28)";
+                  e.currentTarget.style.boxShadow = "0 4px 16px rgba(106,98,86,0.28)";
                 }
               }}
             >
@@ -345,7 +345,7 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
           }}>
             <span style={{
               fontSize: 10,
-              fontFamily: '"DM Sans", system-ui, sans-serif',
+              fontFamily: 'var(--font-body)',
               color: "#9E9EA6",
               letterSpacing: "0.03em",
             }}>
@@ -377,15 +377,15 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
             >
               <div style={{
                 width: 64, height: 64, borderRadius: "50%",
-                background: "linear-gradient(135deg, #3279F9 0%, #27AE60 100%)",
+                background: "linear-gradient(135deg, var(--accent) 0%, var(--green) 100%)",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 margin: "0 auto 16px",
-                boxShadow: "0 8px 32px rgba(50,121,249,0.35)",
+                boxShadow: "0 8px 32px rgba(106,98,86,0.35)",
                 fontSize: 28,
               }}>✓</div>
               <div style={{
                 fontSize: 16, fontWeight: 700,
-                fontFamily: '"DM Sans", system-ui, sans-serif',
+                fontFamily: 'var(--font-body)',
                 color: "#121317", letterSpacing: "-0.01em",
               }}>
                 Access granted

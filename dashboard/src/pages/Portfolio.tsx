@@ -67,7 +67,7 @@ function PnlChip({ v }: { v: number }) {
   return (
     <span style={{
       display: "inline-flex", alignItems: "center", gap: 3,
-      fontFamily: "JetBrains Mono, monospace", fontSize: 11.5, fontWeight: 700,
+      fontFamily: "var(--font-mono)", fontSize: 11.5, fontWeight: 700,
       color: pos ? "var(--green)" : "var(--red)",
     }}>
       {pos ? <TrendingUp style={{ width: 10, height: 10 }} /> : <TrendingDown style={{ width: 10, height: 10 }} />}
@@ -101,7 +101,7 @@ function CapStat({ label, value, color, sub }: { label: string; value: string; c
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
       <div style={{ fontSize: 9, color: "var(--text-3)", letterSpacing: "0.1em", fontFamily: "var(--font-body)", fontWeight: 700, textTransform: "uppercase" }}>{label}</div>
-      <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, fontWeight: 700, color: color ?? "var(--text-1)", lineHeight: 1 }}>{value}</div>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: color ?? "var(--text-1)", lineHeight: 1 }}>{value}</div>
       {sub && <div style={{ fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-body)" }}>{sub}</div>}
     </div>
   );
@@ -194,7 +194,7 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
               <TabBtn active={tab === "paper"} label="PAPER" onClick={() => setTab("paper")} />
               <TabBtn active={tab === "live"}  label="LIVE"  onClick={() => setTab("live")} />
               {activePositions.length > 0 && (
-                <span style={{ fontSize: 10, color: "var(--text-3)", marginLeft: 4, fontFamily: "JetBrains Mono, monospace" }}>
+                <span style={{ fontSize: 10, color: "var(--text-3)", marginLeft: 4, fontFamily: "var(--font-mono)" }}>
                   {activePositions.length} pos
                 </span>
               )}
@@ -340,7 +340,7 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
                         exit={{ opacity: 0, x: 8 }} transition={{ delay: idx * 0.03 }}
                       >
                         <td className="tbl-cell" style={{ paddingLeft: 20 }}>
-                          <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: 12, fontFamily: "JetBrains Mono, monospace" }}>{sym}</span>
+                          <span style={{ fontWeight: 700, color: "var(--accent)", fontSize: 12, fontFamily: "var(--font-mono)" }}>{sym}</span>
                         </td>
                         <td className="tbl-cell-muted" style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pos.name ?? "—"}</td>
                         <td className="tbl-cell">
@@ -437,9 +437,9 @@ function CalendarHeatmap({ year, month, data }: {
               onMouseEnter={() => setHovered(cell.dateStr)}
               onMouseLeave={() => setHovered(null)}
             >
-              <span style={{ fontSize: 9, color: entry ? "var(--text-1)" : "var(--text-4)", fontFamily: "JetBrains Mono, monospace", lineHeight: 1 }}>{cell.day}</span>
+              <span style={{ fontSize: 9, color: entry ? "var(--text-1)" : "var(--text-4)", fontFamily: "var(--font-mono)", lineHeight: 1 }}>{cell.day}</span>
               {entry && (
-                <span style={{ fontSize: 8, color: numColor(pct), fontFamily: "JetBrains Mono, monospace", lineHeight: 1.2 }}>
+                <span style={{ fontSize: 8, color: numColor(pct), fontFamily: "var(--font-mono)", lineHeight: 1.2 }}>
                   {pct > 0 ? "+" : ""}{pct.toFixed(1)}%
                 </span>
               )}
@@ -450,10 +450,10 @@ function CalendarHeatmap({ year, month, data }: {
                   padding: "6px 10px", whiteSpace: "nowrap", boxShadow: "0 4px 20px rgba(0,0,0,0.6)", pointerEvents: "none",
                 }}>
                   <div style={{ fontSize: 10, color: "var(--text-3)", marginBottom: 2 }}>{cell.dateStr}</div>
-                  <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 13, fontWeight: 700, color: numColor(pct) }}>
+                  <div style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: numColor(pct) }}>
                     {pct > 0 ? "+" : ""}{pct.toFixed(2)}%
                   </div>
-                  <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, color: "var(--text-1)" }}>
+                  <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-1)" }}>
                     {entry.pnl >= 0 ? "+" : ""}₹{Math.abs(entry.pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                   </div>
                 </div>
@@ -509,7 +509,7 @@ function PnLTab() {
               <span style={{ fontSize: 9, color: "var(--text-3)", letterSpacing: "0.1em", fontFamily: "var(--font-body)", fontWeight: 700 }}>{p.label}</span>
               {p.icon && <p.icon style={{ width: 11, height: 11, color: "var(--text-4)" }} />}
             </div>
-            <div style={{ fontFamily: "JetBrains Mono, monospace", fontWeight: 700, fontSize: 18, color: p.color ?? "var(--text-1)", lineHeight: 1 }}>{p.value}</div>
+            <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 18, color: p.color ?? "var(--text-1)", lineHeight: 1 }}>{p.value}</div>
             {p.sub && <div style={{ fontSize: 10, color: "var(--text-4)", marginTop: 4 }}>{p.sub}</div>}
           </motion.div>
         ))}
@@ -525,11 +525,11 @@ function PnLTab() {
               <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-1)", fontFamily: "var(--font-body)" }}>P&L CALENDAR</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, fontWeight: 700, color: numColor(monthPnL) }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: numColor(monthPnL) }}>
                 {monthPnL >= 0 ? "+" : ""}₹{Math.abs(monthPnL).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
               </span>
               <button onClick={prevMonth} style={{ padding: 4, borderRadius: 6, background: "transparent", border: "none", color: "var(--text-3)", cursor: "pointer" }}><ChevronLeft style={{ width: 12, height: 12 }} /></button>
-              <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, color: "var(--text-1)", minWidth: 64, textAlign: "center" }}>{MONTHS[month - 1]} {year}</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-1)", minWidth: 64, textAlign: "center" }}>{MONTHS[month - 1]} {year}</span>
               <button onClick={nextMonth} style={{ padding: 4, borderRadius: 6, background: "transparent", border: "none", color: "var(--text-3)", cursor: "pointer" }}><ChevronRight style={{ width: 12, height: 12 }} /></button>
             </div>
           </div>
@@ -577,7 +577,7 @@ function PnLTab() {
               ].map(item => (
                 <div key={item.label} style={{ textAlign: "center" }}>
                   <div style={{ fontSize: 9, color: "var(--text-3)", letterSpacing: "0.1em", fontFamily: "var(--font-body)", fontWeight: 700 }}>{item.label}</div>
-                  <div style={{ fontFamily: "JetBrains Mono, monospace", fontWeight: 700, fontSize: 15, color: item.color, marginTop: 4 }}>{item.val}</div>
+                  <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 15, color: item.color, marginTop: 4 }}>{item.val}</div>
                 </div>
               ))}
             </div>
@@ -598,7 +598,7 @@ function PnLTab() {
                   <XAxis dataKey="month" tick={{ fontSize: 9, fill: "var(--text-4)" }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 9, fill: "var(--text-4)" }} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} />
                   <ReferenceLine y={0} stroke="rgba(255,255,255,0.08)" />
-                  <ReTip contentStyle={{ background: "var(--surface)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, fontSize: 11, fontFamily: "JetBrains Mono, monospace" }}
+                  <ReTip contentStyle={{ background: "var(--surface)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, fontSize: 11, fontFamily: "var(--font-mono)" }}
                     formatter={(v: number) => [`${v.toFixed(2)}%`, "Monthly P&L"]} labelStyle={{ color: "var(--text-3)", fontSize: 10 }} />
                   <Bar dataKey="pnl_pct" radius={[2, 2, 0, 0]} maxBarSize={28}>
                     {stats.monthly.map((d, i) => <Cell key={i} fill={d.pnl_pct >= 0 ? "var(--green)" : "var(--red)"} fillOpacity={0.8} />)}
@@ -627,7 +627,7 @@ function PnLTab() {
                     tickFormatter={v => v.slice(5)} interval="preserveStartEnd" />
                   <YAxis tick={{ fontSize: 9, fill: "var(--text-4)" }} axisLine={false} tickLine={false}
                     tickFormatter={v => `₹${(v / 1000).toFixed(0)}K`} width={44} />
-                  <ReTip contentStyle={{ background: "var(--surface)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, fontSize: 11, fontFamily: "JetBrains Mono, monospace" }}
+                  <ReTip contentStyle={{ background: "var(--surface)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, fontSize: 11, fontFamily: "var(--font-mono)" }}
                     formatter={(v: number) => [`₹${v.toLocaleString("en-IN")}`, "Portfolio"]} labelStyle={{ color: "var(--text-3)", fontSize: 10 }} />
                   <Area type="monotone" dataKey="portfolio_value" stroke="var(--green)" strokeWidth={1.5} fill="url(#navGrad)" dot={false} />
                 </AreaChart>
@@ -710,7 +710,7 @@ function TradesTab() {
                 <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: "var(--text-4)", fontFamily: "var(--font-body)", marginBottom: 6 }}>
                   {(STRATEGY_LABELS[s.strategy] ?? s.strategy).toUpperCase()}
                 </div>
-                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 15, fontWeight: 700, color: s.total_pnl >= 0 ? "var(--green)" : "var(--red)" }}>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 700, color: s.total_pnl >= 0 ? "var(--green)" : "var(--red)" }}>
                   {s.total_pnl >= 0 ? "+" : ""}₹{Math.abs(s.total_pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                 </div>
                 <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
@@ -773,7 +773,7 @@ function TradesTab() {
                 const isOpen = t.status?.toUpperCase() === "OPEN";
                 return (
                   <motion.tr key={`${t.ticker}-${t.entry_date}-${i}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.01 }} className="tbl-row">
-                    <td className="tbl-cell" style={{ paddingLeft: 16, fontWeight: 700, color: "var(--accent)", fontFamily: "JetBrains Mono, monospace", fontSize: 12 }}>
+                    <td className="tbl-cell" style={{ paddingLeft: 16, fontWeight: 700, color: "var(--accent)", fontFamily: "var(--font-mono)", fontSize: 12 }}>
                       {t.ticker}
                     </td>
                     <td className="tbl-cell">
@@ -786,10 +786,10 @@ function TradesTab() {
                     <td className="tbl-cell-r" style={{ color: "var(--green)", fontSize: 11 }}>₹{t.target_price?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                     <td className="tbl-cell-r" style={{ color: "var(--red)", fontSize: 11 }}>₹{t.sl_price?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                     <td className="tbl-cell-r" style={{ color: "var(--text-2)" }}>{t.exit_price ? `₹${t.exit_price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "—"}</td>
-                    <td className="tbl-cell-r" style={{ fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: isOpen ? "var(--text-3)" : pnl >= 0 ? "var(--green)" : "var(--red)" }}>
+                    <td className="tbl-cell-r" style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: isOpen ? "var(--text-3)" : pnl >= 0 ? "var(--green)" : "var(--red)" }}>
                       {isOpen ? "OPEN" : `${pnl >= 0 ? "+" : ""}₹${Math.abs(pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`}
                     </td>
-                    <td className="tbl-cell-r" style={{ fontFamily: "JetBrains Mono, monospace", fontWeight: 700, fontSize: 11, color: isOpen ? "var(--text-3)" : pct >= 0 ? "var(--green)" : "var(--red)" }}>
+                    <td className="tbl-cell-r" style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 11, color: isOpen ? "var(--text-3)" : pct >= 0 ? "var(--green)" : "var(--red)" }}>
                       {isOpen ? "—" : `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`}
                     </td>
                     <td className="tbl-cell">
@@ -845,7 +845,7 @@ function LiveTab() {
             {connected ? "LIVE FEED CONNECTED" : "RECONNECTING…"}
           </div>
           {lastUpdate && (
-            <div style={{ fontSize: 10, color: "var(--text-3)", fontFamily: "JetBrains Mono, monospace" }}>
+            <div style={{ fontSize: 10, color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>
               Last update: {format(lastUpdate, "HH:mm:ss")}
             </div>
           )}
@@ -857,10 +857,10 @@ function LiveTab() {
           className="card p-6 flex flex-col items-center justify-center text-center lg:col-span-2"
           style={{ background: pnlPos ? "rgba(39,174,96,0.03)" : "rgba(231,76,60,0.03)", border: pnlPos ? "1px solid rgba(39,174,96,0.12)" : "1px solid rgba(231,76,60,0.12)" }}>
           <div style={{ fontSize: 10, color: "var(--text-3)", letterSpacing: "0.12em", fontFamily: "var(--font-body)", marginBottom: 8 }}>TODAY'S P&L</div>
-          <div style={{ fontSize: 52, fontWeight: 800, fontFamily: "JetBrains Mono, monospace", color: pnlPos ? "var(--green)" : "var(--red)", lineHeight: 1 }}>
+          <div style={{ fontSize: 52, fontWeight: 800, fontFamily: "var(--font-mono)", color: pnlPos ? "var(--green)" : "var(--red)", lineHeight: 1 }}>
             <AnimatedNumber value={live?.day_pnl_pct ?? 0} format={v => `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`} />
           </div>
-          <div style={{ fontSize: 16, fontFamily: "JetBrains Mono, monospace", color: pnlPos ? "var(--green)" : "var(--red)", marginTop: 8, opacity: 0.7 }}>
+          <div style={{ fontSize: 16, fontFamily: "var(--font-mono)", color: pnlPos ? "var(--green)" : "var(--red)", marginTop: 8, opacity: 0.7 }}>
             {(live?.day_pnl ?? 0) >= 0 ? "+" : ""}₹{Math.abs(live?.day_pnl ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
           </div>
           <div style={{ display: "flex", gap: 32, marginTop: 20 }}>
@@ -871,7 +871,7 @@ function LiveTab() {
             ].map(item => (
               <div key={item.label} style={{ textAlign: "center" }}>
                 <div style={{ fontSize: 9, color: "var(--text-3)", letterSpacing: "0.1em", fontFamily: "var(--font-body)", fontWeight: 700 }}>{item.label}</div>
-                <div style={{ fontSize: 14, fontFamily: "JetBrains Mono, monospace", fontWeight: 600, color: "var(--text-1)", marginTop: 2 }}>{item.val}</div>
+                <div style={{ fontSize: 14, fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--text-1)", marginTop: 2 }}>{item.val}</div>
               </div>
             ))}
           </div>
@@ -904,7 +904,7 @@ function LiveTab() {
               ) : (
                 orders.slice(0, 20).map((o, i) => (
                   <motion.tr key={o.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.02 }} className="tbl-row">
-                    <td className="tbl-cell" style={{ paddingLeft: 16, fontWeight: 700, color: "var(--accent)", fontFamily: "JetBrains Mono, monospace", fontSize: 12 }}>
+                    <td className="tbl-cell" style={{ paddingLeft: 16, fontWeight: 700, color: "var(--accent)", fontFamily: "var(--font-mono)", fontSize: 12 }}>
                       {o.ticker.replace(".NS","").replace(".BO","")}
                     </td>
                     <td className="tbl-cell"><SideBadge side={o.side} /></td>

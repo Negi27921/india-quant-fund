@@ -48,24 +48,24 @@ function FilingRow({ filing, index }: { filing: Filing; index: number }) {
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, justifyContent: "space-between" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3, flexWrap: "wrap" }}>
-            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 700, color: "var(--text-1)" }}>
+            <span style={{ fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 700, color: "var(--text-1)" }}>
               {filing.company}
             </span>
-            <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 99, fontWeight: 700, fontFamily: "Inter, sans-serif", letterSpacing: "0.06em", background: `${color}18`, color, border: `1px solid ${color}30`, whiteSpace: "nowrap" }}>
+            <span style={{ fontSize: 9, padding: "1px 6px", borderRadius: 99, fontWeight: 700, fontFamily: "var(--font-body)", letterSpacing: "0.06em", background: `${color}18`, color, border: `1px solid ${color}30`, whiteSpace: "nowrap" }}>
               {filing.category}
             </span>
-            <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 4, background: "var(--surface-2)", color: "var(--text-3)", fontFamily: "Inter, sans-serif", fontWeight: 600 }}>
+            <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 4, background: "var(--surface-2)", color: "var(--text-3)", fontFamily: "var(--font-body)", fontWeight: 600 }}>
               {filing.exchange}
             </span>
           </div>
-          <div style={{ fontSize: 11.5, color: "var(--text-2)", fontFamily: "Inter, sans-serif", lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as React.CSSProperties["WebkitBoxOrient"] }}>
+          <div style={{ fontSize: 11.5, color: "var(--text-2)", fontFamily: "var(--font-body)", lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as React.CSSProperties["WebkitBoxOrient"] }}>
             {filing.headline}
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 3, color: "var(--text-4)", fontSize: 10 }}>
             <Clock style={{ width: 9, height: 9 }} />
-            <span style={{ fontFamily: "JetBrains Mono, monospace" }}>{timeAgo(filing.dt)}</span>
+            <span style={{ fontFamily: "var(--font-mono)" }}>{timeAgo(filing.dt)}</span>
           </div>
           {filing.has_pdf && (
             <a
@@ -73,7 +73,7 @@ function FilingRow({ filing, index }: { filing: Filing; index: number }) {
               target="_blank"
               rel="noopener noreferrer"
               onClick={e => e.stopPropagation()}
-              style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 9, color: "var(--accent)", fontFamily: "Inter, sans-serif", fontWeight: 700, textDecoration: "none" }}
+              style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 9, color: "var(--accent)", fontFamily: "var(--font-body)", fontWeight: 700, textDecoration: "none" }}
               onMouseEnter={e => (e.currentTarget.style.opacity = "0.7")}
               onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
             >
@@ -94,10 +94,10 @@ export function FilingsFeed() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px 8px", borderBottom: "1px solid var(--border)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)", boxShadow: "0 0 6px var(--green)", animation: "pulse 2s infinite" }} />
-          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, color: "var(--accent)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+          <span style={{ fontFamily: "var(--font-body)", fontSize: 11, fontWeight: 700, color: "var(--accent)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
             LIVE FILINGS
           </span>
-          {filings && <span style={{ fontSize: 10, background: "var(--accent-dim)", color: "var(--accent)", padding: "1px 6px", borderRadius: 99, fontFamily: "Inter, sans-serif", fontWeight: 700 }}>{filings.length}</span>}
+          {filings && <span style={{ fontSize: 10, background: "var(--accent-dim)", color: "var(--accent)", padding: "1px 6px", borderRadius: 99, fontFamily: "var(--font-body)", fontWeight: 700 }}>{filings.length}</span>}
         </div>
         <button onClick={() => refetch()} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-3)", padding: 4, borderRadius: 6 }}>
           <RefreshCw style={{ width: 12, height: 12, animation: isFetching ? "spin 1s linear infinite" : "none" }} />

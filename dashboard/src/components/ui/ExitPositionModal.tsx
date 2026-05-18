@@ -101,7 +101,7 @@ export function ExitPositionModal({ open, position, mode, onClose }: Props) {
             {/* Header */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <LogOut size={18} color="#3279F9" />
+                <LogOut size={18} color="var(--accent)" />
                 <span style={{ fontSize: 16, fontWeight: 600, color: "var(--text-1)" }}>
                   Exit Position
                 </span>
@@ -111,8 +111,8 @@ export function ExitPositionModal({ open, position, mode, onClose }: Props) {
                     fontWeight: 600,
                     padding: "2px 8px",
                     borderRadius: 20,
-                    backgroundColor: mode === "paper" ? "rgba(50,121,249,0.12)" : "rgba(39,174,96,0.12)",
-                    color: mode === "paper" ? "#3279F9" : "#27AE60",
+                    backgroundColor: mode === "paper" ? "rgba(106,98,86,0.12)" : "rgba(39,174,96,0.12)",
+                    color: mode === "paper" ? "var(--accent)" : "#27AE60",
                     textTransform: "uppercase",
                     letterSpacing: "0.06em",
                   }}
@@ -292,13 +292,13 @@ export function ExitPositionModal({ open, position, mode, onClose }: Props) {
                   flex: 1,
                   padding: "11px 0",
                   borderRadius: 8,
-                  border: "1px solid #3279F9",
+                  border: "1px solid var(--accent)",
                   cursor:
                     exitMutation.isPending || quantity <= 0 || quantity >= position.quantity
                       ? "not-allowed"
                       : "pointer",
                   backgroundColor: "transparent",
-                  color: "#3279F9",
+                  color: "var(--accent)",
                   fontWeight: 600,
                   fontSize: 14,
                   opacity:

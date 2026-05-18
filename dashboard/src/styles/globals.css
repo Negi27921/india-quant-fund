@@ -3,179 +3,198 @@
 @tailwind utilities;
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   DESIGN SYSTEM — One Piece Quant / Luffy Labs
-   Inspired by Google Antigravity Design System
-   Fonts : DM Sans (≈ Google Sans) · JetBrains Mono
-   Light : #F8F9FC bg · #121317 text · #3279F9 accent
-   Dark  : #18191D bg · #E6EAF0 text · #3279F9 accent
+   DESIGN SYSTEM — Stone / Paper × Luffy Labs Quant Terminal
+   Fonts   : Literata (serif, headings) · Inter (sans, body) · JetBrains Mono (data)
+   Light   : #EBE7E7 bg · #11100E text · #6A6256 accent (warm olive)
+   Dark    : #0F0E0C bg · #EBE7E7 text · #857A6D accent (lighter olive)
+   Source  : Stone Paper Editorial Design System
 ───────────────────────────────────────────────────────────────────────────── */
 
-/* ── Google Palette Tokens ──────────────────────────────────────────────── */
+/* ── Stone Paper Palette Tokens ─────────────────────────────────────────── */
 :root {
-  --palette-grey-0:    #FFFFFF;
-  --palette-grey-10:   #F8F9FC;
-  --palette-grey-20:   #EFF2F7;
-  --palette-grey-50:   #E6EAF0;
-  --palette-grey-100:  #E1E6EC;
-  --palette-grey-200:  #CDD4DC;
-  --palette-grey-300:  #B2BBC5;
-  --palette-grey-400:  #8B96A9;
-  --palette-grey-800:  #45474D;
-  --palette-grey-900:  #2F3034;
-  --palette-grey-1000: #212226;
-  --palette-grey-1100: #18191D;
-  --palette-grey-1200: #121317;
-  --palette-blue-600:  #3279F9;
+  /* Cream scale (Stone Paper background family) */
+  --sp-cream-0:   #FFFFFF;
+  --sp-cream-10:  #F8F6F4;
+  --sp-cream-20:  #F2F0F0;
+  --sp-cream-50:  #EBE7E7;
+  --sp-cream-100: #DAD8D8;
+  --sp-cream-200: #D3D1D0;
+  --sp-cream-300: #C3BCAF;
+
+  /* Charcoal scale (Stone Paper foreground family) */
+  --sp-charcoal-50:  #ABA398;
+  --sp-charcoal-100: #7C7468;
+  --sp-charcoal-200: #48433C;
+  --sp-charcoal-300: #2A2520;
+  --sp-charcoal-400: #11100E;
+
+  /* Warm dark scale */
+  --sp-dark-0:   #0F0E0C;
+  --sp-dark-10:  #161411;
+  --sp-dark-20:  #1A1917;
+  --sp-dark-50:  #262320;
+  --sp-dark-100: #2E2B27;
+  --sp-dark-200: #423D37;
+
+  /* Olive accent scale */
+  --sp-olive-300: #9A8F81;
+  --sp-olive-400: #857A6D;
+  --sp-olive-500: #6A6256;
+  --sp-olive-600: #5A5248;
+  --sp-olive-700: #4A443C;
 }
 
-/* ── Light Mode (default) ───────────────────────────────────────────────── */
+/* ── Light Mode — Stone Paper Warm Cream ────────────────────────────────── */
 :root {
-  /* Surfaces — Anthropic warm white */
-  --bg:        #FAFAF8;
-  --surface:   #FFFFFF;
-  --surface-2: #F5F2EC;
-  --surface-3: #EDE9E1;
-  --overlay:   rgba(250,250,248,0.97);
-  --card-bg:   #FFFFFF;
-  --card-hover:#F5F2EC;
-  --sidebar-bg:#FFFFFF;
-  --sidebar-border: rgba(40,35,30,0.07);
+  /* Surfaces */
+  --bg:        #EBE7E7;
+  --surface:   #F2F0F0;
+  --surface-2: #DAD8D8;
+  --surface-3: #D3D1D0;
+  --overlay:   rgba(235,231,231,0.97);
+  --card-bg:   #F2F0F0;
+  --card-hover:#DAD8D8;
+  --sidebar-bg:#EBE7E7;
+  --sidebar-border: rgba(17,16,14,0.09);
 
-  /* Brand — Blue as primary per Design System */
-  --accent:         #3279F9;
-  --accent-hover:   #2060E0;
-  --accent-dim:     rgba(50,121,249,0.08);
-  --accent-border:  rgba(50,121,249,0.22);
-  --accent-dark:    #1A4FBE;
+  /* Olive accent (Stone Paper primary) */
+  --accent:         #6A6256;
+  --accent-hover:   #5A5248;
+  --accent-dim:     rgba(106,98,86,0.10);
+  --accent-border:  rgba(106,98,86,0.26);
+  --accent-dark:    #4A443C;
 
-  /* Financial semantic — universal up/down */
-  --green:       #27AE60;
-  --green-hover: #219150;
-  --green-dim:   rgba(39,174,96,0.08);
-  --green-border:rgba(39,174,96,0.22);
-  --green-dark:  #1A7A44;
+  /* Financial semantic — universal (unchanged) */
+  --green:        #27AE60;
+  --green-hover:  #219150;
+  --green-dim:    rgba(39,174,96,0.10);
+  --green-border: rgba(39,174,96,0.26);
+  --green-dark:   #1A7A44;
 
-  --red:         #E74C3C;
-  --red-dim:     rgba(231,76,60,0.08);
-  --red-border:  rgba(231,76,60,0.22);
+  --red:          #C0392B;
+  --red-dim:      rgba(192,57,43,0.10);
+  --red-border:   rgba(192,57,43,0.26);
 
-  --amber:       #F59E0B;
-  --amber-dim:   rgba(245,158,11,0.08);
-  --amber-border:rgba(245,158,11,0.22);
+  --amber:        #D97706;
+  --amber-dim:    rgba(217,119,6,0.10);
+  --amber-border: rgba(217,119,6,0.26);
 
-  /* Yellow — kept for legacy chart/badge references */
-  --yellow:       #3279F9;
-  --yellow-dark:  #1A4FBE;
-  --yellow-dim:   rgba(50,121,249,0.08);
-  --yellow-border:rgba(50,121,249,0.22);
+  /* Legacy alias — olive */
+  --yellow:        #6A6256;
+  --yellow-dark:   #4A443C;
+  --yellow-dim:    rgba(106,98,86,0.10);
+  --yellow-border: rgba(106,98,86,0.26);
 
-  /* Borders — warm */
-  --border:        rgba(40,35,28,0.08);
-  --border-2:      rgba(40,35,28,0.13);
-  --border-strong: rgba(40,35,28,0.20);
-  --border-accent: rgba(50,121,249,0.22);
+  /* Borders — warm Stone Paper #C3BCAF family */
+  --border:        rgba(17,16,14,0.11);
+  --border-2:      rgba(17,16,14,0.17);
+  --border-strong: rgba(17,16,14,0.25);
+  --border-accent: rgba(106,98,86,0.26);
+  --border-green:  rgba(39,174,96,0.26);
+  --border-red:    rgba(192,57,43,0.26);
 
-  /* Typography — warm charcoal */
-  --text-1: #1C1916;
+  /* Typography — Stone Paper charcoal family */
+  --text-1: #11100E;
   --text-2: #48433C;
-  --text-3: #8A8178;
+  --text-3: #7C7468;
   --text-4: #ABA398;
 
-  /* Fonts */
-  --font-heading: "DM Sans", "Google Sans", system-ui, sans-serif;
-  --font-body:    "DM Sans", "Google Sans", system-ui, sans-serif;
-  --font-mono:    "JetBrains Mono", "Fira Code", monospace;
+  /* Fonts — Stone Paper: Literata + Inter + JetBrains Mono */
+  --font-heading: "Literata", Georgia, "Times New Roman", serif;
+  --font-body:    "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono:    "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
 
   /* Layout */
-  --sidebar-bg:     #FFFFFF;
-  --sidebar-border: rgba(33,34,38,0.08);
-  --sidebar-w:      220px;
+  --sidebar-w: 220px;
+  --input-bg:     #F2F0F0;
+  --input-border: rgba(17,16,14,0.18);
 
-  --card-bg:    #FFFFFF;
-  --card-hover: #F8F9FC;
-
-  --input-bg:     #FFFFFF;
-  --input-border: rgba(33,34,38,0.18);
-
-  /* Radius — Design System: 4px base, 9999px pill */
-  --r-xs:   3px;
-  --r-sm:   6px;
-  --r-md:   8px;
-  --r-lg:   12px;
-  --r-xl:   16px;
-  --r-2xl:  24px;
+  /* Radius — Stone Paper editorial (minimal, 4px base) */
+  --r-xs:   2px;
+  --r-sm:   4px;
+  --r-md:   6px;
+  --r-lg:   8px;
+  --r-xl:   10px;
+  --r-2xl:  14px;
   --r-pill: 9999px;
 
-  /* Shadows — warm */
-  --shadow-sm:     0 1px 3px rgba(40,35,28,0.06), 0 0 0 1px rgba(40,35,28,0.05);
-  --shadow-md:     0 4px 12px rgba(40,35,28,0.08), 0 0 0 1px rgba(40,35,28,0.05);
-  --shadow-lg:     0 8px 32px rgba(40,35,28,0.10), 0 0 0 1px rgba(40,35,28,0.05);
-  --shadow-accent: 0 4px 20px rgba(50,121,249,0.22);
-  --shadow-yellow: 0 4px 16px rgba(50,121,249,0.15);
-  --shadow-green:  0 4px 16px rgba(39,174,96,0.18);
+  /* Shadows — warm, Stone Paper tone */
+  --shadow-sm:     0 1px 3px rgba(17,16,14,0.07), 0 0 0 1px rgba(17,16,14,0.05);
+  --shadow-md:     0 4px 12px rgba(17,16,14,0.10), 0 0 0 1px rgba(17,16,14,0.05);
+  --shadow-lg:     0 8px 32px rgba(17,16,14,0.12), 0 0 0 1px rgba(17,16,14,0.05);
+  --shadow-accent: 0 4px 20px rgba(106,98,86,0.22);
+  --shadow-yellow: 0 4px 16px rgba(106,98,86,0.18);
+  --shadow-green:  0 4px 16px rgba(39,174,96,0.20);
 }
 
-/* ── Dark Mode ──────────────────────────────────────────────────────────── */
+/* ── Dark Mode — Stone Paper Warm Charcoal ──────────────────────────────── */
 [data-theme="dark"] {
-  --bg:        #000000;
-  --surface:   #0A0A0B;
-  --surface-2: #111113;
-  --surface-3: #1A1A1D;
-  --overlay:   rgba(0,0,0,0.97);
+  /* Surfaces — warm near-black (not pure black) */
+  --bg:        #0F0E0C;
+  --surface:   #1A1917;
+  --surface-2: #262320;
+  --surface-3: #2E2B27;
+  --overlay:   rgba(15,14,12,0.97);
 
-  --accent:        #3279F9;
-  --accent-hover:  #4A8EFF;
-  --accent-dim:    rgba(50,121,249,0.12);
-  --accent-border: rgba(50,121,249,0.25);
-  --accent-dark:   #2060E0;
+  /* Olive accent — lightened for dark */
+  --accent:        #A0947F;
+  --accent-hover:  #B3A894;
+  --accent-dim:    rgba(160,148,127,0.12);
+  --accent-border: rgba(160,148,127,0.28);
+  --accent-dark:   #857A6D;
 
+  /* Financial semantic — bright for dark */
   --green:        #22C55E;
   --green-hover:  #16A34A;
   --green-dim:    rgba(34,197,94,0.10);
-  --green-border: rgba(34,197,94,0.22);
+  --green-border: rgba(34,197,94,0.26);
   --green-dark:   #15803D;
 
-  --red:         #F87171;
-  --red-dim:     rgba(248,113,113,0.10);
-  --red-border:  rgba(248,113,113,0.22);
+  --red:          #F87171;
+  --red-dim:      rgba(248,113,113,0.10);
+  --red-border:   rgba(248,113,113,0.26);
 
-  --amber:        #FCD34D;
-  --amber-dim:    rgba(252,211,77,0.10);
-  --amber-border: rgba(252,211,77,0.22);
+  --amber:        #FBBF24;
+  --amber-dim:    rgba(251,191,36,0.10);
+  --amber-border: rgba(251,191,36,0.26);
 
-  --yellow:        #FCD34D;
-  --yellow-dark:   #D97706;
-  --yellow-dim:    rgba(252,211,77,0.10);
-  --yellow-border: rgba(252,211,77,0.22);
+  --yellow:        #A0947F;
+  --yellow-dark:   #6A6256;
+  --yellow-dim:    rgba(160,148,127,0.10);
+  --yellow-border: rgba(160,148,127,0.26);
 
-  --border:        rgba(255,255,255,0.06);
-  --border-2:      rgba(255,255,255,0.09);
-  --border-strong: rgba(255,255,255,0.14);
-  --border-accent: rgba(50,121,249,0.28);
+  /* Borders — warm Stone Paper dark family */
+  --border:        rgba(235,231,231,0.07);
+  --border-2:      rgba(235,231,231,0.11);
+  --border-strong: rgba(235,231,231,0.17);
+  --border-accent: rgba(160,148,127,0.30);
   --border-green:  rgba(34,197,94,0.28);
   --border-red:    rgba(248,113,113,0.28);
 
-  --text-1: #F4F4F6;
-  --text-2: #B8B8C8;
-  --text-3: #6B6B7E;
-  --text-4: #44445A;
+  /* Typography — Stone Paper cream family */
+  --text-1: #EBE7E7;
+  --text-2: #C5BEB5;
+  --text-3: #9A9490;
+  --text-4: #635D57;
 
-  --sidebar-bg:     #050507;
-  --sidebar-border: rgba(255,255,255,0.05);
-  --card-bg:        #0A0A0B;
-  --card-hover:     #111113;
-  --input-bg:       #0A0A0B;
-  --input-border:   rgba(255,255,255,0.10);
+  /* Layout */
+  --sidebar-bg:     #0F0E0C;
+  --sidebar-border: rgba(235,231,231,0.06);
+  --card-bg:        #1A1917;
+  --card-hover:     #262320;
+  --input-bg:       #1A1917;
+  --input-border:   rgba(235,231,231,0.12);
 
-  --shadow-sm:     0 1px 3px rgba(0,0,0,0.9);
-  --shadow-md:     0 4px 16px rgba(0,0,0,0.95);
-  --shadow-lg:     0 8px 40px rgba(0,0,0,1), 0 0 0 1px rgba(255,255,255,0.04);
-  --shadow-accent: 0 4px 24px rgba(50,121,249,0.40);
-  --shadow-yellow: 0 4px 16px rgba(50,121,249,0.20);
+  /* Shadows — deep warm */
+  --shadow-sm:     0 1px 3px rgba(0,0,0,0.70);
+  --shadow-md:     0 4px 16px rgba(0,0,0,0.80);
+  --shadow-lg:     0 8px 40px rgba(0,0,0,0.90), 0 0 0 1px rgba(235,231,231,0.04);
+  --shadow-accent: 0 4px 24px rgba(160,148,127,0.30);
+  --shadow-yellow: 0 4px 16px rgba(160,148,127,0.20);
   --shadow-green:  0 4px 16px rgba(34,197,94,0.25);
 }
 
-/* ── Background animation (Google Antigravity gradient orbs) ────────────── */
+/* ── Ambient background orbs — olive tones ──────────────────────────────── */
 @keyframes orb-drift-1 {
   0%,100% { transform: translate(0,0) scale(1); }
   33%  { transform: translate(40px,-30px) scale(1.06); }
@@ -193,8 +212,8 @@ body::before {
   top: -25%; left: -15%;
   width: 55vw; height: 65vh;
   border-radius: 50%;
-  background: radial-gradient(ellipse, rgba(50,121,249,0.04) 0%, transparent 68%);
-  animation: orb-drift-1 24s ease-in-out infinite;
+  background: radial-gradient(ellipse, rgba(106,98,86,0.05) 0%, transparent 68%);
+  animation: orb-drift-1 28s ease-in-out infinite;
   pointer-events: none;
   z-index: 0;
 }
@@ -204,16 +223,21 @@ body::after {
   bottom: -15%; right: -10%;
   width: 45vw; height: 55vh;
   border-radius: 50%;
-  background: radial-gradient(ellipse, rgba(50,121,249,0.03) 0%, transparent 68%);
-  animation: orb-drift-2 30s ease-in-out infinite;
+  background: radial-gradient(ellipse, rgba(106,98,86,0.04) 0%, transparent 68%);
+  animation: orb-drift-2 34s ease-in-out infinite;
   pointer-events: none;
   z-index: 0;
 }
 [data-theme="dark"] body::before {
-  background: radial-gradient(ellipse, rgba(50,121,249,0.07) 0%, transparent 68%);
+  background: radial-gradient(ellipse, rgba(160,148,127,0.07) 0%, transparent 68%);
 }
 [data-theme="dark"] body::after {
-  background: radial-gradient(ellipse, rgba(50,121,249,0.05) 0%, transparent 68%);
+  background: radial-gradient(ellipse, rgba(160,148,127,0.05) 0%, transparent 68%);
+}
+
+/* ── Dark body — warm charcoal gradient (Stone Paper dark) ─────────────── */
+[data-theme="dark"] body {
+  background: radial-gradient(ellipse at top left, #171412 0%, #0F0E0C 55%, #13120F 100%);
 }
 
 /* ── Keyframes ──────────────────────────────────────────────────────────── */
@@ -278,8 +302,6 @@ html, body {
     overflow: hidden;
     box-shadow: var(--shadow-sm);
     transition: box-shadow 200ms, border-color 200ms, transform 150ms;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
   }
   .card-hover { @apply card; cursor:pointer; }
   .card-hover:hover {
@@ -350,7 +372,7 @@ html, body {
     font-feature-settings: "tnum";
   }
 
-  /* ── Buttons (pill-shaped per Design System) ── */
+  /* ── Buttons (pill-shaped) ── */
   .btn {
     display: inline-flex;
     align-items: center;
@@ -360,7 +382,7 @@ html, body {
     font-size: 12px;
     font-weight: 600;
     font-family: var(--font-body);
-    letter-spacing: 0.01em;
+    letter-spacing: 0.04em;
     cursor: pointer;
     border: none;
     transition: all 150ms;
@@ -369,19 +391,19 @@ html, body {
   .btn-primary {
     @apply btn;
     background: var(--accent);
-    color: #FFFFFF;
+    color: var(--bg);
     box-shadow: var(--shadow-accent);
   }
   .btn-primary:hover {
     background: var(--accent-hover);
-    box-shadow: 0 6px 24px rgba(50,121,249,0.35);
+    box-shadow: 0 6px 24px rgba(106,98,86,0.32);
     transform: translateY(-1px);
   }
   .btn-primary:active { transform: translateY(0); }
   .btn-yellow {
     @apply btn;
     background: var(--accent);
-    color: #FFFFFF;
+    color: var(--bg);
     box-shadow: var(--shadow-accent);
   }
   .btn-yellow:hover { background: var(--accent-hover); transform: translateY(-1px); }
@@ -466,7 +488,7 @@ html, body {
   .table-row    { @apply tbl-row; }
   .table-cell   { @apply tbl-cell; }
 
-  /* ── Badges ── */
+  /* ── Badges / Pills ── */
   .badge {
     display: inline-flex;
     align-items: center;
@@ -515,8 +537,8 @@ html, body {
   .tab-item:hover { color:var(--text-1); background:var(--surface); }
   .tab-item.active {
     background: var(--accent);
-    color: #FFFFFF;
-    box-shadow: 0 2px 8px rgba(50,121,249,0.28);
+    color: var(--bg);
+    box-shadow: 0 2px 8px rgba(106,98,86,0.28);
   }
 
   /* ── Pills ── */
@@ -541,16 +563,17 @@ html, body {
     color: var(--accent);
   }
 
-  /* ── Typography ── */
+  /* ── Typography — Stone Paper hierarchy ── */
+  /* Display: Literata serif for large headings */
   .t-display {
-    font-family: var(--font-mono);
+    font-family: var(--font-heading);
     font-size: 28px;
     font-weight: 700;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.01em;
     color: var(--text-1);
-    line-height: 1.1;
-    font-feature-settings: "tnum";
+    line-height: 1.15;
   }
+  /* Heading: Inter bold uppercase — panel headers, section titles */
   .t-heading {
     font-family: var(--font-body);
     font-size: 13px;
@@ -559,6 +582,7 @@ html, body {
     text-transform: uppercase;
     color: var(--text-1);
   }
+  /* Sub: olive accent, small uppercase */
   .t-sub {
     font-family: var(--font-body);
     font-size: 11px;
@@ -583,17 +607,21 @@ html, body {
     text-transform: uppercase;
     color: var(--text-4);
   }
-  .t-body   { font-family:var(--font-body);  font-size:13px; color:var(--text-2); }
-  .t-sm     { font-family:var(--font-body);  font-size:11px; color:var(--text-3); }
-  .t-mono   { font-family:var(--font-mono);  font-size:13px; font-weight:500; font-feature-settings:"tnum"; color:var(--text-1); }
-  .t-mono-lg{ font-family:var(--font-mono);  font-size:15px; font-weight:600; font-feature-settings:"tnum"; color:var(--text-1); }
-  .font-mono{ font-family:var(--font-mono);  font-feature-settings:"tnum"; }
+  .t-body   { font-family:var(--font-body);    font-size:13px; color:var(--text-2); }
+  .t-sm     { font-family:var(--font-body);    font-size:11px; color:var(--text-3); }
+  /* Mono: JetBrains Mono for all financial numbers */
+  .t-mono   { font-family:var(--font-mono);    font-size:13px; font-weight:500; font-feature-settings:"tnum"; color:var(--text-1); }
+  .t-mono-lg{ font-family:var(--font-mono);    font-size:15px; font-weight:600; font-feature-settings:"tnum"; color:var(--text-1); }
+  .font-mono{ font-family:var(--font-mono);    font-feature-settings:"tnum"; }
+
+  /* Serif: Literata for editorial/decorative text */
+  .t-serif  { font-family:var(--font-heading); }
 
   /* ── Status dots ── */
   .status-dot       { width:7px; height:7px; border-radius:50%; flex-shrink:0; animation:pulse-dot 2s ease-in-out infinite; }
   .status-dot-green { background:var(--green); box-shadow:0 0 6px var(--green); }
   .status-dot-red   { background:var(--red);   box-shadow:0 0 6px var(--red); }
-  .status-dot-amber { background:var(--amber);  box-shadow:0 0 6px var(--amber); }
+  .status-dot-amber { background:var(--amber); box-shadow:0 0 6px var(--amber); }
 
   /* ── Skeleton ── */
   .skeleton {
@@ -620,7 +648,7 @@ html, body {
     text-transform: uppercase;
     color: var(--text-4);
     padding: 0 0 6px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 2px solid var(--accent);
     margin-bottom: 10px;
   }
 
@@ -630,14 +658,14 @@ html, body {
 }
 
 /* ── Dark mode component overrides ─────────────────────────────────────── */
-[data-theme="dark"] .card-yellow  { background: linear-gradient(135deg, rgba(50,121,249,0.07) 0%, var(--surface) 60%); }
-[data-theme="dark"] .card-accent  { background: linear-gradient(135deg, rgba(50,121,249,0.07) 0%, var(--surface) 60%); }
-[data-theme="dark"] .card-green   { background: linear-gradient(135deg, rgba(39,174,96,0.08)  0%, var(--surface) 60%); }
+[data-theme="dark"] .card-yellow  { background: linear-gradient(135deg, rgba(160,148,127,0.08) 0%, var(--surface) 60%); }
+[data-theme="dark"] .card-accent  { background: linear-gradient(135deg, rgba(160,148,127,0.08) 0%, var(--surface) 60%); }
+[data-theme="dark"] .card-green   { background: linear-gradient(135deg, rgba(34,197,94,0.07)   0%, var(--surface) 60%); }
 [data-theme="dark"] .tbl thead tr { background: var(--surface-2); }
 [data-theme="dark"] .tbl-row:hover{ background: var(--accent-dim); }
 [data-theme="dark"] .tab-item:hover{ background:var(--surface-2); color:var(--text-1); }
-[data-theme="dark"] body {
-  background: radial-gradient(ellipse at top left, #0A0010 0%, #000000 50%, #00080A 100%);
+[data-theme="dark"] .tab-item.active {
+  box-shadow: 0 2px 8px rgba(160,148,127,0.28);
 }
 
 /* ── Recharts overrides ─────────────────────────────────────────────────── */

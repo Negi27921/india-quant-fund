@@ -29,7 +29,7 @@ class ErrorBoundary extends React.Component<
           display: "flex", flexDirection: "column", alignItems: "center",
           justifyContent: "center", height: "100vh",
           background: "#F8F9FC", gap: 16,
-          fontFamily: '"DM Sans", "Google Sans", system-ui, sans-serif',
+          fontFamily: 'var(--font-body)',
           padding: 32, textAlign: "center",
         }}>
           <div style={{
@@ -42,18 +42,18 @@ class ErrorBoundary extends React.Component<
           <div style={{ fontSize: 18, fontWeight: 700, color: "#121317", letterSpacing: "-0.01em" }}>
             Something went wrong
           </div>
-          <div style={{ fontSize: 12, color: "#818590", maxWidth: 480, lineHeight: 1.7 }}>
+          <div style={{ fontSize: 12, color: "var(--text-3)", maxWidth: 480, lineHeight: 1.7 }}>
             {this.state.error.message}
           </div>
           <button
             onClick={() => { this.setState({ error: null }); window.location.href = "/"; }}
             style={{
               marginTop: 8, padding: "10px 28px",
-              background: "#3279F9", color: "#fff",
+              background: "var(--accent)", color: "#fff",
               border: "none", borderRadius: 9999,
               cursor: "pointer", fontSize: 13, fontWeight: 600,
-              fontFamily: '"DM Sans", system-ui, sans-serif',
-              boxShadow: "0 4px 16px rgba(50,121,249,0.3)",
+              fontFamily: "var(--font-body)",
+              boxShadow: "0 4px 16px rgba(106,98,86,0.3)",
             }}
           >
             Reload Terminal

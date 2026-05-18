@@ -97,19 +97,19 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
     const chart = createChart(el, {
       autoSize: true,
       layout: {
-        background: { type: ColorType.Solid, color: "#000000" },
+        background: { type: ColorType.Solid, color: "transparent" },
         textColor: "var(--text-3)",
         fontSize: 11,
         fontFamily: "'JetBrains Mono', monospace",
       },
       grid: {
-        vertLines: { color: "rgba(50,121,249,0.06)", style: LineStyle.Dotted },
-        horzLines: { color: "rgba(50,121,249,0.06)", style: LineStyle.Dotted },
+        vertLines: { color: "rgba(106,98,86,0.06)", style: LineStyle.Dotted },
+        horzLines: { color: "rgba(106,98,86,0.06)", style: LineStyle.Dotted },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: "rgba(50,121,249,0.5)", labelBackgroundColor: "var(--surface)" },
-        horzLine: { color: "rgba(50,121,249,0.5)", labelBackgroundColor: "var(--surface)" },
+        vertLine: { color: "rgba(106,98,86,0.5)", labelBackgroundColor: "var(--surface)" },
+        horzLine: { color: "rgba(106,98,86,0.5)", labelBackgroundColor: "var(--surface)" },
       },
       rightPriceScale: {
         borderColor: "var(--border)",
@@ -142,7 +142,7 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
     const volSeries = chart.addHistogramSeries({
       priceFormat: { type: "volume" },
       priceScaleId: "volume",
-      color: "rgba(50,121,249,0.3)",
+      color: "rgba(106,98,86,0.3)",
     });
     chart.priceScale("volume").applyOptions({
       scaleMargins: { top: 0.8, bottom: 0 },
@@ -212,7 +212,7 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
             style={{
               width: "min(820px, 90vw)",
               background: "var(--surface)",
-              borderLeft: "1px solid rgba(50,121,249,0.15)",
+              borderLeft: "1px solid rgba(106,98,86,0.15)",
               boxShadow: "-24px 0 80px rgba(0,0,0,0.9)",
             }}
             initial={{ x: "100%" }}
@@ -227,13 +227,13 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-3">
-                  <span style={{ fontSize: "18px", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: "var(--text-1)", letterSpacing: "0.04em" }}>
+                  <span style={{ fontSize: "18px", fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text-1)", letterSpacing: "0.04em" }}>
                     {displaySymbol}
                   </span>
                   <span
                     style={{
                       fontSize: "13px",
-                      fontFamily: "JetBrains Mono, monospace",
+                      fontFamily: "var(--font-mono)",
                       fontWeight: 700,
                       padding: "2px 8px",
                       borderRadius: 6,
@@ -245,7 +245,7 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
                     {isUp ? "▲" : "▼"} {Math.abs(changePct).toFixed(2)}%
                   </span>
                 </div>
-                {name && <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: 2, fontFamily: "Inter, sans-serif" }}>{name}</div>}
+                {name && <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: 2, fontFamily: "var(--font-body)" }}>{name}</div>}
               </div>
 
               {displayData && (
@@ -258,22 +258,22 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
                     { label: "V", val: fmtVol(displayData.volume ?? 0) },
                   ].map(item => (
                     <div key={item.label} className="text-center">
-                      <div style={{ fontSize: "9px", color: "var(--text-3)", letterSpacing: "0.1em", fontFamily: "Inter, sans-serif" }}>{item.label}</div>
-                      <div style={{ fontSize: "11px", color: "#A0A0BC", fontFamily: "JetBrains Mono, monospace" }}>{item.val}</div>
+                      <div style={{ fontSize: "9px", color: "var(--text-3)", letterSpacing: "0.1em", fontFamily: "var(--font-body)" }}>{item.label}</div>
+                      <div style={{ fontSize: "11px", color: "#A0A0BC", fontFamily: "var(--font-mono)" }}>{item.val}</div>
                     </div>
                   ))}
                 </div>
               )}
 
               <div className="flex items-center gap-1">
-                {loading && <RefreshCw style={{ width: 13, height: 13, color: "#3279F9", animation: "spin 1s linear infinite" }} />}
+                {loading && <RefreshCw style={{ width: 13, height: 13, color: "var(--accent)", animation: "spin 1s linear infinite" }} />}
                 <a
                   href={`https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tvSymbol)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-1.5 rounded flex items-center gap-1 transition-colors"
                   style={{ fontSize: "9px", color: "var(--text-3)", letterSpacing: "0.08em", textDecoration: "none" }}
-                  onMouseEnter={e => (e.currentTarget.style.color = "#3279F9")}
+                  onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
                   onMouseLeave={e => (e.currentTarget.style.color = "var(--text-3)")}
                   title="Open in TradingView"
                 >
@@ -303,13 +303,13 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
                   onClick={() => setTf(t)}
                   style={{
                     fontSize: "11px",
-                    fontFamily: "JetBrains Mono, monospace",
+                    fontFamily: "var(--font-mono)",
                     fontWeight: tf.label === t.label ? 700 : 500,
                     padding: "4px 12px",
                     borderRadius: 6,
-                    background: tf.label === t.label ? "rgba(50,121,249,0.15)" : "transparent",
-                    color: tf.label === t.label ? "#3279F9" : "var(--text-3)",
-                    border: `1px solid ${tf.label === t.label ? "rgba(50,121,249,0.35)" : "transparent"}`,
+                    background: tf.label === t.label ? "rgba(106,98,86,0.15)" : "transparent",
+                    color: tf.label === t.label ? "var(--accent)" : "var(--text-3)",
+                    border: `1px solid ${tf.label === t.label ? "rgba(106,98,86,0.35)" : "transparent"}`,
                     cursor: "pointer",
                     transition: "all 150ms",
                   }}
@@ -320,7 +320,7 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
                 </button>
               ))}
               <div className="flex-1" />
-              <span style={{ fontSize: "9px", color: "#1C1C2E", letterSpacing: "0.1em", fontFamily: "Inter, sans-serif" }}>NSE · YFINANCE</span>
+              <span style={{ fontSize: "9px", color: "var(--surface-3)", letterSpacing: "0.1em", fontFamily: "var(--font-body)" }}>NSE · YFINANCE</span>
             </div>
 
             {/* Chart area */}
@@ -328,8 +328,8 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
               {loading && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.85)" }}>
                   <div className="flex flex-col items-center gap-3">
-                    <RefreshCw style={{ width: 20, height: 20, color: "#3279F9", animation: "spin 1s linear infinite" }} />
-                    <span style={{ fontSize: "11px", color: "var(--text-3)", fontFamily: "Inter, sans-serif" }}>Loading chart data...</span>
+                    <RefreshCw style={{ width: 20, height: 20, color: "var(--accent)", animation: "spin 1s linear infinite" }} />
+                    <span style={{ fontSize: "11px", color: "var(--text-3)", fontFamily: "var(--font-body)" }}>Loading chart data...</span>
                   </div>
                 </div>
               )}
@@ -337,8 +337,8 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-center">
                     <div style={{ fontSize: "28px", marginBottom: 8 }}>📊</div>
-                    <div style={{ fontSize: "12px", color: "var(--text-3)", fontFamily: "Inter, sans-serif" }}>No chart data for {displaySymbol}</div>
-                    <div style={{ fontSize: "10px", color: "var(--text-3)", marginTop: 4, fontFamily: "Inter, sans-serif" }}>Market may be closed or symbol not found</div>
+                    <div style={{ fontSize: "12px", color: "var(--text-3)", fontFamily: "var(--font-body)" }}>No chart data for {displaySymbol}</div>
+                    <div style={{ fontSize: "10px", color: "var(--text-3)", marginTop: 4, fontFamily: "var(--font-body)" }}>Market may be closed or symbol not found</div>
                   </div>
                 </div>
               )}
@@ -356,11 +356,11 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
                   { label: "HIGH",  val: `₹${fmtPrice(last.high)}`,  color: "#27AE60" },
                   { label: "LOW",   val: `₹${fmtPrice(last.low)}`,   color: "#E74C3C" },
                   { label: "CLOSE", val: `₹${fmtPrice(last.close)}`, color: "#FFFFFF" },
-                  { label: "VOL",   val: fmtVol(last.volume),         color: "#3279F9" },
+                  { label: "VOL",   val: fmtVol(last.volume),         color: "var(--accent)" },
                 ].map(s => (
                   <div key={s.label} className="flex items-center gap-1.5">
-                    <span style={{ fontSize: "9px", color: "var(--text-3)", letterSpacing: "0.1em", fontFamily: "Inter, sans-serif" }}>{s.label}</span>
-                    <span style={{ fontSize: "11px", color: s.color, fontFamily: "JetBrains Mono, monospace" }}>{s.val}</span>
+                    <span style={{ fontSize: "9px", color: "var(--text-3)", letterSpacing: "0.1em", fontFamily: "var(--font-body)" }}>{s.label}</span>
+                    <span style={{ fontSize: "11px", color: s.color, fontFamily: "var(--font-mono)" }}>{s.val}</span>
                   </div>
                 ))}
                 <div className="flex-1" />
@@ -369,7 +369,7 @@ export function ChartDrawer({ symbol, name, onClose }: ChartDrawerProps) {
                     ? <TrendingUp style={{ width: 12, height: 12, color: "#27AE60" }} />
                     : <TrendingDown style={{ width: 12, height: 12, color: "#E74C3C" }} />
                   }
-                  <span style={{ fontSize: "12px", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: changePct >= 0 ? "#27AE60" : "#E74C3C" }}>
+                  <span style={{ fontSize: "12px", fontFamily: "var(--font-mono)", fontWeight: 700, color: changePct >= 0 ? "#27AE60" : "#E74C3C" }}>
                     {change >= 0 ? "+" : ""}{fmtPrice(change)} ({changePct >= 0 ? "+" : ""}{changePct.toFixed(2)}%)
                   </span>
                 </div>

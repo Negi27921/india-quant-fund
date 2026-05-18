@@ -8,7 +8,7 @@ const wsBase = import.meta.env.VITE_API_URL
 export const WS_URL = `${wsBase}/ws`;
 
 export const CHART_COLORS = {
-  primary: "#3279F9",
+  primary: "var(--accent)",
   success: "#27AE60",
   danger:  "#E74C3C",
   warning: "#F59E0B",
@@ -19,7 +19,7 @@ export const CHART_COLORS = {
 };
 
 export const SECTOR_COLORS: Record<string, string> = {
-  "Information Technology": "#3279F9",
+  "Information Technology": "var(--accent)",
   "Financial Services":     "#27AE60",
   "Healthcare":             "#F59E0B",
   "Consumer Goods":         "#8B5CF6",
@@ -36,7 +36,7 @@ export const SECTOR_COLORS: Record<string, string> = {
 export const STRATEGY_COLORS: Record<string, string> = {
   vcp:          "#27AE60",
   ipo_base:     "#F59E0B",
-  rocket_base:  "#3279F9",
+  rocket_base:  "var(--accent)",
   breakout:     "#E74C3C",
   rsi_reversal: "#8B5CF6",
   golden_cross: "#06B6D4",

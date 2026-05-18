@@ -155,16 +155,16 @@ export function Header({ title, subtitle }: HeaderProps) {
       }}>
         {/* Title */}
         <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 4, height: 20, borderRadius: 2, background: "var(--accent)" }} />
+          <div style={{ width: 3, height: 22, background: "var(--accent)" }} />
           <div>
             <div style={{
-              fontSize: 14, fontWeight: 800, color: "var(--text-1)",
-              letterSpacing: "0.04em", fontFamily: "var(--font-body)",
+              fontSize: 16, fontWeight: 700, color: "var(--text-1)",
+              letterSpacing: "0.01em", fontFamily: "var(--font-heading)", fontStyle: "italic",
             }}>
               {title}
             </div>
             {subtitle && (
-              <div style={{ fontSize: 10, color: "var(--text-3)", letterSpacing: "0.04em", fontFamily: "var(--font-body)", marginTop: 1 }}>
+              <div style={{ fontSize: 9, color: "var(--text-3)", letterSpacing: "0.12em", fontFamily: "var(--font-body)", marginTop: 1, textTransform: "uppercase", fontWeight: 700 }}>
                 {subtitle}
               </div>
             )}
