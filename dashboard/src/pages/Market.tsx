@@ -131,10 +131,24 @@ function IndexChip({ label, data }: { label: string; data?: IndexData; indexKey:
   const up = data.change_pct >= 0;
   const color = up ? "var(--green)" : "var(--red)";
   const tvSymbol = data.symbol ? toTVSymbol(data.symbol) : "";
-  const isDark = document.documentElement.dataset.theme === "dark";
-  const tvTheme = isDark ? "dark" : "light";
+  const isDark = document.documentElement.dataset.theme !== "light";
+  // Use TradingView's official embeddable widget endpoint (s.tradingview.com CDN)
+  // www.tradingview.com/widgetembed/ sends X-Frame-Options: SAMEORIGIN — blocks cross-domain
   const miniUrl = tvSymbol
-    ? `https://www.tradingview.com/widgetembed/?symbol=${encodeURIComponent(tvSymbol)}&interval=D&theme=${tvTheme}&style=2&hide_top_bar=1&hide_legend=1&save_image=0&locale=en`
+    ? `https://s.tradingview.com/embed-widget/mini-symbol-overview/?locale=en#${encodeURIComponent(JSON.stringify({
+        symbol:                tvSymbol,
+        width:                 200,
+        height:                130,
+        dateRange:             "1M",
+        colorTheme:            isDark ? "dark" : "light",
+        trendLineColor:        "rgba(41, 98, 255, 1)",
+        underLineColor:        "rgba(41, 98, 255, 0.3)",
+        underLineBottomColor:  "rgba(41, 98, 255, 0)",
+        isTransparent:         true,
+        autosize:              false,
+        largeChartUrl:         "",
+        locale:                "en",
+      }))}`
     : "";
 
   const handleMouseEnter = () => {
@@ -160,7 +174,7 @@ function IndexChip({ label, data }: { label: string; data?: IndexData; indexKey:
             borderRadius: 10,
             padding: "10px 10px 8px",
             boxShadow: "var(--shadow-lg)",
-            width: 220,
+            width: 226,
             pointerEvents: "auto",
           }}
         >
@@ -169,14 +183,15 @@ function IndexChip({ label, data }: { label: string; data?: IndexData; indexKey:
           </div>
           {miniUrl && (
             <iframe
-              key={tvSymbol}
+              key={tvSymbol + (isDark ? "d" : "l")}
               src={miniUrl}
               width={200}
-              height={120}
+              height={130}
               frameBorder={0}
+              scrolling="no"
               allowTransparency
               title={`${label} mini chart`}
-              style={{ display: "block", border: "none", borderRadius: 4 }}
+              style={{ display: "block", border: "none", borderRadius: 4, background: "transparent" }}
             />
           )}
           <div style={{ marginTop: 6, fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-body)", textAlign: "center" }}>
