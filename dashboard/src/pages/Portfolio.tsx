@@ -28,7 +28,7 @@ import {
 } from "@/api/queries";
 import {
   usePaperPositions, useDeletePaperPosition, useLivePositions, useDeleteLivePosition,
-  usePnLStats, usePaperTrades, useStrategyPnl,
+  usePaperTrades, useStrategyPnl,
   useJournalSummary, useJournalPnLCalendar, useJournalPositions,
   type PaperPosition,
 } from "@/api/pnl-queries";
@@ -120,6 +120,7 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
 
   const { data: sectors } = useSectorExposure();
   const { data: equity, isLoading: equityLoading } = useEquityCurve(equityCurveDays);
+  const { data: journalEquity = [] } = useJournalPnLCalendar(new Date().getFullYear());
   const { data: paperPositions, isLoading: paperLoading } = usePaperPositions();
   const { data: journalRaw, isLoading: journalLoading } = useJournalPositions();
   const { data: dhanRaw,    isLoading: dhanLoading    } = useLivePositions();
@@ -187,24 +188,39 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 card p-4">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-1)", letterSpacing: "0.08em", fontFamily: "var(--font-body)" }}>EQUITY CURVE</span>
-            <div style={{ display: "flex", gap: 4 }}>
-              {DAYS_OPTIONS_EQUITY.map(d => (
-                <button key={d} onClick={() => setEquityCurveDays(d)} style={{
-                  fontSize: 10, padding: "2px 8px", borderRadius: 6, cursor: "pointer",
-                  background: equityCurveDays === d ? "rgba(39,174,96,0.1)" : "transparent",
-                  border: equityCurveDays === d ? "1px solid rgba(39,174,96,0.25)" : "1px solid transparent",
-                  color: equityCurveDays === d ? "var(--accent)" : "var(--text-3)",
-                  fontFamily: "var(--font-body)", fontWeight: 600,
-                }}>
-                  {d === 252 ? "1Y" : d === 756 ? "3Y" : d === 90 ? "3M" : "1M"}
-                </button>
-              ))}
-            </div>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-1)", letterSpacing: "0.08em", fontFamily: "var(--font-body)" }}>
+              {tab === "live" ? "JOURNAL NAV CURVE" : "SCREENER EQUITY CURVE"}
+            </span>
+            {tab === "paper" && (
+              <div style={{ display: "flex", gap: 4 }}>
+                {DAYS_OPTIONS_EQUITY.map(d => (
+                  <button key={d} onClick={() => setEquityCurveDays(d)} style={{
+                    fontSize: 10, padding: "2px 8px", borderRadius: 6, cursor: "pointer",
+                    background: equityCurveDays === d ? "rgba(39,174,96,0.1)" : "transparent",
+                    border: equityCurveDays === d ? "1px solid rgba(39,174,96,0.25)" : "1px solid transparent",
+                    color: equityCurveDays === d ? "var(--accent)" : "var(--text-3)",
+                    fontFamily: "var(--font-body)", fontWeight: 600,
+                  }}>
+                    {d === 252 ? "1Y" : d === 756 ? "3Y" : d === 90 ? "3M" : "1M"}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          {equityLoading
-            ? <div style={{ height: 180, background: "rgba(39,174,96,0.03)", borderRadius: 8 }} />
-            : <EquityChart data={equity ?? []} height={180} />}
+          {tab === "live" ? (
+            journalEquity.length > 1 ? (
+              <EquityChart data={journalEquity.map(d => ({ date: d.date, portfolio_value: d.portfolio_value, day_pnl_pct: d.pnl_pct, drawdown_pct: 0 }))} height={180} />
+            ) : (
+              <div style={{ height: 180, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8 }}>
+                <span style={{ fontSize: 13, color: "var(--text-3)" }}>No closed journal trades yet</span>
+                <span style={{ fontSize: 11, color: "var(--text-4)" }}>Equity curve builds as you close trades in the Trading Journal</span>
+              </div>
+            )
+          ) : (
+            equityLoading
+              ? <div style={{ height: 180, background: "rgba(39,174,96,0.03)", borderRadius: 8 }} />
+              : <EquityChart data={equity ?? []} height={180} />
+          )}
         </div>
         <div className="card p-4">
           <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-1)", letterSpacing: "0.08em", display: "block", marginBottom: 12, fontFamily: "var(--font-body)" }}>SECTOR EXPOSURE</span>
@@ -499,8 +515,32 @@ function PnLTab() {
   const [rangeEnd,   setRangeEnd]   = useState(monthEnd(now.getFullYear(), now.getMonth() + 1));
 
   const { data: calData = [] } = useJournalPnLCalendar(year, month);
-  const { data: stats }        = usePnLStats();
   const { data: allData = [] } = useJournalPnLCalendar(year);
+
+  // Stats computed from journal calendar — no paper_trades dependency
+  const winDays  = allData.filter(d => d.pnl > 0).length;
+  const lossDays = allData.filter(d => d.pnl < 0).length;
+  const totalPnl = allData.reduce((s, d) => s + d.pnl, 0);
+  const totalPnlPct = allData.reduce((s, d) => s + d.pnl_pct, 0);
+  const winPcts  = allData.filter(d => d.pnl > 0).map(d => d.pnl_pct);
+  const lossPcts = allData.filter(d => d.pnl < 0).map(d => d.pnl_pct);
+  const bestDay  = winPcts.length  > 0 ? Math.max(...winPcts)  : 0;
+  const worstDay = lossPcts.length > 0 ? Math.min(...lossPcts) : 0;
+  const avgWin   = winPcts.length  > 0 ? winPcts.reduce((s, v) => s + v, 0) / winPcts.length  : 0;
+  const avgLoss  = lossPcts.length > 0 ? lossPcts.reduce((s, v) => s + v, 0) / lossPcts.length : 0;
+
+  const monthlyData = useMemo(() => {
+    const byMonth: Record<string, { pnl: number; pnl_pct: number }> = {};
+    allData.forEach(d => {
+      const key = d.date.slice(0, 7);
+      if (!byMonth[key]) byMonth[key] = { pnl: 0, pnl_pct: 0 };
+      byMonth[key].pnl += d.pnl;
+      byMonth[key].pnl_pct += d.pnl_pct;
+    });
+    return Object.entries(byMonth)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, v]) => ({ month: MONTHS[parseInt(key.slice(5)) - 1], ...v }));
+  }, [allData]);
 
   const prevMonth = () => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); };
   const nextMonth = () => { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); };
@@ -516,12 +556,12 @@ function PnLTab() {
   const monthLoss   = filteredCalData.filter(d => d.pnl < 0).length;
 
   const statPanels = [
-    { label: "TOTAL P&L",  value: formatCurrency(stats?.total_pnl ?? 0, true), sub: `${(stats?.total_pnl_pct ?? 0) >= 0 ? "+" : ""}${(stats?.total_pnl_pct ?? 0).toFixed(2)}% overall`, color: numColor(stats?.total_pnl ?? 0), icon: TrendingUp },
-    { label: "WIN DAYS",   value: String(stats?.win_days ?? 0),   sub: `${stats?.loss_days ?? 0} losing`, color: "var(--green)", icon: Target },
-    { label: "BEST DAY",   value: `+${(stats?.best_day ?? 0).toFixed(2)}%`,  color: "var(--green)", icon: Flame },
-    { label: "WORST DAY",  value: `${(stats?.worst_day ?? 0).toFixed(2)}%`,  color: "var(--red)",   icon: TrendingDown },
-    { label: "AVG WIN",    value: `+${(stats?.avg_win ?? 0).toFixed(2)}%`,   color: "var(--green)" },
-    { label: "AVG LOSS",   value: `${(stats?.avg_loss ?? 0).toFixed(2)}%`,   color: "var(--red)" },
+    { label: "TOTAL P&L",  value: totalPnl !== 0 ? formatCurrency(totalPnl, true) : "—", sub: totalPnlPct !== 0 ? `${totalPnlPct >= 0 ? "+" : ""}${totalPnlPct.toFixed(2)}% overall` : "from journal trades", color: numColor(totalPnl), icon: TrendingUp },
+    { label: "WIN DAYS",   value: allData.length > 0 ? String(winDays)  : "—", sub: allData.length > 0 ? `${lossDays} losing` : "no closed trades", color: "var(--green)", icon: Target },
+    { label: "BEST DAY",   value: bestDay  !== 0 ? `+${bestDay.toFixed(2)}%`  : "—", color: "var(--green)", icon: Flame },
+    { label: "WORST DAY",  value: worstDay !== 0 ? `${worstDay.toFixed(2)}%`  : "—", color: "var(--red)",   icon: TrendingDown },
+    { label: "AVG WIN",    value: avgWin   !== 0 ? `+${avgWin.toFixed(2)}%`   : "—", color: "var(--green)" },
+    { label: "AVG LOSS",   value: avgLoss  !== 0 ? `${avgLoss.toFixed(2)}%`   : "—", color: "var(--red)" },
   ];
 
   return (
@@ -616,9 +656,9 @@ function PnLTab() {
               <BarChart2 style={{ width: 11, height: 11, color: "var(--amber)" }} />
               <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-1)", fontFamily: "var(--font-body)" }}>MONTHLY P&L {year}</span>
             </div>
-            {stats?.monthly ? (
+            {monthlyData.length > 0 ? (
               <ResponsiveContainer width="100%" height={140}>
-                <BarChart data={stats.monthly} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                <BarChart data={monthlyData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                   <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
                   <XAxis dataKey="month" tick={{ fontSize: 9, fill: "var(--text-4)" }} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 9, fill: "var(--text-4)" }} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} />
@@ -626,11 +666,15 @@ function PnLTab() {
                   <ReTip contentStyle={{ background: "var(--surface)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 4, fontSize: 11, fontFamily: "var(--font-mono)" }}
                     formatter={(v: number) => [`${v.toFixed(2)}%`, "Monthly P&L"]} labelStyle={{ color: "var(--text-3)", fontSize: 10 }} />
                   <Bar dataKey="pnl_pct" radius={[2, 2, 0, 0]} maxBarSize={28}>
-                    {stats.monthly.map((d, i) => <Cell key={i} fill={d.pnl_pct >= 0 ? "var(--green)" : "var(--red)"} fillOpacity={0.8} />)}
+                    {monthlyData.map((d, i) => <Cell key={i} fill={d.pnl_pct >= 0 ? "var(--green)" : "var(--red)"} fillOpacity={0.8} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-            ) : <div className="skeleton" style={{ height: 140 }} />}
+            ) : (
+              <div style={{ height: 140, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <span style={{ fontSize: 12, color: "var(--text-4)" }}>No journal trades closed yet</span>
+              </div>
+            )}
           </div>
 
           <div className="card p-4">
@@ -765,9 +809,14 @@ function TradesTab() {
       {/* Paper trades table */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="card">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexWrap: "wrap", gap: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-1)", fontFamily: "var(--font-body)" }}>
-            PAPER TRADES ({filtered.length})
-          </span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-1)", fontFamily: "var(--font-body)" }}>
+              SCREENER AUTO-TRADES ({filtered.length})
+            </span>
+            <span style={{ fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-body)" }}>
+              Automated paper trades from the screener bot — not your journal trades
+            </span>
+          </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             {/* Date range filter */}
             <div style={{ display: "flex", alignItems: "center", gap: 5 }}>

@@ -55,16 +55,33 @@ def _all_trades() -> list[dict]:
         return []
 
 
-def _fetch_prices_sync(symbols: list[str]) -> dict[str, float]:
+def _fetch_prices_sync(symbols: list[str], timeout_s: float = 6.0) -> dict[str, float]:
+    """Fetch prices for all symbols in parallel; total wall-time capped at timeout_s."""
+    from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED
     import yfinance as yf
-    prices: dict[str, float] = {}
-    for sym in symbols:
+
+    def _one(sym: str) -> tuple[str, float | None]:
         for suffix in (".NS", ".BO"):
             try:
                 p = float(yf.Ticker(sym + suffix).fast_info.last_price)
                 if p > 0:
-                    prices[sym] = p
-                    break
+                    return sym, p
+            except Exception:
+                pass
+        return sym, None
+
+    prices: dict[str, float] = {}
+    if not symbols:
+        return prices
+
+    with ThreadPoolExecutor(max_workers=min(len(symbols), 6)) as pool:
+        futures = [pool.submit(_one, s) for s in symbols]
+        done, _ = wait(futures, timeout=timeout_s, return_when=ALL_COMPLETED)
+        for f in done:
+            try:
+                sym, price = f.result()
+                if price is not None:
+                    prices[sym] = price
             except Exception:
                 pass
     return prices
@@ -270,21 +287,14 @@ async def journal_summary():
             for t in closed_trades
             if (t.get("exitDate") or "")[:10] == today
         )
+        # Cost-basis NAV — no yFinance call (avoids Vercel serverless timeouts).
+        # The /journal/prices endpoint supplies live CMPs to the frontend separately.
         total_invested = sum(float(t["buyPrice"]) * int(t["quantity"]) for t in open_trades)
-        symbols = list({t["stockName"] for t in open_trades})
-        prices = _fetch_prices_sync(symbols) if symbols else {}
-        unrealized_pnl = sum(
-            (prices.get(t["stockName"], float(t["buyPrice"])) - float(t["buyPrice"])) * int(t["quantity"])
-            for t in open_trades
-        )
-        open_value = sum(
-            prices.get(t["stockName"], float(t["buyPrice"])) * int(t["quantity"])
-            for t in open_trades
-        )
-        nav = open_value + realized_pnl
-        day_pnl = today_realized + unrealized_pnl
+        nav = total_invested + realized_pnl
+        unrealized_pnl = 0  # frontend fetches live prices via /journal/prices
+        day_pnl = today_realized
         nav_prev = nav - day_pnl if nav - day_pnl > 0 else (nav if nav > 0 else 1)
-        day_pnl_pct = day_pnl / nav_prev * 100
+        day_pnl_pct = day_pnl / nav_prev * 100 if nav_prev > 0 else 0.0
 
         # Max drawdown from closed-trade equity curve
         daily: dict[str, float] = defaultdict(float)
