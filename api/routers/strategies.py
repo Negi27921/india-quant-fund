@@ -62,33 +62,51 @@ async def strategy_performance():
 @router.get("/signals")
 async def recent_signals(days: int = Query(5, ge=1, le=30)):
     """Return signals from screener_cache; falls back to paper_trades entries when cache is empty."""
+    # Strategies that store non-screener data in screener_cache — skip them
+    _NON_SIGNAL_STRATEGIES = {"fii_dii", "quarterly_results"}
+
     try:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
         rows = sdb.select(
             "screener_cache",
             cols="strategy,scanned_at,results",
             order="-scanned_at",
-            limit=20,
+            limit=50,
         )
         signals = []
+        seen: set[tuple] = set()
+
         for row in rows:
+            strategy = row.get("strategy", "")
+            if strategy in _NON_SIGNAL_STRATEGIES:
+                continue
             scanned_at = row.get("scanned_at", "")
             if scanned_at and scanned_at < cutoff:
                 continue
-            strategy = row.get("strategy", "")
             raw = row.get("results") or []
             results = json.loads(raw) if isinstance(raw, str) else raw
             date_str = scanned_at[:10] if scanned_at else ""
-            for r in results[:25]:
+            for r in results[:30]:
+                # screener stores "symbol"; multibagger_alert may store "ticker" — accept both
+                ticker = (r.get("ticker") or r.get("symbol") or "").replace(".NS", "").replace(".BO", "").strip()
+                if not ticker:
+                    continue
                 conf = int(r.get("confidence", 0))
+                if conf == 0:
+                    continue
+                key = (date_str, ticker, strategy)
+                if key in seen:
+                    continue
+                seen.add(key)
                 approved = conf >= 70
                 signals.append({
                     "date": date_str,
-                    "ticker": r.get("ticker", ""),
+                    "ticker": ticker,
                     "strategy": strategy,
                     "signal": round(conf / 100, 2),
                     "approved": approved,
                     "rejection_reason": None if approved else f"confidence {conf}% < 70% threshold",
+                    "type": "BUY",
                 })
 
         # Fallback: derive signals from paper_trades when screener_cache is empty
@@ -98,18 +116,21 @@ async def recent_signals(days: int = Query(5, ge=1, le=30)):
                 "paper_trades",
                 cols="ticker,strategy,entry_date,confidence,status",
                 order="-entry_date",
-                limit=100,
+                limit=200,
             )
             for t in trades:
                 entry_date = t.get("entry_date", "")
                 if entry_date and entry_date < cutoff_date:
                     continue
+                ticker = (t.get("ticker") or "").replace(".NS", "").replace(".BO", "").strip()
+                if not ticker:
+                    continue
                 conf = int(t.get("confidence") or 80)
-                approved = conf >= 80
+                approved = conf >= 70
                 status = t.get("status", "open").lower()
                 signals.append({
                     "date": entry_date,
-                    "ticker": t.get("ticker", ""),
+                    "ticker": ticker,
                     "strategy": t.get("strategy", ""),
                     "signal": round(conf / 100, 2),
                     "approved": approved,

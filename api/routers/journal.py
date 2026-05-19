@@ -199,6 +199,46 @@ def delete_trade(trade_id: str):
         conn.close()
 
 
+# ── Live price endpoint ────────────────────────────────────────────────────────
+
+@router.get("/prices")
+async def get_live_prices(symbols: str = ""):
+    """
+    Fetch live CMP for a comma-separated list of stock names.
+    Tries NSE (.NS) first, falls back to BSE (.BO).
+    Returns {symbol: price | null} map — never raises.
+    """
+    names = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    if not names:
+        return {}
+
+    def _fetch(name: str) -> tuple[str, float | None]:
+        import yfinance as yf
+        for suffix in (".NS", ".BO"):
+            try:
+                t = yf.Ticker(name + suffix)
+                info = t.fast_info
+                price = float(info.last_price)
+                if price and price > 0:
+                    return name, round(price, 2)
+            except Exception:
+                pass
+        return name, None
+
+    loop = asyncio.get_running_loop()
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=min(len(names), 10)) as pool:
+        tasks = [loop.run_in_executor(pool, _fetch, n) for n in names]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    return {
+        name: price
+        for item in results
+        if not isinstance(item, Exception)
+        for name, price in [item]
+    }
+
+
 # ── AI system prompt ───────────────────────────────────────────────────────────
 
 JOURNAL_SYSTEM_PROMPT = """You are my Personal AI Trading Journal, Portfolio Manager, and Performance Coach.
@@ -328,18 +368,46 @@ def _gemini(system: str, user_msg: str, history: list[dict] | None = None) -> st
         json={
             "system_instruction": {"parts": [{"text": system}]},
             "contents": contents,
-            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1200},
+            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 2000},
         },
-        timeout=7,
+        timeout=22,
     )
     r.raise_for_status()
     return r.json()["candidates"][0]["content"]["parts"][0]["text"]
 
 
+def _openrouter(system: str, user_msg: str, history: list[dict] | None = None) -> str:
+    import requests as _req
+    key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    if not key:
+        raise ValueError("OPENROUTER_API_KEY not set")
+    model = os.getenv("OPENROUTER_MODEL", "google/gemini-2.0-flash-001").strip()
+    messages = [{"role": "system", "content": system}]
+    for t in (history or []):
+        messages.append({"role": t.get("role", "user"), "content": t.get("content", "")})
+    messages.append({"role": "user", "content": user_msg})
+    r = _req.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://india-quant-fund.vercel.app",
+        },
+        json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 2000},
+        timeout=22,
+    )
+    r.raise_for_status()
+    return r.json()["choices"][0]["message"]["content"]
+
+
 def _llm(system: str, user_msg: str, history: list[dict] | None = None) -> tuple[str, str, int]:
-    preferred = os.getenv("LLM_PROVIDER", "gemini").lower()
-    chain = [("gemini", _gemini), ("groq", _groq)] if preferred == "gemini" else [("groq", _groq), ("gemini", _gemini)]
-    last_err = ""
+    # Priority: Gemini direct → OpenRouter (Gemini via proxy) → Groq (llama fallback)
+    chain = [
+        ("gemini",      _gemini),
+        ("openrouter",  _openrouter),
+        ("groq",        _groq),
+    ]
+    errors: list[str] = []
     for name, fn in chain:
         try:
             t0 = time.monotonic()
@@ -348,10 +416,11 @@ def _llm(system: str, user_msg: str, history: list[dict] | None = None) -> tuple
             if result and result.strip():
                 return result.strip(), name, ms
         except Exception as exc:
-            last_err = f"{name}: {exc}"
+            errors.append(f"{name}: {str(exc)[:60]}")
     return (
-        "Temporary AI issue. Please try again in a moment.",
-        f"none:{last_err[:80]}",
+        f"AI Coach is temporarily unavailable. Tried: {'; '.join(errors[:2])}. "
+        "Please ensure GEMINI_API_KEY or OPENROUTER_API_KEY is set in Vercel environment variables.",
+        "none",
         0,
     )
 
@@ -389,7 +458,7 @@ async def journal_chat(body: JournalChatRequest):
     try:
         reply, provider, latency_ms, trade_count = await asyncio.wait_for(
             loop.run_in_executor(_executor, _fetch_trades_and_chat),
-            timeout=14.0,
+            timeout=25.0,
         )
     except asyncio.TimeoutError:
         reply = "The analysis timed out. Try asking for one section at a time (e.g. 'Show my Psychology Analysis' or 'What are my critical mistakes?')."

@@ -637,10 +637,17 @@ export function TradingJournalPage() {
   const [loading, setLoading]           = useState(false);
   const [sortDesc, setSortDesc]         = useState(true);
   const [syncStatus, setSyncStatus]     = useState<"idle" | "syncing" | "synced" | "error">("idle");
+  const [livePrices, setLivePrices]     = useState<Record<string, number | null>>({});
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLInputElement>(null);
 
   const metrics = calcMetrics(trades);
+  const unrealizedPnL = trades
+    .filter(t => t.status === "Open")
+    .reduce((sum, t) => {
+      const cmp = livePrices[t.stockName.trim().toUpperCase()];
+      return cmp != null ? sum + (cmp - t.buyPrice) * t.quantity : sum;
+    }, 0);
 
   // ── On mount: pull from backend DB, merge with localStorage ──
   useEffect(() => {
@@ -659,6 +666,19 @@ export function TradingJournalPage() {
       })
       .catch(() => setSyncStatus("error"));
   }, []);
+
+  // ── Fetch live prices for open trades ──
+  const fetchLivePrices = useCallback((tradeList: Trade[]) => {
+    const openSymbols = [...new Set(
+      tradeList.filter(t => t.status === "Open").map(t => t.stockName.trim().toUpperCase())
+    )];
+    if (!openSymbols.length) return;
+    api.get<Record<string, number | null>>(`/journal/prices?symbols=${openSymbols.join(",")}`)
+      .then(prices => setLivePrices(prev => ({ ...prev, ...prices })))
+      .catch(() => {/* price fetch failure is non-fatal */});
+  }, []);
+
+  useEffect(() => { fetchLivePrices(trades); }, [trades, fetchLivePrices]);
 
   const persistAndSet = useCallback((updated: Trade[]) => {
     setTrades(updated);
@@ -743,7 +763,7 @@ export function TradingJournalPage() {
       {/* ── Stat Cards ── */}
       <div style={{
         display: "grid",
-        gridTemplateColumns: "repeat(5, 1fr)",
+        gridTemplateColumns: "repeat(6, 1fr)",
         gap: 14, padding: "20px 24px 0",
       }}>
         <StatCard
@@ -762,6 +782,16 @@ export function TradingJournalPage() {
           icon={metrics.realizedPnL >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
           variant={metrics.realizedPnL > 0 ? "success" : metrics.realizedPnL < 0 ? "danger" : "default"}
           delay={0.05}
+        />
+        <StatCard
+          label="Unrealized P&L"
+          value={<span style={{ fontSize: 22, color: pnlColor(unrealizedPnL) }}>
+            {Object.keys(livePrices).length > 0 ? rupees(unrealizedPnL) : "—"}
+          </span>}
+          subValue={`${metrics.openTrades} open positions`}
+          icon={unrealizedPnL >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+          variant={unrealizedPnL > 0 ? "success" : unrealizedPnL < 0 ? "danger" : "default"}
+          delay={0.075}
         />
         <StatCard
           label="Win Rate"
@@ -876,7 +906,7 @@ export function TradingJournalPage() {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                 <thead>
                   <tr style={{ background: "var(--surface-2)" }}>
-                    {["Date ↕", "Stock", "Type", "Status", "Buy ₹", "Sell ₹", "Qty", "Capital", "P&L", "P&L%", "Strategy", "Rule", ""].map((h, i) => (
+                    {["Date ↕", "Stock", "Type", "Status", "Buy ₹", "CMP ₹", "Sell ₹", "Qty", "Capital", "P&L", "P&L%", "Strategy", "Rule", ""].map((h, i) => (
                       <th key={i} onClick={h === "Date ↕" ? () => setSortDesc(v => !v) : undefined}
                         style={{
                           padding: "9px 12px", textAlign: "left",
@@ -893,8 +923,16 @@ export function TradingJournalPage() {
                 </thead>
                 <tbody>
                   {displayedTrades.map((t, idx) => {
-                    const result = tradePnL(t);
-                    const emoji = t.status === "Open" ? "⚪" : result ? (result.pnl > 0 ? "🟢" : "🔴") : "⚪";
+                    const cmp = t.status === "Open"
+                      ? (livePrices[t.stockName.trim().toUpperCase()] ?? null)
+                      : null;
+                    const unrealized = cmp != null
+                      ? { pnl: (cmp - t.buyPrice) * t.quantity, pct: ((cmp - t.buyPrice) / t.buyPrice) * 100 }
+                      : null;
+                    const result = t.status === "Closed" ? tradePnL(t) : unrealized;
+                    const emoji = t.status === "Open"
+                      ? (unrealized ? (unrealized.pnl >= 0 ? "🟢" : "🔴") : "⚪")
+                      : (tradePnL(t) ? (tradePnL(t)!.pnl > 0 ? "🟢" : "🔴") : "⚪");
                     return (
                       <tr key={t.id} style={{
                         background: idx % 2 === 0 ? "transparent" : "var(--surface-2)",
@@ -925,6 +963,16 @@ export function TradingJournalPage() {
                         </td>
                         <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)" }}>
                           ₹{t.buyPrice.toLocaleString("en-IN")}
+                        </td>
+                        {/* CMP — live price for open, dash for closed */}
+                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, whiteSpace: "nowrap" }}>
+                          {t.status === "Open"
+                            ? cmp != null
+                              ? <span style={{ color: cmp >= t.buyPrice ? "var(--green)" : "var(--red)", fontWeight: 700 }}>
+                                  ₹{cmp.toLocaleString("en-IN")}
+                                </span>
+                              : <span style={{ color: "var(--text-4)", fontSize: 9 }}>loading…</span>
+                            : <span style={{ color: "var(--text-4)" }}>—</span>}
                         </td>
                         <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)" }}>
                           {t.sellPrice ? `₹${t.sellPrice.toLocaleString("en-IN")}` : "—"}
