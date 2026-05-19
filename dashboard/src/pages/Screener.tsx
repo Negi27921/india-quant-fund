@@ -301,7 +301,7 @@ function StockRow({ r, strategy, index }: { r: ScreenerResult; strategy: Strateg
       <AnimatePresence>
         {expanded && (
           <tr style={{ background: "var(--surface-2)" }}>
-            <td colSpan={7} style={{ padding: 0, borderBottom: "1px solid var(--border)" }}>
+            <td colSpan={8} style={{ padding: 0, borderBottom: "1px solid var(--border)" }}>
               <motion.div
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
@@ -413,7 +413,6 @@ function StratPnlCard({
         boxShadow: active ? `0 0 16px ${color}22` : "none",
         transition: "all 160ms",
         borderTop: `3px solid ${color}`,
-        minWidth: 140, flex: 1,
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
@@ -530,7 +529,7 @@ function PaperTradeRow({ trade }: { trade: PaperTrade }) {
 export function ScreenerPage() {
   const [strategy, setStrategy] = useState<Strategy>("vcp");
   const [tab, setTab] = useState<"screener" | "trades">("screener");
-  const [universe, setUniverse] = useState<Universe>("full");
+  const [universe, setUniverse] = useState<Universe>("nifty500");
   const [minConf, setMinConf] = useState(0);
   const [minPrice, setMinPrice] = useState(0);
   const [maxPrice, setMaxPrice] = useState(0);
@@ -979,7 +978,7 @@ export function ScreenerPage() {
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid var(--border)", background: "var(--surface-2)" }}>
-                    {["Symbol", "Price", "Confidence", "Conditions", "RSI", "Risk/Reward", ""].map(h => (
+                    {["Symbol", "Price", "Confidence", "Conditions", "RSI", "Risk/Reward", "", ""].map(h => (
                       <th key={h} style={{
                         padding: "8px 14px", textAlign: "left",
                         fontSize: 9.5, fontWeight: 700, color: "var(--text-3)",
@@ -1030,7 +1029,7 @@ export function ScreenerPage() {
                   </button>
                 )}
               </div>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10 }}>
                 {(Object.keys(STRATEGY_META) as Strategy[]).map(s => (
                   <StratPnlCard
                     key={s}

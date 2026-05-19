@@ -52,7 +52,7 @@ jobs:
           SUPABASE_KEY:       ${{ secrets.SUPABASE_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
-          MIN_CONFIDENCE:     "95"
+          MIN_CONFIDENCE:     "70"
           TRADE_AMOUNT:       "25000"
           MAX_OPEN_TRADES:    "30"
           KILL_DRAWDOWN:      "15"

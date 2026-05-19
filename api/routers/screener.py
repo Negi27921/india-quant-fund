@@ -28,8 +28,8 @@ _executor = ThreadPoolExecutor(max_workers=20)
 # ── In-process cache (warm) ────────────────────────────────────────────────
 _cache: dict[str, tuple[float, list[dict]]] = {}
 _scan_running: set[str] = set()
-CACHE_TTL      = 4 * 3600   # 4 hours in-process
-SB_CACHE_TTL   = 4 * 3600   # 4 hours Supabase cache (seconds)
+CACHE_TTL      = 6 * 3600   # 6 hours in-process
+SB_CACHE_TTL   = 24 * 3600  # 24 hours Supabase cache (seconds)
 
 
 # ── Supabase persistent cache ──────────────────────────────────────────────
@@ -690,12 +690,6 @@ def _get_or_scan_nonblocking(strategy: str, universe_name: str = "nifty500") -> 
     sb_data = _sb_read(strategy, universe_name)
     if sb_data is not None:
         _cache[cache_key] = (now, sb_data)
-        # If in-process cache had expired, kick off a silent background refresh
-        # so next request after 4h gets updated results without blocking
-        if cache_key not in _scan_running and cache_key in _cache:
-            old_ts = _cache.get(cache_key, (0, []))[0]
-            if now - old_ts >= CACHE_TTL:
-                _launch_bg_scan(cache_key, strategy, universe_name)
         return sb_data, cache_key in _scan_running
 
     # 3. No cache anywhere — trigger background scan, return stale or empty

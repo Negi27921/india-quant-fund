@@ -1,0 +1,35 @@
+name: Morning Screener (10 AM IST)
+
+on:
+  schedule:
+    # 10:00 AM IST = 04:30 UTC  Mon–Fri  (shortly after market open)
+    - cron: "30 4 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  screener:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-screener-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: ${{ runner.os }}-pip-screener-
+
+      - name: Install dependencies
+        run: pip install yfinance pandas numpy supabase loguru
+
+      - name: Run all-strategy screener → Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python scripts/run_screener.py
