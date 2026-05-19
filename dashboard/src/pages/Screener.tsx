@@ -529,7 +529,7 @@ function PaperTradeRow({ trade }: { trade: PaperTrade }) {
 export function ScreenerPage() {
   const [strategy, setStrategy] = useState<Strategy>("vcp");
   const [tab, setTab] = useState<"screener" | "trades">("screener");
-  const [universe, setUniverse] = useState<Universe>("nifty500");
+  const [universe, setUniverse] = useState<Universe>("full");
   const [minConf, setMinConf] = useState(0);
   const [minPrice, setMinPrice] = useState(0);
   const [maxPrice, setMaxPrice] = useState(0);
@@ -644,14 +644,20 @@ export function ScreenerPage() {
               Stock Screener
             </h1>
             <div style={{ fontSize: 11.5, color: "var(--text-3)", fontFamily: "var(--font-body)", marginTop: 4 }}>
-              Universe: <span style={{ color: "var(--accent)", fontWeight: 700 }}>{data?.universe_size ?? (universe === "full" ? "2,137" : "503")}</span> NSE stocks
-              {data?.total != null ? (
-                <> · {data.total} scanned
+              Universe: <span style={{ color: "var(--accent)", fontWeight: 700 }}>{data?.universe_size ?? (universe === "full" ? 2137 : 503)}</span> NSE stocks
+              {data?.is_scanning && data?.scanned != null && data.scanned > 0 ? (
+                <> · <span style={{ color: "var(--amber)", fontWeight: 600 }}>
+                  Scanning: {data.scanned}/{data.universe_size ?? (universe === "full" ? 2137 : 503)} stocks
+                </span>
+                {data.total > 0 && <> · <span style={{ color: "var(--green)", fontWeight: 600 }}>{data.total} found so far</span></>}
+                </>
+              ) : data?.total != null ? (
+                <> · {data.total} results
                   {" · "}<span style={{ color: "var(--green)", fontWeight: 600 }}>{strong.length} Strong</span>
                   {" · "}<span style={{ color: "var(--amber)", fontWeight: 600 }}>{moderate.length} Moderate</span>
                 </>
               ) : null}
-              {data?.last_scan ? <> · Last scan: {data.last_scan}</> : " · First scan takes ~15 min for full universe"}
+              {!data?.is_scanning && (data?.last_scan ? <> · Last scan: {data.last_scan}</> : <> · <span style={{ color: "var(--amber)" }}>Scan in progress — results stream as each 100-stock batch completes</span></>)}
             </div>
           </div>
 

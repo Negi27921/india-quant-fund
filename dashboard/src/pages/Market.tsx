@@ -1,5 +1,4 @@
-import { useState, useRef } from "react";
-import { createPortal } from "react-dom";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   TrendingUp, Activity, BarChart2,
@@ -19,15 +18,13 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Cell,
 } from "recharts";
 
-// ── TradingView symbol helpers ─────────────────────────────────────────────────
-const TV_INDEX_MAP: Record<string, string> = {
-  "^NSEI": "NSE:NIFTY", "^NSEBANK": "NSE:BANKNIFTY",
-  "^BSESN": "BSE:SENSEX", "^NSEMDCP50": "NSE:MIDCPNIFTY", "^CNXIT": "NSE:NIFTYIT",
+// ── Symbol maps ────────────────────────────────────────────────────────────────
+const SECTOR_SYMBOL_MAP: Record<string, string> = {
+  "IT": "^CNXIT", "Bank": "^NSEBANK", "FMCG": "^CNXFMCG",
+  "Auto": "^CNXAUTO", "Pharma": "^CNXPHARMA", "Metal": "^CNXMETAL",
+  "Energy": "^CNXENERGY", "Realty": "^CNXREALTY", "Infra": "^CNXINFRA",
+  "Finance": "^CNXFINANCE",
 };
-function toTVSymbol(raw: string): string {
-  const clean = raw.replace(".NS", "").replace(".BO", "").toUpperCase();
-  return TV_INDEX_MAP[clean] ?? TV_INDEX_MAP["^" + clean] ?? `NSE:${clean}`;
-}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const upDn = (v: number) => (v > 0 ? "▲" : v < 0 ? "▼" : "—");
@@ -106,11 +103,9 @@ function Card({
   );
 }
 
-// ── Index chip ─────────────────────────────────────────────────────────────────
+// ── Index chip — click to open full chart ─────────────────────────────────────
 function IndexChip({ label, data }: { label: string; data?: IndexData; indexKey: string }) {
   const [hovered, setHovered] = useState(false);
-  const chipRef = useRef<HTMLDivElement>(null);
-  const [rect, setRect] = useState<DOMRect | null>(null);
   const { openChart } = useUIStore();
 
   if (!data) {
@@ -130,113 +125,57 @@ function IndexChip({ label, data }: { label: string; data?: IndexData; indexKey:
 
   const up = data.change_pct >= 0;
   const color = up ? "var(--green)" : "var(--red)";
-  const tvSymbol = data.symbol ? toTVSymbol(data.symbol) : "";
-  const isDark = document.documentElement.dataset.theme !== "light";
-  // Use TradingView's official embeddable widget endpoint (s.tradingview.com CDN)
-  // www.tradingview.com/widgetembed/ sends X-Frame-Options: SAMEORIGIN — blocks cross-domain
-  const miniUrl = tvSymbol
-    ? `https://s.tradingview.com/embed-widget/mini-symbol-overview/?locale=en#${encodeURIComponent(JSON.stringify({
-        symbol:                tvSymbol,
-        width:                 200,
-        height:                130,
-        dateRange:             "1M",
-        colorTheme:            isDark ? "dark" : "light",
-        trendLineColor:        "rgba(41, 98, 255, 1)",
-        underLineColor:        "rgba(41, 98, 255, 0.3)",
-        underLineBottomColor:  "rgba(41, 98, 255, 0)",
-        isTransparent:         true,
-        autosize:              false,
-        largeChartUrl:         "",
-        locale:                "en",
-      }))}`
-    : "";
-
-  const handleMouseEnter = () => {
-    if (chipRef.current) setRect(chipRef.current.getBoundingClientRect());
-    setHovered(true);
-  };
 
   return (
-    <>
-      {/* Portal hover tooltip */}
-      {hovered && rect && createPortal(
-        <div
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-          style={{
-            position: "fixed",
-            top: rect.bottom + 8,
-            left: rect.left + rect.width / 2,
-            transform: "translateX(-50%)",
-            zIndex: 9999,
-            background: "var(--surface)",
-            border: `1px solid ${color}55`,
-            borderRadius: 10,
-            padding: "10px 10px 8px",
-            boxShadow: "var(--shadow-lg)",
-            width: 226,
-            pointerEvents: "auto",
-          }}
-        >
-          <div style={{ fontSize: 9, fontFamily: "var(--font-body)", fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>
-            {label} · TradingView
-          </div>
-          {miniUrl && (
-            <iframe
-              key={tvSymbol + (isDark ? "d" : "l")}
-              src={miniUrl}
-              width={200}
-              height={130}
-              frameBorder={0}
-              scrolling="no"
-              allowTransparency
-              title={`${label} mini chart`}
-              style={{ display: "block", border: "none", borderRadius: 4, background: "transparent" }}
-            />
-          )}
-          <div style={{ marginTop: 6, fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-body)", textAlign: "center" }}>
-            Click chip to open full chart
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* Chip */}
-      <div
-        ref={chipRef}
-        role="button"
-        tabIndex={0}
-        onClick={() => data?.symbol && openChart(data.symbol, label)}
-        onKeyDown={e => e.key === "Enter" && data?.symbol && openChart(data.symbol, label)}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={() => setHovered(false)}
-        style={{
-          padding: "10px 16px",
-          background: "var(--surface)",
-          border: `1px solid var(--border)`,
-          borderLeft: `3px solid ${color}`,
-          borderRadius: 8,
-          minWidth: 130,
-          transition: "box-shadow 150ms ease",
-          cursor: "pointer",
-          boxShadow: hovered ? `0 0 0 1px ${color}40` : "none",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-          <div style={{ fontSize: 9, fontFamily: "var(--font-body)", fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.12em" }}>
-            {label}
-          </div>
-          <ExternalLink style={{ width: 8, height: 8, color: "var(--text-4)", opacity: hovered ? 1 : 0.4, transition: "opacity 150ms" }} />
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => data?.symbol && openChart(data.symbol, label)}
+      onKeyDown={e => e.key === "Enter" && data?.symbol && openChart(data.symbol, label)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      title={`Click to open ${label} chart`}
+      style={{
+        padding: "10px 16px 8px",
+        background: hovered ? "rgba(39,174,96,0.06)" : "var(--surface)",
+        border: `1.5px solid ${hovered ? color : "var(--border)"}`,
+        borderLeft: `3px solid ${color}`,
+        borderRadius: 8,
+        minWidth: 138,
+        transition: "all 180ms ease",
+        cursor: "pointer",
+        transform: hovered ? "translateY(-2px) scale(1.015)" : "none",
+        boxShadow: hovered ? `0 6px 20px rgba(0,0,0,0.35), 0 0 0 1px ${color}30` : "none",
+        userSelect: "none",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+        <div style={{ fontSize: 9, fontFamily: "var(--font-body)", fontWeight: 700, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.12em" }}>
+          {label}
         </div>
-        <div style={{ fontSize: 14, fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text-1)", lineHeight: 1, marginBottom: 3 }}>
-          {data.price.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 2, fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 700, color }}>
-          {up ? <ArrowUpRight style={{ width: 10, height: 10 }} /> : <ArrowDownRight style={{ width: 10, height: 10 }} />}
-          {Math.abs(data.change_pct).toFixed(2)}%
-        </div>
+        {/* Always-visible chart badge */}
+        <span style={{
+          display: "inline-flex", alignItems: "center", gap: 2,
+          fontSize: 8, fontFamily: "var(--font-body)", fontWeight: 700,
+          color: hovered ? color : "var(--text-4)",
+          background: hovered ? `${color}20` : "rgba(255,255,255,0.04)",
+          border: `1px solid ${hovered ? `${color}40` : "rgba(255,255,255,0.08)"}`,
+          borderRadius: 4, padding: "1px 5px",
+          transition: "all 180ms ease",
+          letterSpacing: "0.06em",
+        }}>
+          <ExternalLink style={{ width: 7, height: 7 }} />
+          CHART
+        </span>
       </div>
-    </>
+      <div style={{ fontSize: 14, fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text-1)", lineHeight: 1, marginBottom: 4 }}>
+        {data.price.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 2, fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 700, color }}>
+        {up ? <ArrowUpRight style={{ width: 10, height: 10 }} /> : <ArrowDownRight style={{ width: 10, height: 10 }} />}
+        {Math.abs(data.change_pct).toFixed(2)}%
+      </div>
+    </div>
   );
 }
 
@@ -706,6 +645,7 @@ function BreadthPanel() {
 // ── Sector performance ─────────────────────────────────────────────────────────
 function SectorPanel({ data, isLoading }: { data: { sector: string; change_pct: number }[]; isLoading: boolean }) {
   const max = Math.max(...(data ?? []).map(d => Math.abs(d.change_pct)), 1);
+  const { openChart } = useUIStore();
   return (
     <div style={{ overflowY: "auto", height: "100%", padding: "4px 0" }}>
       {isLoading ? (
@@ -714,18 +654,21 @@ function SectorPanel({ data, isLoading }: { data: { sector: string; change_pct: 
             <div className="skeleton" style={{ height: 10, borderRadius: 3 }} />
           </div>
         ))
-      ) : (data ?? []).map((d, i) => (
+      ) : (data ?? []).map((d, i) => {
+        const sym = SECTOR_SYMBOL_MAP[d.sector];
+        return (
         <motion.div
           key={d.sector}
           initial={{ opacity: 0, x: -6 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: i * 0.04 }}
+          onClick={() => sym && openChart(sym, d.sector)}
           style={{
             display: "flex", alignItems: "center",
-            /* 8px gap between items (Chakra space-2) */
             gap: 8, padding: "8px 14px",
             borderBottom: "1px solid var(--border-2)",
             transition: "background 100ms ease",
+            cursor: sym ? "pointer" : "default",
           }}
           onMouseEnter={e => (e.currentTarget.style.background = "var(--card-hover)")}
           onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
@@ -755,7 +698,8 @@ function SectorPanel({ data, isLoading }: { data: { sector: string; change_pct: 
             {upDn(d.change_pct)}{Math.abs(d.change_pct).toFixed(2)}%
           </div>
         </motion.div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -766,6 +710,7 @@ type MoverTab = "gainers" | "losers";
 function TopMoversPanel() {
   const [tab, setTab] = useState<MoverTab>("gainers");
   const { data: movers, isLoading } = useMarketMovers(10);
+  const { openChart } = useUIStore();
   const rows = tab === "gainers" ? (movers?.gainers ?? []) : (movers?.losers ?? []);
 
   return (
@@ -812,12 +757,13 @@ function TopMoversPanel() {
           const up = m.change_pct >= 0;
           const color = up ? "var(--green)" : "var(--red)";
           return (
-            <div key={m.ticker} style={{
-              display: "flex", alignItems: "center", padding: "9px 14px",
-              /* 8px gap (Chakra space-2) */
-              borderBottom: "1px solid var(--border-2)", gap: 8,
-              transition: "background 80ms ease", cursor: "default",
-            }}
+            <div key={m.ticker}
+              onClick={() => openChart(m.ticker, m.ticker.replace(".NS","").replace(".BO",""))}
+              style={{
+                display: "flex", alignItems: "center", padding: "9px 14px",
+                borderBottom: "1px solid var(--border-2)", gap: 8,
+                transition: "background 80ms ease", cursor: "pointer",
+              }}
               onMouseEnter={e => (e.currentTarget.style.background = "var(--card-hover)")}
               onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
             >
@@ -1081,6 +1027,7 @@ function IndexTable({ indices, globalIndices, loading }: {
   indices: unknown; globalIndices?: GlobalIndexData[]; loading: boolean;
 }) {
   const idxMap = indices as Record<string, IndexData> | undefined;
+  const { openChart } = useUIStore();
 
   return (
     <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" }}>
@@ -1105,7 +1052,9 @@ function IndexTable({ indices, globalIndices, loading }: {
             const col = up ? "var(--green)" : "var(--red)";
             const chgPts = d ? (d.price * d.change_pct / (100 + d.change_pct)).toFixed(2) : "—";
             return (
-              <tr key={key} style={{ borderBottom: "1px solid var(--border-2)", transition: "background 80ms" }}
+              <tr key={key}
+                onClick={() => d?.symbol && openChart(d.symbol, label)}
+                style={{ borderBottom: "1px solid var(--border-2)", transition: "background 80ms", cursor: d ? "pointer" : "default" }}
                 onMouseEnter={e => (e.currentTarget.style.background = "var(--card-hover)")}
                 onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
               >
@@ -1113,6 +1062,7 @@ function IndexTable({ indices, globalIndices, loading }: {
                   <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                     <span style={{ width: 3, height: 18, borderRadius: 9999, background: col, flexShrink: 0 }} />
                     <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-body)" }}>{label}</span>
+                    {d && <ExternalLink style={{ width: 8, height: 8, color: "var(--text-4)", marginLeft: 2 }} />}
                   </div>
                 </td>
                 {loading || !d ? (

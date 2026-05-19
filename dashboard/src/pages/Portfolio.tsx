@@ -23,13 +23,13 @@ import { AddPositionModal } from "@/components/ui/AddPositionModal";
 import { ExitPositionModal } from "@/components/ui/ExitPositionModal";
 import { OrderStatusBadge, SideBadge } from "@/components/ui/Badge";
 import {
-  usePortfolioSummary, usePositions, useSectorExposure, useEquityCurve,
+  usePositions, useSectorExposure, useEquityCurve,
   useOrders, useDrawdownHistory,
 } from "@/api/queries";
 import {
-  usePaperPositions, useDeletePaperPosition, useLivePositions,
-  useDeleteLivePosition, usePnLCalendar, usePnLStats,
-  usePaperTrades, useStrategyPnl,
+  usePaperPositions, useDeletePaperPosition, useLivePositions, useDeleteLivePosition,
+  usePnLStats, usePaperTrades, useStrategyPnl,
+  useJournalSummary, useJournalPnLCalendar, useJournalPositions,
   type PaperPosition,
 } from "@/api/pnl-queries";
 import { useEnvSummary, useAgentConfig } from "@/api/settings-queries";
@@ -121,12 +121,41 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
   const { data: sectors } = useSectorExposure();
   const { data: equity, isLoading: equityLoading } = useEquityCurve(equityCurveDays);
   const { data: paperPositions, isLoading: paperLoading } = usePaperPositions();
-  const { data: livePositions,  isLoading: liveLoading  } = useLivePositions();
+  const { data: journalRaw, isLoading: journalLoading } = useJournalPositions();
+  const { data: dhanRaw,    isLoading: dhanLoading    } = useLivePositions();
+  const { data: journalSummary } = useJournalSummary();
   const { data: envSummary } = useEnvSummary();
   const { data: agentConfig } = useAgentConfig();
   const deletePaper = useDeletePaperPosition();
   const deleteLive  = useDeleteLivePosition();
   usePositions();
+
+  // Merge journal + Dhan: Dhan data (actual broker) takes priority for matching tickers.
+  // Journal entries fill gaps for trades not in Dhan, and enrich Dhan entries with notes/strategy.
+  const livePositions = useMemo<PaperPosition[]>(() => {
+    const journal = journalRaw ?? [];
+    const dhan    = dhanRaw    ?? [];
+    const merged  = new Map<string, PaperPosition>();
+    for (const pos of dhan) {
+      const key = pos.ticker.replace(".NS","").replace(".BO","").toUpperCase();
+      merged.set(key, pos);
+    }
+    for (const pos of journal) {
+      const key = pos.ticker.replace(".NS","").replace(".BO","").toUpperCase();
+      if (!merged.has(key)) {
+        merged.set(key, pos);
+      } else {
+        const existing = merged.get(key)!;
+        merged.set(key, {
+          ...existing,
+          notes:    pos.notes    || existing.notes,
+          strategy: pos.strategy || existing.strategy,
+        });
+      }
+    }
+    return Array.from(merged.values());
+  }, [journalRaw, dhanRaw]);
+  const liveLoading = journalLoading || dhanLoading;
 
   const activePositions: PaperPosition[] = tab === "paper" ? (paperPositions ?? []) : (livePositions ?? []);
   const activeLoading = tab === "paper" ? paperLoading : liveLoading;
@@ -264,26 +293,22 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
             </div>
           )}
 
-          {/* ── Live Dhan summary ── */}
-          {tab === "live" && activePositions.length > 0 && (
+          {/* ── Live Journal summary banner ── */}
+          {tab === "live" && (
             <div style={{
-              display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap",
-              padding: "10px 14px", marginTop: 10,
-              background: "rgba(39,174,96,0.04)",
-              border: "1px solid rgba(39,174,96,0.15)",
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
+              gap: 12, padding: "12px 14px", marginTop: 10,
+              background: "rgba(39,174,96,0.03)",
+              border: "1px solid rgba(39,174,96,0.12)",
               borderRadius: 10,
             }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <Wifi style={{ width: 10, height: 10, color: "var(--green)" }} />
-                <span style={{ fontSize: 9, color: "var(--green)", fontFamily: "var(--font-body)", fontWeight: 700, letterSpacing: "0.1em" }}>DHAN LIVE</span>
-              </div>
-              <CapStat label="Market Value" value={fmtL(totalValue)} />
-              <CapStat label="Cost Basis" value={fmtL(totalCost)} />
-              <CapStat
-                label="Unrealised P&L"
-                value={`${unrealPnl >= 0 ? "+" : ""}₹${Math.abs(unrealPnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`}
-                color={pnlColor}
-              />
+              <CapStat label="Live NAV" value={journalSummary ? `₹${(journalSummary.nav / 1e5).toFixed(2)}L` : "—"} color="var(--green)" sub="from Journal" />
+              <CapStat label="Invested" value={journalSummary ? `₹${(journalSummary.total_invested / 1e5).toFixed(2)}L` : "—"} sub="open cost basis" />
+              <CapStat label="Realized P&L" value={journalSummary ? `${journalSummary.realized_pnl >= 0 ? "+" : ""}₹${Math.abs(journalSummary.realized_pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—"} color={journalSummary ? (journalSummary.realized_pnl >= 0 ? "var(--green)" : "var(--red)") : undefined} sub="closed trades" />
+              <CapStat label="Unrealized" value={journalSummary ? `${journalSummary.unrealized_pnl >= 0 ? "+" : ""}₹${Math.abs(journalSummary.unrealized_pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—"} color={journalSummary ? (journalSummary.unrealized_pnl >= 0 ? "var(--green)" : "var(--red)") : undefined} sub="open positions" />
+              <CapStat label="Drawdown" value={journalSummary ? `-${journalSummary.drawdown.toFixed(2)}%` : "—"} color="var(--red)" sub="from peak" />
+              <CapStat label="Positions" value={journalSummary ? String(journalSummary.open_positions) : "—"} sub="open trades" />
             </div>
           )}
         </div>
@@ -473,9 +498,9 @@ function PnLTab() {
   const [rangeStart, setRangeStart] = useState(monthStart(now.getFullYear(), now.getMonth() + 1));
   const [rangeEnd,   setRangeEnd]   = useState(monthEnd(now.getFullYear(), now.getMonth() + 1));
 
-  const { data: calData = [] } = usePnLCalendar(year, month);
+  const { data: calData = [] } = useJournalPnLCalendar(year, month);
   const { data: stats }        = usePnLStats();
-  const { data: allData = [] } = usePnLCalendar(year);
+  const { data: allData = [] } = useJournalPnLCalendar(year);
 
   const prevMonth = () => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); };
   const nextMonth = () => { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); };
@@ -979,7 +1004,7 @@ export function PortfolioPage() {
   const { equityCurveDays, setEquityCurveDays, openChart } = useUIStore();
   const [mainTab, setMainTab] = useState<MainTab>("holdings");
 
-  const { data: summary, isLoading: summaryLoading } = usePortfolioSummary();
+  const { data: summary, isLoading: summaryLoading } = useJournalSummary();
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -1020,9 +1045,9 @@ export function PortfolioPage() {
               Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
             ) : (
               <>
-                <StatCard label="Portfolio Value" icon={<DollarSign className="w-4 h-4" />} delay={0}
-                  value={<AnimatedNumber value={summary?.portfolio_value ?? 0} format={v => formatCurrency(v, true)} />}
-                  subValue={`Cash: ${formatCurrency(summary?.cash ?? 0, true)}`}
+                <StatCard label="Live NAV" icon={<DollarSign className="w-4 h-4" />} delay={0}
+                  value={<AnimatedNumber value={summary?.nav ?? 0} format={v => formatCurrency(v, true)} />}
+                  subValue={`Realized: ${formatCurrency(summary?.realized_pnl ?? 0, true)}`}
                 />
                 <StatCard label="Day P&L" icon={<Activity className="w-4 h-4" />} delay={0.05}
                   variant={(summary?.day_pnl_pct ?? 0) >= 0 ? "success" : (summary?.day_pnl_pct ?? 0) < -1 ? "danger" : "default"}
@@ -1030,13 +1055,13 @@ export function PortfolioPage() {
                   subValue={formatCurrency(summary?.day_pnl ?? 0, true)}
                 />
                 <StatCard label="Drawdown" icon={<TrendingDown className="w-4 h-4" />} delay={0.1}
-                  variant={(summary?.drawdown_pct ?? 0) > 8 ? "danger" : (summary?.drawdown_pct ?? 0) > 5 ? "warning" : "default"}
-                  value={<span style={{ color: "var(--red)" }}><AnimatedNumber value={-(summary?.drawdown_pct ?? 0)} format={v => formatPct(v)} /></span>}
+                  variant={(summary?.drawdown ?? 0) > 8 ? "danger" : (summary?.drawdown ?? 0) > 5 ? "warning" : "default"}
+                  value={<span style={{ color: "var(--red)" }}><AnimatedNumber value={-(summary?.drawdown ?? 0)} format={v => formatPct(v)} /></span>}
                   subValue="from peak"
                 />
                 <StatCard label="Positions" icon={<Layers className="w-4 h-4" />} delay={0.15}
-                  value={summary?.n_positions ?? 0}
-                  subValue={`Invested: ${formatCurrency(summary?.invested ?? 0, true)}`}
+                  value={summary?.open_positions ?? 0}
+                  subValue={`Invested: ${formatCurrency(summary?.total_invested ?? 0, true)}`}
                 />
               </>
             )}

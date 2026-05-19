@@ -4,6 +4,7 @@ import { RefreshCw, Bell, Search, Zap } from "lucide-react";
 import { useLiveStore } from "@/store/live";
 import { usePortfolioSummary } from "@/api/queries";
 import { useMarketIndices } from "@/api/market-queries";
+import { useJournalSummary } from "@/api/pnl-queries";
 import { formatCurrency, formatPct } from "@/lib/utils";
 import { useUIStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
@@ -59,7 +60,7 @@ function renderTickerItem(item: TickerItemData, i: number) {
 
 function TickerBar() {
   const { data: indices } = useMarketIndices();
-  const { data: live } = useLiveStore();
+  const { data: journal } = useJournalSummary();
 
   const items: TickerItemData[] = [];
   if (indices?.nifty50)    items.push({ label: "NIFTY 50",   value: indices.nifty50.price.toLocaleString("en-IN",    { minimumFractionDigits: 2 }), chg: indices.nifty50.change_pct });
@@ -67,7 +68,7 @@ function TickerBar() {
   if (indices?.sensex)     items.push({ label: "SENSEX",     value: indices.sensex.price.toLocaleString("en-IN",     { minimumFractionDigits: 2 }), chg: indices.sensex.change_pct });
   if (indices?.niftyit)    items.push({ label: "NIFTY IT",   value: indices.niftyit.price.toLocaleString("en-IN",    { minimumFractionDigits: 2 }), chg: indices.niftyit.change_pct });
   if (indices?.niftymid50) items.push({ label: "MIDCAP 50",  value: indices.niftymid50.price.toLocaleString("en-IN", { minimumFractionDigits: 2 }), chg: indices.niftymid50.change_pct });
-  if (live) items.push({ label: "NAV", value: formatCurrency(live.portfolio_value, true), chg: live.day_pnl_pct });
+  if (journal && journal.nav > 0) items.push({ label: "NAV", value: formatCurrency(journal.nav, true), chg: journal.day_pnl_pct });
   if (items.length === 0) {
     ["NIFTY 50", "BANK NIFTY", "SENSEX", "NIFTY IT", "MIDCAP 50"].forEach(label =>
       items.push({ label, value: "···" })
@@ -118,8 +119,9 @@ function TickerBar() {
 }
 
 export function Header({ title, subtitle }: HeaderProps) {
-  const { data: live, connected, lastUpdate } = useLiveStore();
+  const { connected, lastUpdate } = useLiveStore();
   const { refetch, isFetching } = usePortfolioSummary();
+  const { data: journalSummary } = useJournalSummary();
   const { paperMode, openSearch } = useUIStore();
 
   return (
@@ -231,23 +233,21 @@ export function Header({ title, subtitle }: HeaderProps) {
           </span>
         </div>
 
-        {/* Live stats */}
-        {live && (
-          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-            {[
-              { label: "NAV",     val: formatCurrency(live.portfolio_value, true), color: "var(--text-1)" },
-              { label: "DAY P&L", val: formatPct(live.day_pnl_pct), color: live.day_pnl_pct >= 0 ? "var(--green)" : "var(--red)" },
-              { label: "DD",      val: `-${Math.abs(live.drawdown_pct).toFixed(2)}%`, color: live.drawdown_pct > 5 ? "var(--red)" : "var(--text-3)" },
-            ].map(item => (
-              <div key={item.label}>
-                <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: "var(--text-4)", fontFamily: "var(--font-body)", marginBottom: 2 }}>{item.label}</div>
-                <div style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: item.color, letterSpacing: "-0.01em" }}>{item.val}</div>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Live journal stats — NAV / Day P&L / DD from journal trades + Dhan */}
+        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+          {[
+            { label: "NAV",     val: journalSummary ? formatCurrency(journalSummary.nav, true) : "—", color: "var(--text-1)" },
+            { label: "DAY P&L", val: journalSummary ? formatPct(journalSummary.day_pnl_pct) : "—", color: journalSummary ? (journalSummary.day_pnl_pct >= 0 ? "var(--green)" : "var(--red)") : "var(--text-3)" },
+            { label: "DD",      val: journalSummary ? `-${Math.abs(journalSummary.drawdown).toFixed(2)}%` : "—", color: journalSummary && journalSummary.drawdown > 5 ? "var(--red)" : "var(--text-3)" },
+          ].map(item => (
+            <div key={item.label}>
+              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: "var(--text-4)", fontFamily: "var(--font-body)", marginBottom: 2 }}>{item.label}</div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: item.color, letterSpacing: "-0.01em" }}>{item.val}</div>
+            </div>
+          ))}
+        </div>
 
-        {live && <div style={{ width: 1, height: 20, background: "var(--border)" }} />}
+        <div style={{ width: 1, height: 20, background: "var(--border)" }} />
 
         {/* Controls */}
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>

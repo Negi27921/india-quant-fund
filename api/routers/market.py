@@ -1774,3 +1774,40 @@ async def get_quarterly_results():
 
     # 4. Return pre-built fallback immediately (real data arrives in background)
     return _qr_fallback()
+
+
+# ── Sparkline endpoint — 30 daily closes for hover mini-charts ─────────────────
+_SPARK_CACHE: dict[str, tuple[float, list]] = {}
+
+@router.get("/sparkline/{symbol}")
+async def sparkline(symbol: str):
+    """Return last ~30 daily closing prices for a symbol (Index or stock)."""
+    clean = symbol.replace("NSE:", "").replace("BSE:", "").strip().upper()
+    cache_key = f"spark:{clean}"
+    now = time.monotonic()
+    if cache_key in _SPARK_CACHE:
+        ts, val = _SPARK_CACHE[cache_key]
+        if now - ts < 1800:  # 30-min cache
+            return val
+
+    def _fetch():
+        for suffix in ("", ".NS", ".BO"):
+            try:
+                ticker = clean + suffix
+                df = yf.Ticker(ticker).history(period="1mo")
+                if df.empty:
+                    continue
+                data = [
+                    {"date": idx.strftime("%m/%d"), "close": round(float(row["Close"]), 2)}
+                    for idx, row in df.iterrows()
+                ]
+                if data:
+                    return data
+            except Exception:
+                pass
+        return []
+
+    result = await _run(_fetch)
+    _SPARK_CACHE[cache_key] = (now, result)
+    return result
+

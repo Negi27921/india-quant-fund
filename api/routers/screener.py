@@ -28,6 +28,7 @@ _executor = ThreadPoolExecutor(max_workers=20)
 # ── In-process cache (warm) ────────────────────────────────────────────────
 _cache: dict[str, tuple[float, list[dict]]] = {}
 _scan_running: set[str] = set()
+_scan_progress: dict[str, dict] = {}   # {cache_key: {scanned, total, partial}}
 CACHE_TTL      = 6 * 3600   # 6 hours in-process
 SB_CACHE_TTL   = 24 * 3600  # 24 hours Supabase cache (seconds)
 
@@ -616,7 +617,7 @@ def _fetch_batch(batch: list[str], period: str) -> dict[str, pd.DataFrame]:
         return {}
 
 
-def _run_scan(strategy: str, universe_name: str = "nifty500") -> list[dict]:
+def _run_scan(strategy: str, universe_name: str = "nifty500", cache_key: str = "") -> list[dict]:
     """Download all batches in parallel then evaluate each stock."""
     universe = FULL_UNIVERSE if universe_name == "full" else SCAN_UNIVERSE
 
@@ -633,19 +634,36 @@ def _run_scan(strategy: str, universe_name: str = "nifty500") -> list[dict]:
     batch_size = 100
     batches = [universe[i:i + batch_size] for i in range(0, len(universe), batch_size)]
     all_results: list[dict] = []
+    scanned = 0
+
+    # Init progress tracking
+    key = cache_key or f"{strategy}_{universe_name}"
+    _scan_progress[key] = {"scanned": 0, "total": len(universe), "partial": []}
 
     with ThreadPoolExecutor(max_workers=min(20, len(batches))) as pool:
         futures = {pool.submit(_fetch_batch, batch, period): batch for batch in batches}
         for future in as_completed(futures):
+            batch = futures[future]
             try:
                 stock_data = future.result(timeout=90)
+                batch_hits = []
                 for ticker, df in stock_data.items():
                     result = _evaluate_stock(ticker, df, strategy)
                     if result:
                         all_results.append(result)
+                        batch_hits.append(result)
+                scanned += len(batch)
+                if key in _scan_progress:
+                    _scan_progress[key]["scanned"] = scanned
+                    _scan_progress[key]["partial"] = sorted(
+                        all_results, key=lambda x: -x["confidence"]
+                    )
             except Exception:
-                pass
+                scanned += len(batch)
+                if key in _scan_progress:
+                    _scan_progress[key]["scanned"] = scanned
 
+    _scan_progress.pop(key, None)
     return sorted(all_results, key=lambda x: -x["confidence"])
 
 
@@ -658,11 +676,12 @@ def _launch_bg_scan(cache_key: str, strategy: str, universe_name: str) -> None:
 
     def _bg():
         try:
-            results = _run_scan(strategy, universe_name)
+            results = _run_scan(strategy, universe_name, cache_key=cache_key)
             _cache[cache_key] = (time.monotonic(), results)
             _sb_write(strategy, universe_name, results)
         finally:
             _scan_running.discard(cache_key)
+            _scan_progress.pop(cache_key, None)
 
     _executor.submit(_bg)
 
@@ -738,6 +757,25 @@ async def get_screener_results(
         ).strftime("%H:%M:%S")
 
     active_universe = FULL_UNIVERSE if universe == "full" else SCAN_UNIVERSE
+
+    # While scan is running, merge completed-batch partial results with cached results
+    progress = _scan_progress.get(cache_key, {})
+    if is_scanning and progress:
+        partial = progress.get("partial", [])
+        if partial:
+            # Prefer partial (fresher) over stale cache
+            merged_map = {r["symbol"]: r for r in (results or [])}
+            for r in partial:
+                merged_map[r["symbol"]] = r
+            results = sorted(merged_map.values(), key=lambda x: -x["confidence"])
+            filtered = [
+                r for r in results
+                if r["confidence"] >= min_confidence
+                and (not symbol or symbol.upper() in r["symbol"].upper())
+                and (min_price == 0 or r["ltp"] >= min_price)
+                and (max_price == 0 or r["ltp"] <= max_price)
+            ]
+
     return {
         "results": filtered,
         "total": len(filtered),
@@ -746,6 +784,7 @@ async def get_screener_results(
         "is_scanning": is_scanning,
         "last_scan": last_scan,
         "universe_size": len(active_universe),
+        "scanned": progress.get("scanned", len(active_universe) if not is_scanning else 0),
     }
 
 

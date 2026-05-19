@@ -255,6 +255,7 @@ export interface ScreenerResponse {
   is_scanning: boolean;
   last_scan: string | null;
   universe_size: number;
+  scanned?: number;
 }
 
 type ScreenerStrategy = "vcp" | "ipo_base" | "rocket_base" | "breakout" | "rsi_reversal" | "golden_cross" | "multibagger" | "custom";

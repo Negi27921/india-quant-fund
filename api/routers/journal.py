@@ -1,86 +1,73 @@
-"""AI Trading Journal — CRUD storage + performance coach AI."""
+"""AI Trading Journal — CRUD backed by Supabase + live price + AI coach."""
 from __future__ import annotations
 
 import asyncio
 import json
 import os
-import sqlite3
 import time
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 router = APIRouter()
-_executor = ThreadPoolExecutor(max_workers=2)
+_executor = ThreadPoolExecutor(max_workers=4)
 
-# ── SQLite storage ─────────────────────────────────────────────────────────────
-# Defaults to /tmp (ephemeral on Vercel but works across warm invocations).
-# Set JOURNAL_DB_PATH env var to a persistent path (e.g. ./data/journal.db)
-# for local dev or long-running servers.
-_JOURNAL_DB = os.getenv("JOURNAL_DB_PATH", "/tmp/iqf_journal.db")
-
-_CREATE_TABLE = """
-CREATE TABLE IF NOT EXISTS journal_trades (
-    id            TEXT PRIMARY KEY,
-    stock_name    TEXT NOT NULL,
-    buy_price     REAL NOT NULL,
-    quantity      INTEGER NOT NULL,
-    entry_date    TEXT NOT NULL,
-    capital_used  REAL NOT NULL,
-    trade_type    TEXT NOT NULL,
-    status        TEXT NOT NULL,
-    sell_price    REAL,
-    exit_date     TEXT,
-    strategy      TEXT,
-    notes         TEXT,
-    planned_sl    REAL,
-    planned_tp    REAL,
-    emotion_entry TEXT,
-    emotion_exit  TEXT,
-    market_cond   TEXT,
-    rule_followed TEXT,
-    created_at    TEXT NOT NULL,
-    updated_at    TEXT NOT NULL
-)
-"""
+_TABLE = "journal_trades"
 
 
-def _open_db() -> sqlite3.Connection:
-    conn = sqlite3.connect(_JOURNAL_DB, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute(_CREATE_TABLE)
-    conn.commit()
-    return conn
+# ── Supabase storage helpers ───────────────────────────────────────────────────
 
-
-def _row_to_dict(row: sqlite3.Row) -> dict:
-    d = dict(row)
-    # Re-map snake_case DB columns → camelCase for the frontend
+def _row_to_dict(d: dict) -> dict:
     return {
-        "id":              d["id"],
-        "stockName":       d["stock_name"],
-        "buyPrice":        d["buy_price"],
-        "quantity":        d["quantity"],
-        "entryDate":       d["entry_date"],
-        "capitalUsed":     d["capital_used"],
-        "tradeType":       d["trade_type"],
-        "status":          d["status"],
-        "sellPrice":       d["sell_price"],
-        "exitDate":        d["exit_date"],
-        "strategy":        d["strategy"],
-        "notes":           d["notes"],
-        "plannedStopLoss": d["planned_sl"],
-        "plannedTarget":   d["planned_tp"],
-        "emotionEntry":    d["emotion_entry"],
-        "emotionExit":     d["emotion_exit"],
-        "marketCondition": d["market_cond"],
-        "ruleFollowed":    d["rule_followed"],
-        "createdAt":       d["created_at"],
-        "updatedAt":       d["updated_at"],
+        "id":              d.get("id"),
+        "stockName":       d.get("stock_name"),
+        "buyPrice":        float(d.get("buy_price") or 0),
+        "quantity":        int(d.get("quantity") or 0),
+        "entryDate":       d.get("entry_date"),
+        "capitalUsed":     float(d.get("capital_used") or 0),
+        "tradeType":       d.get("trade_type"),
+        "status":          d.get("status"),
+        "sellPrice":       float(d["sell_price"]) if d.get("sell_price") is not None else None,
+        "exitDate":        d.get("exit_date"),
+        "strategy":        d.get("strategy"),
+        "notes":           d.get("notes"),
+        "plannedStopLoss": float(d["planned_sl"]) if d.get("planned_sl") is not None else None,
+        "plannedTarget":   float(d["planned_tp"]) if d.get("planned_tp") is not None else None,
+        "emotionEntry":    d.get("emotion_entry"),
+        "emotionExit":     d.get("emotion_exit"),
+        "marketCondition": d.get("market_cond"),
+        "ruleFollowed":    d.get("rule_followed"),
+        "createdAt":       d.get("created_at"),
+        "updatedAt":       d.get("updated_at"),
     }
+
+
+def _all_trades() -> list[dict]:
+    """Fetch all trades from Supabase, newest entry_date first."""
+    try:
+        from data.storage import supabase_db as sdb
+        rows = sdb.select(_TABLE, order="-entry_date")
+        return [_row_to_dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+def _fetch_prices_sync(symbols: list[str]) -> dict[str, float]:
+    import yfinance as yf
+    prices: dict[str, float] = {}
+    for sym in symbols:
+        for suffix in (".NS", ".BO"):
+            try:
+                p = float(yf.Ticker(sym + suffix).fast_info.last_price)
+                if p > 0:
+                    prices[sym] = p
+                    break
+            except Exception:
+                pass
+    return prices
 
 
 # ── Pydantic models ────────────────────────────────────────────────────────────
@@ -92,8 +79,8 @@ class TradeRecord(BaseModel):
     quantity: int
     entryDate: str
     capitalUsed: float
-    tradeType: str  # "Swing" | "Investment"
-    status: str     # "Open" | "Closed"
+    tradeType: str
+    status: str
     sellPrice: float | None = None
     exitDate: str | None = None
     strategy: str | None = None
@@ -110,7 +97,7 @@ class TradeRecord(BaseModel):
 class JournalChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
     history: list[dict] | None = None
-    trades: list[dict] | None = None  # Frontend passes localStorage trades directly
+    trades: list[dict] | None = None
 
 
 class JournalChatResponse(BaseModel):
@@ -124,90 +111,60 @@ class JournalChatResponse(BaseModel):
 
 @router.get("/trades")
 def get_trades():
-    """Return all stored journal trades, newest entry date first."""
-    conn = _open_db()
-    try:
-        rows = conn.execute(
-            "SELECT * FROM journal_trades ORDER BY entry_date DESC, created_at DESC"
-        ).fetchall()
-        return [_row_to_dict(r) for r in rows]
-    finally:
-        conn.close()
+    return _all_trades()
 
 
 @router.post("/trades")
 def upsert_trade(body: TradeRecord):
-    """Create or update a trade (upserted by id)."""
     now = datetime.now(timezone.utc).isoformat()
-    conn = _open_db()
+    row = {
+        "id":            body.id,
+        "stock_name":    body.stockName,
+        "buy_price":     body.buyPrice,
+        "quantity":      body.quantity,
+        "entry_date":    body.entryDate,
+        "capital_used":  body.capitalUsed,
+        "trade_type":    body.tradeType,
+        "status":        body.status,
+        "sell_price":    body.sellPrice,
+        "exit_date":     body.exitDate,
+        "strategy":      body.strategy,
+        "notes":         body.notes,
+        "planned_sl":    body.plannedStopLoss,
+        "planned_tp":    body.plannedTarget,
+        "emotion_entry": body.emotionEntry,
+        "emotion_exit":  body.emotionExit,
+        "market_cond":   body.marketCondition,
+        "rule_followed": body.ruleFollowed,
+        "created_at":    body.createdAt,
+        "updated_at":    now,
+    }
     try:
-        conn.execute(
-            """
-            INSERT INTO journal_trades
-                (id, stock_name, buy_price, quantity, entry_date, capital_used,
-                 trade_type, status, sell_price, exit_date, strategy, notes,
-                 planned_sl, planned_tp, emotion_entry, emotion_exit, market_cond,
-                 rule_followed, created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            ON CONFLICT(id) DO UPDATE SET
-                stock_name    = excluded.stock_name,
-                buy_price     = excluded.buy_price,
-                quantity      = excluded.quantity,
-                entry_date    = excluded.entry_date,
-                capital_used  = excluded.capital_used,
-                trade_type    = excluded.trade_type,
-                status        = excluded.status,
-                sell_price    = excluded.sell_price,
-                exit_date     = excluded.exit_date,
-                strategy      = excluded.strategy,
-                notes         = excluded.notes,
-                planned_sl    = excluded.planned_sl,
-                planned_tp    = excluded.planned_tp,
-                emotion_entry = excluded.emotion_entry,
-                emotion_exit  = excluded.emotion_exit,
-                market_cond   = excluded.market_cond,
-                rule_followed = excluded.rule_followed,
-                updated_at    = excluded.updated_at
-            """,
-            (
-                body.id, body.stockName, body.buyPrice, body.quantity,
-                body.entryDate, body.capitalUsed, body.tradeType, body.status,
-                body.sellPrice, body.exitDate, body.strategy, body.notes,
-                body.plannedStopLoss, body.plannedTarget,
-                body.emotionEntry, body.emotionExit, body.marketCondition,
-                body.ruleFollowed, body.createdAt, now,
-            ),
-        )
-        conn.commit()
-        row = conn.execute("SELECT * FROM journal_trades WHERE id = ?", (body.id,)).fetchone()
-        return _row_to_dict(row)
-    finally:
-        conn.close()
+        from data.storage import supabase_db as sdb
+        result = sdb.upsert(_TABLE, row, on_conflict="id")
+        if result:
+            return _row_to_dict(result[0])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return _row_to_dict(row)
 
 
 @router.delete("/trades/{trade_id}")
 def delete_trade(trade_id: str):
-    """Delete a trade by id."""
     if not trade_id or len(trade_id) > 64:
         raise HTTPException(status_code=400, detail="Invalid trade id")
-    conn = _open_db()
     try:
-        conn.execute("DELETE FROM journal_trades WHERE id = ?", (trade_id,))
-        conn.commit()
-        return {"ok": True, "id": trade_id}
-    finally:
-        conn.close()
+        from data.storage import supabase_db as sdb
+        sdb.delete(_TABLE, {"id": trade_id})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"ok": True, "id": trade_id}
 
 
 # ── Live price endpoint ────────────────────────────────────────────────────────
 
 @router.get("/prices")
 async def get_live_prices(symbols: str = ""):
-    """
-    Fetch live CMP for a comma-separated list of stock names.
-    Tries NSE (.NS) first, falls back to BSE (.BO).
-    Returns {symbol: price | null} map — never raises.
-    """
     names = [s.strip().upper() for s in symbols.split(",") if s.strip()]
     if not names:
         return {}
@@ -216,18 +173,16 @@ async def get_live_prices(symbols: str = ""):
         import yfinance as yf
         for suffix in (".NS", ".BO"):
             try:
-                t = yf.Ticker(name + suffix)
-                info = t.fast_info
-                price = float(info.last_price)
-                if price and price > 0:
-                    return name, round(price, 2)
+                p = float(yf.Ticker(name + suffix).fast_info.last_price)
+                if p > 0:
+                    return name, round(p, 2)
             except Exception:
                 pass
         return name, None
 
     loop = asyncio.get_running_loop()
-    from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=min(len(names), 10)) as pool:
+    from concurrent.futures import ThreadPoolExecutor as TPE
+    with TPE(max_workers=min(len(names), 10)) as pool:
         tasks = [loop.run_in_executor(pool, _fetch, n) for n in names]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -237,6 +192,166 @@ async def get_live_prices(symbols: str = ""):
         if not isinstance(item, Exception)
         for name, price in [item]
     }
+
+
+# ── Portfolio endpoints (Journal = Live Portfolio) ─────────────────────────────
+
+@router.get("/positions")
+async def journal_positions():
+    """Open journal trades as portfolio positions with live CMPs."""
+    def _compute():
+        trades = _all_trades()
+        open_trades = [t for t in trades if t.get("status") == "Open"]
+        if not open_trades:
+            return []
+        symbols = list({t["stockName"] for t in open_trades})
+        prices = _fetch_prices_sync(symbols)
+        total_value = sum(
+            prices.get(t["stockName"], t["buyPrice"]) * t["quantity"]
+            for t in open_trades
+        )
+        result = []
+        for t in open_trades:
+            sym = t["stockName"]
+            buy = float(t["buyPrice"])
+            qty = int(t["quantity"])
+            cmp = prices.get(sym, buy)
+            unrealized = (cmp - buy) * qty
+            ed = t.get("entryDate") or ""
+            try:
+                days_held = (date.today() - date.fromisoformat(ed[:10])).days
+            except Exception:
+                days_held = 0
+            pos_value = cmp * qty
+            result.append({
+                "ticker":         sym,
+                "name":           sym,
+                "quantity":       qty,
+                "avg_buy_price":  buy,
+                "current_price":  round(cmp, 2),
+                "unrealized_pnl": round(unrealized, 2),
+                "pnl_pct":        round((cmp - buy) / buy * 100, 2) if buy > 0 else 0.0,
+                "weight":         round(pos_value / total_value * 100, 2) if total_value > 0 else 0.0,
+                "sector":         "",
+                "strategy":       t.get("strategy") or "",
+                "buy_date":       ed,
+                "days_held":      days_held,
+                "notes":          t.get("notes") or "",
+            })
+        return result
+
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(_executor, _compute)
+
+
+@router.get("/summary")
+async def journal_summary():
+    """NAV, Day P&L, drawdown — computed from journal trades + live prices."""
+    def _compute():
+        trades = _all_trades()
+        if not trades:
+            return {
+                "nav": 0, "total_invested": 0, "realized_pnl": 0,
+                "unrealized_pnl": 0, "day_pnl": 0, "day_pnl_pct": 0,
+                "drawdown": 0, "open_positions": 0, "total_trades": 0,
+            }
+        open_trades = [t for t in trades if t.get("status") == "Open"]
+        closed_trades = [
+            t for t in trades
+            if t.get("status") == "Closed" and t.get("sellPrice") is not None
+        ]
+        realized_pnl = sum(
+            (float(t["sellPrice"]) - float(t["buyPrice"])) * int(t["quantity"])
+            for t in closed_trades
+        )
+        today = date.today().isoformat()
+        today_realized = sum(
+            (float(t["sellPrice"]) - float(t["buyPrice"])) * int(t["quantity"])
+            for t in closed_trades
+            if (t.get("exitDate") or "")[:10] == today
+        )
+        total_invested = sum(float(t["buyPrice"]) * int(t["quantity"]) for t in open_trades)
+        symbols = list({t["stockName"] for t in open_trades})
+        prices = _fetch_prices_sync(symbols) if symbols else {}
+        unrealized_pnl = sum(
+            (prices.get(t["stockName"], float(t["buyPrice"])) - float(t["buyPrice"])) * int(t["quantity"])
+            for t in open_trades
+        )
+        open_value = sum(
+            prices.get(t["stockName"], float(t["buyPrice"])) * int(t["quantity"])
+            for t in open_trades
+        )
+        nav = open_value + realized_pnl
+        day_pnl = today_realized + unrealized_pnl
+        nav_prev = nav - day_pnl if nav - day_pnl > 0 else (nav if nav > 0 else 1)
+        day_pnl_pct = day_pnl / nav_prev * 100
+
+        # Max drawdown from closed-trade equity curve
+        daily: dict[str, float] = defaultdict(float)
+        for t in closed_trades:
+            ed = (t.get("exitDate") or "")[:10]
+            if ed:
+                daily[ed] += (float(t["sellPrice"]) - float(t["buyPrice"])) * int(t["quantity"])
+        equity = peak = max_dd = 0.0
+        for d in sorted(daily.keys()):
+            equity += daily[d]
+            peak = max(peak, equity)
+            if peak > 0:
+                max_dd = max(max_dd, (peak - equity) / peak * 100)
+
+        return {
+            "nav":            round(nav, 2),
+            "total_invested": round(total_invested, 2),
+            "realized_pnl":   round(realized_pnl, 2),
+            "unrealized_pnl": round(unrealized_pnl, 2),
+            "day_pnl":        round(day_pnl, 2),
+            "day_pnl_pct":    round(day_pnl_pct, 4),
+            "drawdown":       round(max_dd, 4),
+            "open_positions": len(open_trades),
+            "total_trades":   len(trades),
+        }
+
+    loop = asyncio.get_running_loop()
+    try:
+        return await asyncio.wait_for(loop.run_in_executor(_executor, _compute), timeout=20.0)
+    except asyncio.TimeoutError:
+        return {"nav": 0, "total_invested": 0, "realized_pnl": 0, "unrealized_pnl": 0,
+                "day_pnl": 0, "day_pnl_pct": 0, "drawdown": 0, "open_positions": 0, "total_trades": 0}
+
+
+@router.get("/pnl-calendar")
+async def journal_pnl_calendar(year: int | None = None):
+    """Daily P&L from closed journal trades grouped by exit date."""
+    def _compute():
+        trades = _all_trades()
+        closed = [
+            t for t in trades
+            if t.get("status") == "Closed"
+            and t.get("sellPrice") is not None
+            and t.get("exitDate")
+        ]
+        daily: dict[str, float] = defaultdict(float)
+        for t in closed:
+            ed = (t["exitDate"] or "")[:10]
+            if not ed:
+                continue
+            if year and not ed.startswith(str(year)):
+                continue
+            daily[ed] += (float(t["sellPrice"]) - float(t["buyPrice"])) * int(t["quantity"])
+        result, running = [], 0.0
+        for d in sorted(daily.keys()):
+            pnl = daily[d]
+            running += pnl
+            result.append({
+                "date":            d,
+                "pnl":             round(pnl, 2),
+                "pnl_pct":         0.0,
+                "portfolio_value": round(running, 2),
+            })
+        return result
+
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(_executor, _compute)
 
 
 # ── AI system prompt ───────────────────────────────────────────────────────────
@@ -327,8 +442,18 @@ Do: tell the truth, coach like someone serious about mastering trading.
 
 def _fmt_trades(trades: list[dict]) -> str:
     if not trades:
-        return "No trades recorded yet. The user has not logged any trades."
-    return "Trade journal data (JSON):\n" + json.dumps(trades, indent=2, ensure_ascii=False, default=str)
+        return "No trades recorded yet."
+    # Summarize for large datasets to avoid token limits
+    if len(trades) > 30:
+        closed = [t for t in trades if t.get("status") == "Closed"]
+        open_t = [t for t in trades if t.get("status") == "Open"]
+        summary = f"Total trades: {len(trades)} ({len(open_t)} open, {len(closed)} closed). "
+        summary += f"Recent 20 trades + all open positions below.\n\n"
+        subset = open_t + closed[-20:]
+    else:
+        subset = trades
+        summary = ""
+    return summary + "Trade journal data (JSON):\n" + json.dumps(subset, indent=2, ensure_ascii=False, default=str)
 
 
 def _groq(system: str, user_msg: str, history: list[dict] | None = None) -> str:
@@ -344,8 +469,8 @@ def _groq(system: str, user_msg: str, history: list[dict] | None = None) -> str:
     r = _req.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 1200},
-        timeout=6,
+        json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 2000},
+        timeout=20,
     )
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"]
@@ -391,7 +516,7 @@ def _openrouter(system: str, user_msg: str, history: list[dict] | None = None) -
         headers={
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://india-quant-fund.vercel.app",
+            "HTTP-Referer": "https://luffy-labs.vercel.app",
         },
         json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 2000},
         timeout=22,
@@ -401,11 +526,11 @@ def _openrouter(system: str, user_msg: str, history: list[dict] | None = None) -
 
 
 def _llm(system: str, user_msg: str, history: list[dict] | None = None) -> tuple[str, str, int]:
-    # Priority: Gemini direct → OpenRouter (Gemini via proxy) → Groq (llama fallback)
+    # Groq is fastest (1-3s) → Gemini → OpenRouter as fallbacks
     chain = [
-        ("gemini",      _gemini),
-        ("openrouter",  _openrouter),
-        ("groq",        _groq),
+        ("groq",       _groq),
+        ("gemini",     _gemini),
+        ("openrouter", _openrouter),
     ]
     errors: list[str] = []
     for name, fn in chain:
@@ -418,8 +543,8 @@ def _llm(system: str, user_msg: str, history: list[dict] | None = None) -> tuple
         except Exception as exc:
             errors.append(f"{name}: {str(exc)[:60]}")
     return (
-        f"AI Coach is temporarily unavailable. Tried: {'; '.join(errors[:2])}. "
-        "Please ensure GEMINI_API_KEY or OPENROUTER_API_KEY is set in Vercel environment variables.",
+        f"AI Coach is temporarily unavailable. Errors: {'; '.join(errors[:2])}. "
+        "Please ensure GROQ_API_KEY is set in Vercel environment variables.",
         "none",
         0,
     )
@@ -429,26 +554,10 @@ def _llm(system: str, user_msg: str, history: list[dict] | None = None) -> tuple
 
 @router.post("/chat", response_model=JournalChatResponse)
 async def journal_chat(body: JournalChatRequest):
-    """
-    AI coach endpoint. Reads trades from DB (not from request body),
-    so the AI always has the full picture regardless of what the frontend sends.
-    """
     loop = asyncio.get_running_loop()
 
-    def _fetch_trades_and_chat():
-        # Prefer trades passed directly from the frontend (avoids empty /tmp DB on cold start)
-        if body.trades:
-            trades = body.trades[:200]
-        else:
-            conn = _open_db()
-            try:
-                rows = conn.execute(
-                    "SELECT * FROM journal_trades ORDER BY entry_date ASC, created_at ASC"
-                ).fetchall()
-                trades = [_row_to_dict(r) for r in rows]
-            finally:
-                conn.close()
-
+    def _fetch_and_chat():
+        trades = body.trades[:200] if body.trades else _all_trades()
         trade_ctx = _fmt_trades(trades)
         user_msg = f"{trade_ctx}\n\n---\n\nUser request: {body.message.strip()}"
         history = (body.history or [])[-6:] if body.history else None
@@ -457,13 +566,13 @@ async def journal_chat(body: JournalChatRequest):
 
     try:
         reply, provider, latency_ms, trade_count = await asyncio.wait_for(
-            loop.run_in_executor(_executor, _fetch_trades_and_chat),
-            timeout=25.0,
+            loop.run_in_executor(_executor, _fetch_and_chat),
+            timeout=55.0,
         )
     except asyncio.TimeoutError:
-        reply = "The analysis timed out. Try asking for one section at a time (e.g. 'Show my Psychology Analysis' or 'What are my critical mistakes?')."
+        reply = "The analysis timed out. Try asking about fewer trades or a specific section (e.g. 'Show my open positions' or 'What are my critical mistakes?')."
         provider = "timeout"
-        latency_ms = 8000
+        latency_ms = 55000
         trade_count = 0
 
     return JournalChatResponse(

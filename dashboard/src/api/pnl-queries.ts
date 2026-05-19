@@ -180,3 +180,45 @@ export const useStrategyPnl = () =>
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
+
+// ── Journal = Live Portfolio hooks ─────────────────────────────────────────────
+
+export interface JournalSummary {
+  nav: number;
+  total_invested: number;
+  realized_pnl: number;
+  unrealized_pnl: number;
+  day_pnl: number;
+  day_pnl_pct: number;
+  drawdown: number;
+  open_positions: number;
+  total_trades: number;
+}
+
+export const useJournalSummary = () =>
+  useQuery({
+    queryKey: ["journal", "summary"],
+    queryFn: () => api.get<JournalSummary>("/journal/summary"),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
+export const useJournalPnLCalendar = (year?: number, month?: number) =>
+  useQuery({
+    queryKey: ["journal", "pnl-calendar", year, month],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (year) params.set("year", String(year));
+      return api.get<DayPnL[]>(`/journal/pnl-calendar?${params}`);
+    },
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
+export const useJournalPositions = () =>
+  useQuery({
+    queryKey: ["journal", "positions"],
+    queryFn: () => api.get<PaperPosition[]>("/journal/positions"),
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
