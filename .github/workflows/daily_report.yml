@@ -28,6 +28,12 @@ jobs:
       - name: Install dependencies
         run: pip install yfinance pandas supabase loguru groq
 
+      - name: Fetch FII/DII data from NSE → Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python scripts/update_fii_dii.py
+
       - name: Run strategy agent + daily report
         env:
           SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}

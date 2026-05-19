@@ -10,6 +10,7 @@ import json
 import math
 import threading as _threading
 import time
+import urllib.request as _ur
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -980,162 +981,192 @@ async def get_watchlist():
 
 
 @router.get("/fii-dii")
-@_cached("fii_dii", ttl=21600)  # 6-hour cache per user requirement
+@_cached("fii_dii", ttl=3600)  # 1-hour in-process cache
 async def get_fii_dii():
-    """FII/DII data: NSE live API first, then local history file, then mock."""
+    """
+    FII/DII cash-segment data — real data only, no mock.
+
+    Priority:
+      1. Supabase cache (populated nightly by GitHub Actions update_fii_dii.py)
+      2. NSE live API direct fetch (works when Vercel IP is not blocked)
+      3. Local fii_dii_data/latest.json + fpi_daily.json (bundled, may be stale)
+      4. Empty list — frontend shows 'Data unavailable'
+    """
     import json as _json
     from pathlib import Path
+    from datetime import timezone as _tz
 
     loop = asyncio.get_running_loop()
 
     def _map_row(row: dict) -> dict:
         return {
-            "date": row.get("date", ""),
-            "fii_buy": float(row.get("fii_buy", 0) or 0),
-            "fii_sell": float(row.get("fii_sell", 0) or 0),
-            "fii_net": float(row.get("fii_net", 0) or 0),
-            "dii_buy": float(row.get("dii_buy", 0) or 0),
-            "dii_sell": float(row.get("dii_sell", 0) or 0),
-            "dii_net": float(row.get("dii_net", 0) or 0),
-            "fii_idx_fut_net": float(row.get("fii_idx_fut_net", 0) or 0),
-            "fii_stk_fut_net": float(row.get("fii_stk_fut_net", 0) or 0),
+            "date":             row.get("date", ""),
+            "fii_buy":          float(row.get("fii_buy", 0) or 0),
+            "fii_sell":         float(row.get("fii_sell", 0) or 0),
+            "fii_net":          float(row.get("fii_net", 0) or 0),
+            "dii_buy":          float(row.get("dii_buy", 0) or 0),
+            "dii_sell":         float(row.get("dii_sell", 0) or 0),
+            "dii_net":          float(row.get("dii_net", 0) or 0),
+            "fii_idx_fut_net":  float(row.get("fii_idx_fut_net", 0) or 0),
+            "fii_stk_fut_net":  float(row.get("fii_stk_fut_net", 0) or 0),
             "fii_idx_call_net": float(row.get("fii_idx_call_net", 0) or 0),
-            "fii_idx_put_net": float(row.get("fii_idx_put_net", 0) or 0),
-            "pcr": float(row.get("pcr", 0) or 0),
-            "sentiment_score": float(row.get("sentiment_score", 50) or 50),
-            "sentiment": (row.get("_fao_summary") or {}).get("sentiment", row.get("sentiment", "Neutral")),
-            "updated_at": row.get("_updated_at", row.get("updated_at", "")),
+            "fii_idx_put_net":  float(row.get("fii_idx_put_net", 0) or 0),
+            "pcr":              float(row.get("pcr", 0) or 0),
+            "sentiment_score":  float(row.get("sentiment_score", 50) or 50),
+            "sentiment":        (row.get("_fao_summary") or {}).get("sentiment", row.get("sentiment", "Neutral")),
+            "updated_at":       row.get("_updated_at", row.get("updated_at", "")),
         }
 
-    # ── 1. Try NSE live API (most accurate, fetched once per 6h) ─────────────
+    # ── 1. Supabase cache (populated by GitHub Actions nightly) ───────────────
     try:
-        def _fetch_nse_fii_dii():
-            import urllib.request as _ur
-            import json as _j, time as _t
-            # First hit the main page to get cookies
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.5",
-            }
-            session_req = _ur.Request("https://www.nseindia.com/reports/fii-dii", headers=headers)
-            import http.cookiejar as _cj
-            cookie_jar = _cj.CookieJar()
-            opener = _ur.build_opener(_ur.HTTPCookieProcessor(cookie_jar))
-            opener.open(session_req, timeout=6)
-            _t.sleep(0.5)
+        from data.storage import supabase_db as sdb
+        sb_rows = sdb.select(
+            "screener_cache",
+            cols="results,scanned_at",
+            filters={"strategy": "fii_dii", "universe": "cash"},
+            limit=1,
+        )
+        if sb_rows:
+            row = sb_rows[0]
+            raw = row.get("results")
+            data = _json.loads(raw) if isinstance(raw, str) else raw
+            if isinstance(data, list) and len(data) >= 5:
+                # Accept even if slightly stale (up to 4 days — covers weekends + holidays)
+                sa = row.get("scanned_at", "")
+                age_days = 999.0
+                if sa:
+                    scanned = datetime.fromisoformat(sa.replace("Z", "+00:00"))
+                    age_days = (datetime.now(_tz.utc) - scanned).total_seconds() / 86400
+                if age_days < 4:
+                    return data[-60:]
+    except Exception:
+        pass
 
-            api_headers = {**headers,
-                "Accept": "application/json, text/plain, */*",
-                "Referer": "https://www.nseindia.com/reports/fii-dii",
-                "X-Requested-With": "XMLHttpRequest",
-            }
-            api_req = _ur.Request("https://www.nseindia.com/api/fiidiiTradeReact", headers=api_headers)
-            with opener.open(api_req, timeout=6) as r:
-                data = _j.loads(r.read())
+    # ── 2. NSE live API with session cookie ───────────────────────────────────
+    def _fetch_nse_direct() -> list[dict]:
+        import http.cookiejar as _cj, time as _t
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        jar = _cj.CookieJar()
+        opener = _ur.build_opener(_ur.HTTPCookieProcessor(jar))
+        opener.open(
+            _ur.Request("https://www.nseindia.com/reports/fii-dii",
+                        headers={**headers, "Accept": "text/html,*/*"}),
+            timeout=7,
+        )
+        _t.sleep(0.8)
+        with opener.open(
+            _ur.Request(
+                "https://www.nseindia.com/api/fiidiiTradeReact",
+                headers={**headers,
+                         "Accept": "application/json, text/plain, */*",
+                         "Referer": "https://www.nseindia.com/reports/fii-dii",
+                         "X-Requested-With": "XMLHttpRequest"},
+            ),
+            timeout=7,
+        ) as r:
+            data = _json.loads(r.read())
 
-            results = []
-            for row in (data if isinstance(data, list) else []):
-                results.append({
-                    "date": row.get("date", ""),
-                    "fii_buy": _sf(row.get("buySell_FII_buy", row.get("fii_buy", 0))),
-                    "fii_sell": _sf(row.get("buySell_FII_sell", row.get("fii_sell", 0))),
-                    "fii_net": _sf(row.get("buySell_FII_net", row.get("fii_net", 0))),
-                    "dii_buy": _sf(row.get("buySell_DII_buy", row.get("dii_buy", 0))),
-                    "dii_sell": _sf(row.get("buySell_DII_sell", row.get("dii_sell", 0))),
-                    "dii_net": _sf(row.get("buySell_DII_net", row.get("dii_net", 0))),
-                    "fii_idx_fut_net": 0, "fii_stk_fut_net": 0,
-                    "fii_idx_call_net": 0, "fii_idx_put_net": 0,
-                    "pcr": 0, "sentiment_score": 50, "sentiment": "Neutral",
-                    "updated_at": "",
-                })
-            return [r for r in results if abs(r.get("fii_net", 0)) > 0 or abs(r.get("dii_net", 0)) > 0]
+        out = []
+        for row in (data if isinstance(data, list) else []):
+            fii_net = _sf(row.get("buySell_FII_net", row.get("fii_net", 0)))
+            dii_net = _sf(row.get("buySell_DII_net", row.get("dii_net", 0)))
+            if abs(fii_net) < 0.01 and abs(dii_net) < 0.01:
+                continue
+            out.append({
+                "date":             row.get("date", ""),
+                "fii_buy":          _sf(row.get("buySell_FII_buy",  row.get("fii_buy",  0))),
+                "fii_sell":         _sf(row.get("buySell_FII_sell", row.get("fii_sell", 0))),
+                "fii_net":          fii_net,
+                "dii_buy":          _sf(row.get("buySell_DII_buy",  row.get("dii_buy",  0))),
+                "dii_sell":         _sf(row.get("buySell_DII_sell", row.get("dii_sell", 0))),
+                "dii_net":          dii_net,
+                "fii_idx_fut_net":  0.0, "fii_stk_fut_net":  0.0,
+                "fii_idx_call_net": 0.0, "fii_idx_put_net":  0.0,
+                "pcr": 0.0, "sentiment_score": 50.0, "sentiment": "Neutral",
+                "updated_at": datetime.now(IST).isoformat(),
+            })
+        return out
 
+    try:
         nse_rows = await asyncio.wait_for(
-            loop.run_in_executor(_executor, _fetch_nse_fii_dii),
-            timeout=10.0,
+            loop.run_in_executor(_executor, _fetch_nse_direct),
+            timeout=12.0,
         )
         if nse_rows:
+            # Persist to Supabase so future cold starts don't hit NSE again
+            try:
+                from data.storage import supabase_db as sdb
+                sdb.upsert(
+                    "screener_cache",
+                    {
+                        "strategy":    "fii_dii",
+                        "universe":    "cash",
+                        "scanned_at":  datetime.now(_tz.utc).isoformat(),
+                        "results":     _json.dumps(nse_rows),
+                        "is_scanning": False,
+                    },
+                    on_conflict="strategy,universe",
+                )
+            except Exception:
+                pass
             return nse_rows[-60:]
     except Exception:
         pass
 
-    # ── 2. Fall back to local history.json (rich data with futures + sentiment) ─
-    data_dir = Path(__file__).parent.parent / "fii_dii_data"
-    try:
-        history_path = data_dir / "history.json"
-        if history_path.exists():
-            with open(history_path) as f:
-                file_data = _json.load(f)
-            rows = [_map_row(r) for r in file_data if isinstance(r, dict) and r.get("fii_buy", 0) > 0]
-            if rows:
-                return rows[-60:]
-    except Exception:
-        pass
-
-    # ── 3. Try nsetools library if available ──────────────────────────────────
+    # ── 3. nsepython fallback (same NSE API, different session handling) ──────
     if _NSE_AVAILABLE:
         try:
-            def _fetch_fii_dii_nse():
-                url = "https://www.nseindia.com/api/fiidiiTradeReact"
-                data = _nsefetch(url)
-                results = []
+            def _fetch_nse_py() -> list[dict]:
+                data = _nsefetch("https://www.nseindia.com/api/fiidiiTradeReact")
+                out = []
                 for row in (data if isinstance(data, list) else []):
-                    results.append({
-                        "date": row.get("date", ""),
-                        "fii_buy": _sf(row.get("buySell_FII_buy", 0)),
-                        "fii_sell": _sf(row.get("buySell_FII_sell", 0)),
-                        "fii_net": _sf(row.get("buySell_FII_net", 0)),
-                        "dii_buy": _sf(row.get("buySell_DII_buy", 0)),
-                        "dii_sell": _sf(row.get("buySell_DII_sell", 0)),
-                        "dii_net": _sf(row.get("buySell_DII_net", 0)),
-                        "fii_idx_fut_net": 0, "fii_stk_fut_net": 0,
-                        "fii_idx_call_net": 0, "fii_idx_put_net": 0,
-                        "pcr": 0, "sentiment_score": 50, "sentiment": "Neutral",
-                        "updated_at": "",
+                    fii_net = _sf(row.get("buySell_FII_net", 0))
+                    dii_net = _sf(row.get("buySell_DII_net", 0))
+                    if abs(fii_net) < 0.01 and abs(dii_net) < 0.01:
+                        continue
+                    out.append({
+                        "date":             row.get("date", ""),
+                        "fii_buy":          _sf(row.get("buySell_FII_buy",  0)),
+                        "fii_sell":         _sf(row.get("buySell_FII_sell", 0)),
+                        "fii_net":          fii_net,
+                        "dii_buy":          _sf(row.get("buySell_DII_buy",  0)),
+                        "dii_sell":         _sf(row.get("buySell_DII_sell", 0)),
+                        "dii_net":          dii_net,
+                        "fii_idx_fut_net":  0.0, "fii_stk_fut_net":  0.0,
+                        "fii_idx_call_net": 0.0, "fii_idx_put_net":  0.0,
+                        "pcr": 0.0, "sentiment_score": 50.0, "sentiment": "Neutral",
+                        "updated_at": datetime.now(IST).isoformat(),
                     })
-                return results[-30:] if results else []
-            result = await loop.run_in_executor(_executor, _fetch_fii_dii_nse)
-            valid = [r for r in result if abs(r.get("fii_net", 0)) > 0 or abs(r.get("dii_net", 0)) > 0]
-            if valid:
-                return result
+                return out
+            nse_py_rows = await asyncio.wait_for(
+                loop.run_in_executor(_executor, _fetch_nse_py), timeout=8.0
+            )
+            if nse_py_rows:
+                return nse_py_rows[-60:]
         except Exception:
             pass
 
-    # Final fallback: deterministic mock
-    import random
-    from datetime import timedelta
-    rng = random.Random(42)
-    today = datetime.now(IST).date()
-    rows = []
-    for i in range(30, 0, -1):
-        d = today - timedelta(days=i)
-        if d.weekday() >= 5:
-            continue
-        fii_net = rng.uniform(-4500, 4500)
-        dii_net = rng.uniform(-fii_net * 0.3, abs(fii_net) * 0.8)
-        fii_buy = abs(fii_net) + rng.uniform(4000, 12000)
-        fii_sell = fii_buy - fii_net
-        dii_buy = abs(dii_net) + rng.uniform(2000, 8000)
-        dii_sell = dii_buy - dii_net
-        rows.append({
-            "date": d.strftime("%d-%b-%Y"),
-            "fii_buy": round(fii_buy, 2),
-            "fii_sell": round(fii_sell, 2),
-            "fii_net": round(fii_net, 2),
-            "dii_buy": round(dii_buy, 2),
-            "dii_sell": round(dii_sell, 2),
-            "dii_net": round(dii_net, 2),
-            "fii_idx_fut_net": 0,
-            "fii_stk_fut_net": 0,
-            "fii_idx_call_net": 0,
-            "fii_idx_put_net": 0,
-            "pcr": 0,
-            "sentiment_score": 50,
-            "sentiment": "Neutral",
-            "updated_at": "",
-        })
-    return rows
+    # ── 4. Bundled local JSON files (real historical data, may be stale) ──────
+    data_dir = Path(__file__).parent.parent / "fii_dii_data"
+    try:
+        latest_path = data_dir / "latest.json"
+        if latest_path.exists():
+            with open(latest_path) as f:
+                latest = _json.load(f)
+            if latest.get("fii_buy", 0) > 0:
+                return [_map_row(latest)]
+    except Exception:
+        pass
+
+    # ── No real data available — return empty, never return mock ──────────────
+    return []
 
 
 @router.get("/fii-dii/today")
