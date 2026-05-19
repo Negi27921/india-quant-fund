@@ -81,14 +81,14 @@ async def recent_signals(days: int = Query(5, ge=1, le=30)):
             date_str = scanned_at[:10] if scanned_at else ""
             for r in results[:25]:
                 conf = int(r.get("confidence", 0))
-                approved = conf >= 95
+                approved = conf >= 70
                 signals.append({
                     "date": date_str,
                     "ticker": r.get("ticker", ""),
                     "strategy": strategy,
                     "signal": round(conf / 100, 2),
                     "approved": approved,
-                    "rejection_reason": None if approved else f"confidence {conf}% < threshold",
+                    "rejection_reason": None if approved else f"confidence {conf}% < 70% threshold",
                 })
 
         # Fallback: derive signals from paper_trades when screener_cache is empty

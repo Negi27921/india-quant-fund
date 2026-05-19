@@ -333,15 +333,19 @@ def _supabase_store(results: list[dict], rating_events: list[dict]) -> None:
         sb = create_client(SUPABASE_URL, SUPABASE_KEY)
         from datetime import datetime
         now_ist = datetime.now(IST).isoformat()
-        sb.table("screener_cache").upsert({
-            "strategy":    "multibagger",
-            "universe":    "full",
+        payload = {
             "scanned_at":  now_ist,
             "results":     json.dumps(results),
             "meta":        json.dumps({"rating_events": rating_events[:20]}),
             "is_scanning": False,
-        }, on_conflict="strategy,universe").execute()
-        print("  Stored results in Supabase screener_cache")
+        }
+        # Write to both universes so the web dashboard (nifty500 default) also sees results
+        for univ in ("full", "nifty500"):
+            sb.table("screener_cache").upsert(
+                {"strategy": "multibagger", "universe": univ, **payload},
+                on_conflict="strategy,universe",
+            ).execute()
+        print("  Stored results in Supabase screener_cache (full + nifty500)")
     except Exception as e:
         print(f"  Supabase store failed: {e}")
 

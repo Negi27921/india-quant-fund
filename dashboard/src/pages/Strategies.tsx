@@ -93,27 +93,21 @@ function AllocationBars({
               border: `1px solid ${isSelected ? color + "40" : "var(--border)"}`,
             }}
           >
-            {/* Top row: label + weight */}
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-2">
+            {/* Row 1: dot + name | SR + weight (no description here — prevents overflow) */}
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2 min-w-0">
                 <div
                   className="w-2 h-2 rounded-full shrink-0"
                   style={{ background: color }}
                 />
                 <span
-                  className="font-semibold uppercase tracking-wide"
+                  className="font-semibold uppercase tracking-wide shrink-0"
                   style={{ fontSize: "10px", color: isSelected ? color : "var(--text-2)", letterSpacing: "0.08em" }}
                 >
                   {STRATEGY_LABELS[a.strategy] ?? a.strategy}
                 </span>
-                <span
-                  className="truncate"
-                  style={{ fontSize: "9px", color: "var(--text-3)", maxWidth: 140 }}
-                >
-                  {STRATEGY_DESCRIPTIONS[a.strategy]}
-                </span>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 ml-2">
                 {sharpe !== undefined && (
                   <Tooltip content="Sharpe Ratio — risk-adjusted return. >1 = good, >2 = excellent. Measures return per unit of volatility.">
                     <span
@@ -121,6 +115,7 @@ function AllocationBars({
                         fontSize: "9px",
                         color: sharpe >= 1 ? "var(--green)" : sharpe >= 0.5 ? "var(--amber)" : "var(--red)",
                         fontFamily: "JetBrains Mono",
+                        whiteSpace: "nowrap",
                       }}
                     >
                       SR {sharpe.toFixed(2)}
@@ -129,11 +124,20 @@ function AllocationBars({
                 )}
                 <span
                   className="font-mono font-bold"
-                  style={{ fontSize: "11px", color: "var(--text-1)" }}
+                  style={{ fontSize: "11px", color: "var(--text-1)", whiteSpace: "nowrap" }}
                 >
                   {a.weight.toFixed(1)}%
                 </span>
               </div>
+            </div>
+            {/* Row 2: description */}
+            <div className="mb-1.5 pl-4">
+              <span
+                className="truncate block"
+                style={{ fontSize: "9px", color: "var(--text-3)", lineHeight: 1.4 }}
+              >
+                {STRATEGY_DESCRIPTIONS[a.strategy]}
+              </span>
             </div>
             {/* Bar */}
             <div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--surface-3)" }}>
