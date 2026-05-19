@@ -8,6 +8,7 @@ import asyncio
 import json
 import math
 import os
+import threading as _threading
 import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -794,3 +795,79 @@ async def screener_status():
                 "cache_age_mins": age_mins,
             }
     return out
+
+
+# ── Prewarm (called on login) ───────────────────────────────────────────────
+
+_PREWARM_LOCK = _threading.Lock()
+_PREWARM_ORDER = ["vcp", "ipo_base", "rsi_reversal", "rocket_base", "breakout", "golden_cross", "multibagger"]
+
+
+def _sequential_prewarm(universe_name: str) -> None:
+    """Scan all strategies one by one in a single dedicated thread.
+    Skips strategies that are already fresh in Supabase or in-process cache."""
+    for strategy in _PREWARM_ORDER:
+        cache_key = f"{strategy}_{universe_name}"
+        now = time.monotonic()
+
+        # Already fresh in memory
+        if cache_key in _cache and (now - _cache[cache_key][0]) < CACHE_TTL:
+            continue
+        # Already being scanned by another thread
+        if cache_key in _scan_running:
+            continue
+        # Try Supabase first — warm in-process cache and skip
+        sb_data = _sb_read(strategy, universe_name)
+        if sb_data is not None:
+            _cache[cache_key] = (time.monotonic(), sb_data)
+            continue
+        # Run scan synchronously in this thread (no executor contention)
+        _scan_running.add(cache_key)
+        try:
+            results = _run_scan(strategy, universe_name)
+            _cache[cache_key] = (time.monotonic(), results)
+            _sb_write(strategy, universe_name, results)
+        except Exception:
+            pass
+        finally:
+            _scan_running.discard(cache_key)
+
+
+@router.post("/prewarm")
+async def prewarm_all_strategies(
+    universe: str = Query("nifty500", pattern="^(nifty500|full)$"),
+):
+    """Called once on app login. Scans all 7 strategies sequentially in the background
+    so results are ready when the user opens the Screener page."""
+    if not _PREWARM_LOCK.acquire(blocking=False):
+        return {"message": "Prewarm already running", "started": False, "strategies": []}
+
+    # Identify what actually needs scanning (skip already-cached strategies)
+    needs_scan: list[str] = []
+    now = time.monotonic()
+    for strategy in _PREWARM_ORDER:
+        cache_key = f"{strategy}_{universe}"
+        if cache_key in _scan_running:
+            continue
+        if cache_key in _cache and (now - _cache[cache_key][0]) < CACHE_TTL:
+            continue
+        needs_scan.append(strategy)
+
+    if not needs_scan:
+        _PREWARM_LOCK.release()
+        return {"message": "All strategies already cached", "started": False, "strategies": []}
+
+    def _run_and_release():
+        try:
+            _sequential_prewarm(universe)
+        finally:
+            _PREWARM_LOCK.release()
+
+    t = _threading.Thread(target=_run_and_release, daemon=True, name="screener-prewarm")
+    t.start()
+    return {
+        "message": f"Prewarm started — scanning {len(needs_scan)} strategies one by one",
+        "started": True,
+        "strategies": needs_scan,
+        "universe": universe,
+    }

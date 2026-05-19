@@ -710,10 +710,10 @@ export function TradingJournalPage() {
     setLoading(true);
     try {
       const history = messages.map(m => ({ role: m.role, content: m.content }));
-      // No trades passed — backend reads from DB directly for accurate analysis
       const res = await api.post<{ response: string; trade_count: number }>("/journal/chat", {
         message: msg,
         history: history.slice(-6),
+        trades: trades.slice(0, 150),  // pass localStorage trades so AI works even on fresh server
       });
       setMessages(prev => [...prev, { role: "assistant", content: res.response }]);
     } catch (err) {

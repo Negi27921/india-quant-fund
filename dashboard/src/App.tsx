@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
+import { api } from "@/api/client";
 import { Layout } from "@/components/layout/Layout";
 import { MarketPage }          from "@/pages/Market";
 import { ScreenerPage }        from "@/pages/Screener";
@@ -69,6 +70,11 @@ class ErrorBoundary extends React.Component<
 /* ── App ──────────────────────────────────────────────────────────────────── */
 export default function App() {
   const [authed, setAuthed] = useState(() => hasValidSession());
+
+  useEffect(() => {
+    if (!authed) return;
+    api.post("/screener/prewarm?universe=nifty500").catch(() => {});
+  }, [authed]);
 
   if (!authed) return <LoginPage onAuth={() => setAuthed(true)} />;
 

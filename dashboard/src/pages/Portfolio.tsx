@@ -657,6 +657,8 @@ function TradesTab() {
   const [statusFilter, setStatusFilter] = useState<"all" | "OPEN" | "CLOSED">("all");
   const [sortKey, setSortKey] = useState<TradeSortKey>("entry_date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   const { data: trades, isLoading } = usePaperTrades(statusFilter);
   const { data: strategyStats }     = useStrategyPnl();
@@ -674,7 +676,14 @@ function TradesTab() {
     else { setSortKey(key); setSortDir("desc"); }
   };
 
-  const filtered = [...allTrades].sort((a, b) => {
+  const filtered = [...allTrades]
+    .filter(t => {
+      const d = t.entry_date?.slice(0, 10) ?? "";
+      if (fromDate && d < fromDate) return false;
+      if (toDate && d > toDate) return false;
+      return true;
+    })
+    .sort((a, b) => {
     let av: string | number = 0, bv: string | number = 0;
     if (sortKey === "ticker")       { av = a.ticker; bv = b.ticker; }
     else if (sortKey === "strategy") { av = a.strategy; bv = b.strategy; }
@@ -734,7 +743,33 @@ function TradesTab() {
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-1)", fontFamily: "var(--font-body)" }}>
             PAPER TRADES ({filtered.length})
           </span>
-          <div style={{ display: "flex", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            {/* Date range filter */}
+            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              {(["From", "To"] as const).map((label, i) => (
+                <input
+                  key={label}
+                  type="date"
+                  value={i === 0 ? fromDate : toDate}
+                  onChange={e => i === 0 ? setFromDate(e.target.value) : setToDate(e.target.value)}
+                  title={label}
+                  style={{
+                    background: "rgba(39,174,96,0.04)", border: "1px solid var(--accent-border)",
+                    color: "var(--text-1)", fontFamily: "var(--font-mono)",
+                    borderRadius: 5, padding: "3px 7px", outline: "none", fontSize: 10,
+                    colorScheme: "dark",
+                  }}
+                />
+              ))}
+              {(fromDate || toDate) && (
+                <button onClick={() => { setFromDate(""); setToDate(""); }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-4)", fontSize: 12, lineHeight: 1 }}>
+                  ✕
+                </button>
+              )}
+            </div>
+            <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.08)" }} />
+            {/* Status filters */}
             {(["all", "OPEN", "CLOSED"] as const).map(s => (
               <button key={s} onClick={() => setStatusFilter(s)} style={{
                 fontSize: 10, padding: "3px 10px", borderRadius: 6, cursor: "pointer", transition: "all 120ms",

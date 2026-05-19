@@ -110,6 +110,7 @@ class TradeRecord(BaseModel):
 class JournalChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
     history: list[dict] | None = None
+    trades: list[dict] | None = None  # Frontend passes localStorage trades directly
 
 
 class JournalChatResponse(BaseModel):
@@ -303,8 +304,8 @@ def _groq(system: str, user_msg: str, history: list[dict] | None = None) -> str:
     r = _req.post(
         "https://api.groq.com/openai/v1/chat/completions",
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 2000},
-        timeout=25,
+        json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 1200},
+        timeout=6,
     )
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"]
@@ -327,9 +328,9 @@ def _gemini(system: str, user_msg: str, history: list[dict] | None = None) -> st
         json={
             "system_instruction": {"parts": [{"text": system}]},
             "contents": contents,
-            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 2000},
+            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1200},
         },
-        timeout=30,
+        timeout=7,
     )
     r.raise_for_status()
     return r.json()["candidates"][0]["content"]["parts"][0]["text"]
@@ -365,16 +366,19 @@ async def journal_chat(body: JournalChatRequest):
     """
     loop = asyncio.get_running_loop()
 
-    # Read all trades from DB — AI gets the full persistent picture
     def _fetch_trades_and_chat():
-        conn = _open_db()
-        try:
-            rows = conn.execute(
-                "SELECT * FROM journal_trades ORDER BY entry_date ASC, created_at ASC"
-            ).fetchall()
-            trades = [_row_to_dict(r) for r in rows]
-        finally:
-            conn.close()
+        # Prefer trades passed directly from the frontend (avoids empty /tmp DB on cold start)
+        if body.trades:
+            trades = body.trades[:200]
+        else:
+            conn = _open_db()
+            try:
+                rows = conn.execute(
+                    "SELECT * FROM journal_trades ORDER BY entry_date ASC, created_at ASC"
+                ).fetchall()
+                trades = [_row_to_dict(r) for r in rows]
+            finally:
+                conn.close()
 
         trade_ctx = _fmt_trades(trades)
         user_msg = f"{trade_ctx}\n\n---\n\nUser request: {body.message.strip()}"
@@ -385,7 +389,7 @@ async def journal_chat(body: JournalChatRequest):
     try:
         reply, provider, latency_ms, trade_count = await asyncio.wait_for(
             loop.run_in_executor(_executor, _fetch_trades_and_chat),
-            timeout=8.0,
+            timeout=14.0,
         )
     except asyncio.TimeoutError:
         reply = "The analysis timed out. Try asking for one section at a time (e.g. 'Show my Psychology Analysis' or 'What are my critical mistakes?')."
