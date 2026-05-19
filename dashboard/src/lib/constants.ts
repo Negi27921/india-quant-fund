@@ -1,5 +1,6 @@
 // In dev: Vite proxies /api → localhost:8000
 // In prod: set VITE_API_URL=https://your-backend.com in Vercel env vars
+// v2 — journal-only NAV header, index card CHART badge, full NSE screener
 export const API_BASE = (import.meta.env.VITE_API_URL ?? "") + "/api";
 
 const wsBase = import.meta.env.VITE_API_URL
