@@ -76,7 +76,7 @@ uvicorn api.main:app --reload --port 8000
 ```bash
 cd dashboard
 npm install
-npm run dev                   # → http://localhost:5173
+npm run dev                   # → http://localhost:3000
 ```
 
 ### Run screener alert manually
@@ -156,11 +156,11 @@ Fundamental Proxies (from concall/rating/announcement research):
 
 ---
 
-## Strategy Agent (Hermes-Inspired Self-Improving AI)
+## Strategy Agent (Self-Improving AI)
 
 **Script:** `scripts/strategy_agent.py`
 
-Based on the [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) tool-calling architecture.
+Uses Groq Llama 3.3 70B with tool-calling to analyse win rates and improve strategies daily.
 
 **Agent loop:**
 1. **Observe** — queries 30 days of paper trade results
@@ -271,12 +271,23 @@ GET /api/risk/metrics            # VaR, Sharpe, drawdown
 GET /api/strategies/performance  # Per-strategy stats
 ```
 
+### Trading Journal
+```
+GET  /api/journal/trades         # All journal entries
+POST /api/journal/trades         # Add trade
+PUT  /api/journal/trades/{id}    # Update trade
+DELETE /api/journal/trades/{id}  # Delete trade
+GET  /api/journal/summary        # NAV (cost-basis), realized P&L, open count
+GET  /api/journal/prices         # Live yFinance prices for open positions (parallel fetch)
+GET  /api/journal/pnl-calendar   # Daily P&L calendar for equity curve
+```
+
 ### AI + System
 ```
 POST /api/chat/message           # AI chat with live market context
 POST /api/telegram               # Telegram webhook
 GET  /health                     # Health check
-WS   /ws                         # Live P&L WebSocket (5s interval)
+WS   /ws                         # Live P&L WebSocket (5s interval, local only)
 ```
 
 ---
@@ -381,12 +392,34 @@ CREATE TABLE IF NOT EXISTS screener_cache (
 | UI state | Zustand |
 | Database | Supabase (PostgreSQL cloud) |
 | AI Chat | Groq Llama 3.3 70B → Gemini Flash → OpenRouter (cascading fallback, <9s) |
-| AI Agent | Groq + OpenRouter (Hermes tool-calling architecture) |
+| AI Agent | Groq + OpenRouter (tool-calling, self-improving strategy loop) |
 | Market data | yfinance (batch downloads, 500 stocks / batch) |
 | Email | Resend API |
 | Notifications | Telegram Bot API |
 | Scheduling | GitHub Actions cron |
 | Brokers | Zerodha Kite API (MCP integration) |
+
+---
+
+## Developer Tooling
+
+```bash
+# Frontend quality checks
+cd dashboard
+npm run typecheck   # tsc strict typecheck (no emit)
+npm run lint        # ESLint v9 flat config (0 warnings allowed)
+npm run build       # tsc + vite production build
+
+# Backend checks
+ruff check api/          # linting
+ruff format --check api/ # formatting
+```
+
+**CI** (`.github/workflows/ci.yml`) runs automatically on every push to `main`:
+- Frontend: lint → typecheck → build
+- Backend: ruff lint → ruff format → pyright
+
+**Architecture:** See [ARCHITECTURE.md](ARCHITECTURE.md) for the full system map, data flows, and deployment guide.
 
 ---
 
