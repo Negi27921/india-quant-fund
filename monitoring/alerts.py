@@ -27,7 +27,7 @@ class AlertManager:
     def send(self, message: str, level: str = "info") -> None:
         """Send alert to all configured channels."""
         prefix = {"info": "ℹ️", "warning": "⚠️", "critical": "🚨"}.get(level, "📢")
-        full_msg = f"{prefix} [India Quant Fund]\n{datetime.now().strftime('%H:%M:%S IST')}\n{message}"
+        full_msg = f"{prefix} [One Piece]\n{datetime.now().strftime('%H:%M:%S IST')}\n{message}"
         self._send_telegram(full_msg)
         if level == "critical":
             self._send_email(f"CRITICAL: {message[:60]}", full_msg)

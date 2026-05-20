@@ -1,10 +1,10 @@
-# India Quant Fund (IQF)
+# One Piece
 
-> Automated quant hedge fund for Indian equities (NSE/BSE). Real-time dashboard, 7 screener strategies, automated paper trading, AI chat, Telegram alerts, and Zerodha Kite execution.
+> Automated quant hedge fund for Indian equities (NSE/BSE). 7 AI-powered screener strategies, real-time dashboard, auto paper trading, AI market chat, Telegram alerts, and Zerodha Kite execution.
 
 **Live Dashboard →** [luffy-labs.vercel.app](https://luffy-labs.vercel.app)
 **API →** [onepiece-labs.vercel.app](https://onepiece-labs.vercel.app)
-**Repo →** [github.com/Negi27921/india-quant-fund](https://github.com/Negi27921/india-quant-fund)
+**Repo →** [github.com/Negi27921/one-piece](https://github.com/Negi27921/one-piece)
 
 ---
 
@@ -65,7 +65,7 @@
 ## Repository Structure
 
 ```
-india-quant-fund/
+one-piece/
 ├── api/                        # FastAPI application
 │   ├── _config.py              # Shared CORS, versioning, prefixes (single source of truth)
 │   ├── main.py                 # Local dev entry point (DuckDB + WebSocket)

@@ -13,7 +13,7 @@ const SUGGESTIONS = [
   "What are top gainers and why?",
 ];
 
-const SYSTEM_PROMPT = `You are IQF Market Intelligence, an AI analyst specialising in Indian equity markets (NSE/BSE).
+const SYSTEM_PROMPT = `You are One Piece Market Intelligence, an AI analyst specialising in Indian equity markets (NSE/BSE).
 You help with: stock analysis & fundamentals, BSE/NSE filing interpretation, corporate actions & dividends,
 FII/DII flows & market breadth, quarterly results, and trading strategy analysis for Indian markets.
 Be concise, data-driven, and always reference Indian market context. Format responses with bullet points when listing multiple items.`;
@@ -71,7 +71,7 @@ async function tryOpenRouter(messages: { role: string; content: string }[]): Pro
       "Content-Type": "application/json",
       "Authorization": `Bearer ${key}`,
       "HTTP-Referer": window.location.origin,
-      "X-Title": "IQF Market Intelligence",
+      "X-Title": "One Piece Market Intelligence",
     },
     body: JSON.stringify({
       model: import.meta.env.VITE_OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free",
@@ -156,7 +156,7 @@ export function ChatBot() {
     if (open && messages.length === 0) {
       setMessages([{
         role: "assistant",
-        content: "**Welcome to IQF Market Intelligence** ✦\n\nI'm your AI analyst for Indian markets. Ask me about:\n- Stock analysis & fundamentals\n- BSE/NSE filings interpretation\n- Corporate actions & dividends\n- FII/DII flows & market breadth\n- Quarterly results deep-dive\n\nWhat would you like to analyse?",
+        content: "**Welcome to One Piece Market Intelligence** ✦\n\nI'm your AI analyst for Indian markets. Ask me about:\n- Stock analysis & fundamentals\n- BSE/NSE filings interpretation\n- Corporate actions & dividends\n- FII/DII flows & market breadth\n- Quarterly results deep-dive\n\nWhat would you like to analyse?",
         sources: [],
       }]);
     }
@@ -245,7 +245,7 @@ export function ChatBot() {
                 <Sparkles style={{ width: 16, height: 16, color: "#fff" }} />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 700, color: "var(--text-1)" }}>IQF Market Intelligence</div>
+                <div style={{ fontFamily: "var(--font-body)", fontSize: 13, fontWeight: 700, color: "var(--text-1)" }}>One Piece Market Intelligence</div>
                 <div style={{ fontFamily: "var(--font-body)", fontSize: 10, color: "var(--green)", display: "flex", alignItems: "center", gap: 4 }}>
                   <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--green)", display: "inline-block" }} />
                   AI Analyst · NSE · BSE · Filings

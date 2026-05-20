@@ -63,8 +63,8 @@ class BaseLLMClient:
                 api_key=os.getenv("OPENROUTER_API_KEY", ""),
                 base_url="https://openrouter.ai/api/v1",
                 default_headers={
-                    "HTTP-Referer": "https://github.com/iqf",
-                    "X-Title": "India Quant Fund",
+                    "HTTP-Referer": "https://github.com/Negi27921/one-piece",
+                    "X-Title": "One Piece",
                 },
             )
         return self._clients["openrouter"]

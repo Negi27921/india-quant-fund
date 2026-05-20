@@ -253,7 +253,7 @@ def notify_telegram(trades: list[dict], skipped: list[str]) -> None:
 
 def main(dry_run: bool = False):
     print("=" * 60)
-    print(f"  IQF Auto-Trader Agent  —  {date.today()}  {datetime.now(IST).strftime('%H:%M')} IST")
+    print(f"  One Piece Auto-Trader  —  {date.today()}  {datetime.now(IST).strftime('%H:%M')} IST")
     mode_str = "DRY-RUN" if dry_run else ("PAPER" if PAPER_TRADING else "LIVE ⚠️")
     print(f"  Mode: {mode_str}")
     print("=" * 60)
@@ -347,7 +347,7 @@ def main(dry_run: bool = False):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="IQF Auto-Trader Agent")
+    parser = argparse.ArgumentParser(description="One Piece Auto-Trader")
     parser.add_argument("--paper",   action="store_true", help="Paper trading mode (no real orders)")
     parser.add_argument("--live",    action="store_true", help="Live trading (real orders — be careful!)")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be traded, nothing placed")

@@ -1,5 +1,5 @@
 /**
- * IQF API client — typed, timeout-aware, retryable HTTP wrapper.
+ * One Piece API client — typed, timeout-aware, retryable HTTP wrapper.
  *
  * All API calls go through this module. Never call fetch() directly in components.
  * Timeouts:  default 10s, chat endpoints 35s

@@ -1,4 +1,4 @@
-"""Shared configuration for all IQF API entry points.
+"""Shared configuration for all One Piece API entry points.
 
 Single source of truth for CORS, versioning, and allowed origins.
 Both cloud_main.py (Vercel) and main.py (local) import from here.
@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 
 # ── Versioning ────────────────────────────────────────────────────────────────
-API_TITLE = "India Quant Fund API"
+API_TITLE = "One Piece API"
 API_VERSION = "2.1.0"
 
 # ── CORS ─────────────────────────────────────────────────────────────────────

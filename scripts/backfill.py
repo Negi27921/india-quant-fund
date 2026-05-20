@@ -24,7 +24,7 @@ def parse_args():
 def main():
     args = parse_args()
 
-    console.print(f"\n[bold blue]IQF Backfill[/bold blue] — {args.years}Y of {args.universe.upper()}\n")
+    console.print(f"\n[bold blue]One Piece Backfill[/bold blue] — {args.years}Y of {args.universe.upper()}\n")
 
     # Load universe
     from data.pipeline.transformers.universe import get_nifty500, apply_universe_filters

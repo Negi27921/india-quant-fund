@@ -14,7 +14,7 @@ services:
       timeout: 3s
       retries: 3
     networks:
-      - iqf
+      - one-piece
 
   api:
     build:
@@ -24,7 +24,7 @@ services:
     env_file: ../.env
     environment:
       - REDIS_URL=redis://redis:6379/0
-      - DATABASE_URL=/app/data/db/iqf.duckdb
+      - DATABASE_URL=/app/data/db/one-piece.duckdb
       - PAPER_TRADING=true
     volumes:
       - db_data:/app/data/db
@@ -41,7 +41,7 @@ services:
       retries: 3
       start_period: 60s
     networks:
-      - iqf
+      - one-piece
 
   scheduler:
     build:
@@ -51,7 +51,7 @@ services:
     env_file: ../.env
     environment:
       - REDIS_URL=redis://redis:6379/0
-      - DATABASE_URL=/app/data/db/iqf.duckdb
+      - DATABASE_URL=/app/data/db/one-piece.duckdb
       - PAPER_TRADING=true
     volumes:
       - db_data:/app/data/db
@@ -61,7 +61,7 @@ services:
         condition: service_healthy
     command: python -m orchestration.scheduler
     networks:
-      - iqf
+      - one-piece
 
   dashboard:
     build:
@@ -73,7 +73,7 @@ services:
     depends_on:
       - api
     networks:
-      - iqf
+      - one-piece
 
 volumes:
   redis_data:
@@ -81,5 +81,5 @@ volumes:
   logs_data:
 
 networks:
-  iqf:
+  one-piece:
     driver: bridge

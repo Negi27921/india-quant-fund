@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: india-quant-fund-api
+    name: one-piece-api
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: free

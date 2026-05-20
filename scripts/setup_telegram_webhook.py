@@ -5,7 +5,7 @@ Usage (run once after deploying to Vercel):
   python scripts/setup_telegram_webhook.py
 
 Or call the live endpoint manually:
-  curl https://india-quant-fund.vercel.app/api/telegram/setup
+  curl https://onepiece-labs.vercel.app/api/telegram/setup
 """
 from __future__ import annotations
 

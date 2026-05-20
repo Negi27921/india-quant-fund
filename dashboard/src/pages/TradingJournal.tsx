@@ -53,7 +53,13 @@ interface Metrics {
 
 // ── Storage ───────────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = "iqf_journal_trades_v1";
+const STORAGE_KEY = "op_journal_trades_v1";
+
+// One-time migration: copy data from legacy key so no trades are lost
+if (typeof window !== "undefined" && !localStorage.getItem(STORAGE_KEY) && localStorage.getItem("iqf_journal_trades_v1")) {
+  localStorage.setItem(STORAGE_KEY, localStorage.getItem("iqf_journal_trades_v1")!);
+  localStorage.removeItem("iqf_journal_trades_v1");
+}
 
 function loadTrades(): Trade[] {
   try {

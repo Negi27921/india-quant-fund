@@ -161,9 +161,9 @@ def send_email(stats: dict) -> bool:
         return False
     try:
         payload = json.dumps({
-            "from": "IQF Reports <onboarding@resend.dev>",
+            "from": "One Piece Reports <onboarding@resend.dev>",
             "to": [REPORT_EMAIL],
-            "subject": f"📈 IQF Monthly Report — {stats['report_month']}",
+            "subject": f"📈 One Piece Monthly Report — {stats['report_month']}",
             "html": build_html(stats),
         }).encode()
         req = urllib.request.Request(
@@ -221,7 +221,7 @@ def log_report(stats: dict, emailed: bool, deleted: dict) -> None:
 
 def main():
     print("=" * 50)
-    print("IQF Monthly Report & Cleanup")
+    print("One Piece Monthly Report & Cleanup")
     print("=" * 50)
 
     pnl_rows   = fetch_pnl_rows()

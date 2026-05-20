@@ -28,7 +28,7 @@ class DirectorAgent(BaseAgent):
         strategy_sharpes = context.get("strategy_sharpes_30d", {})
 
         user_msg = f"""
-Daily context for India Quant Fund:
+Daily context for One Piece:
 - Day PnL: {pnl_pct:.2f}%
 - Current drawdown from peak: {drawdown:.2f}%
 - India VIX: {vix:.1f}

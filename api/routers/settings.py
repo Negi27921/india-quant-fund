@@ -136,7 +136,7 @@ async def test_telegram():
         async with httpx.AsyncClient() as client:
             r = await client.post(
                 f"https://api.telegram.org/bot{token}/sendMessage",
-                json={"chat_id": chat_id, "text": "✅ IQF Dashboard — Telegram connection test successful!"},
+                json={"chat_id": chat_id, "text": "✅ One Piece Dashboard — Telegram connection test successful!"},
                 timeout=8,
             )
         data = r.json()

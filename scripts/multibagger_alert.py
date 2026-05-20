@@ -647,7 +647,7 @@ def main():
     run_time = now.strftime("%H:%M")
 
     print("=" * 60)
-    print(f"  IQF Multibagger Alert Agent  —  {date.today()}  {run_time} IST")
+    print(f"  One Piece Multibagger Alert  —  {date.today()}  {run_time} IST")
     print("=" * 60)
 
     universe = _load_universe()
@@ -685,7 +685,7 @@ def main():
     print("\n[5/5] Sending notifications...")
     session_label = "Morning" if int(run_time[:2]) < 12 else ("Afternoon" if int(run_time[:2]) < 17 else "Evening")
     subject = (
-        f"📈 IQF Multibagger Alert [{session_label}] — "
+        f"📈 One Piece Multibagger Alert [{session_label}] — "
         f"{len(results)} candidates"
         + (f" | ⭐ {len(credit_matches)} credit-rated" if credit_matches else "")
         + f" · {date.today()}"

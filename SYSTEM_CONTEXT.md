@@ -11,8 +11,8 @@
 |---------|-----|
 | **Dashboard** | https://luffy-labs.vercel.app |
 | **API (primary)** | https://onepiece-labs.vercel.app |
-| **API (alias)** | https://india-quant-fund.vercel.app → 307 → above |
-| **GitHub** | https://github.com/Negi27921/india-quant-fund |
+| **API (alias)** | https://onepiece-labs.vercel.app (primary) |
+| **GitHub** | https://github.com/Negi27921/one-piece |
 | **Telegram webhook** | https://onepiece-labs.vercel.app/api/telegram |
 
 ---
@@ -23,7 +23,7 @@
 |-------|-----------|
 | Backend | FastAPI + Python 3.11, deployed on Vercel serverless |
 | Database | Supabase (PostgreSQL cloud) |
-| Local cache | DuckDB (`data/db/iqf.duckdb`) |
+| Local cache | DuckDB (`data/db/one-piece.duckdb`) |
 | Frontend | React 19 + Vite + TypeScript + Tailwind + Framer Motion |
 | State | TanStack Query v5 (server) + Zustand (UI) |
 | Charts | Recharts |
@@ -41,7 +41,7 @@
 ## Directory Structure
 
 ```
-india-quant-fund/
+one-piece/
 ├── api/                      # FastAPI backend (Vercel serverless)
 │   ├── main.py               # App factory, CORS, WebSocket, 9 routers
 │   ├── cloud_main.py         # Vercel entry point

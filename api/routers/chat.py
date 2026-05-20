@@ -84,7 +84,7 @@ Sector: {info.get('sector', 'N/A')} | Industry: {info.get('industry', 'N/A')}
         return f"Stock: {symbol.upper()} (NSE) - Live data unavailable"
 
 
-SYSTEM_PROMPT = """You are the IQF Market Intelligence Assistant — a world-class AI analyst specialising in Indian stock markets (NSE & BSE).
+SYSTEM_PROMPT = """You are the One Piece Market Intelligence Assistant — a world-class AI analyst specialising in Indian stock markets (NSE & BSE).
 
 You help users with:
 1. Stock analysis and fundamental research (P/E, ROE, debt, margins, competitive position)
@@ -280,12 +280,12 @@ async def chat_message(body: ChatMessage):
             timeout=8.5,
         )
     except asyncio.TimeoutError:
-        reply = "IQF Market Intelligence: AI response took too long. This is a temporary issue — Groq and Gemini are being retried. Please send your message again."
+        reply = "One Piece Market Intelligence: AI response took too long. This is a temporary issue — Groq and Gemini are being retried. Please send your message again."
         provider = "timeout"
         latency_ms = 8500
 
     if not sources:
-        sources = ["IQF Market Intelligence"]
+        sources = ["One Piece Market Intelligence"]
 
     return ChatResponse(
         response=reply,

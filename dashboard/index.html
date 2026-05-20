@@ -10,7 +10,12 @@
     <script>
       (function () {
         try {
-          var saved = localStorage.getItem('iqf-theme');
+          // Migrate legacy theme key
+          if (!localStorage.getItem('op-theme') && localStorage.getItem('iqf-theme')) {
+            localStorage.setItem('op-theme', localStorage.getItem('iqf-theme'));
+            localStorage.removeItem('iqf-theme');
+          }
+          var saved = localStorage.getItem('op-theme');
           var theme = saved || 'dark';
           document.documentElement.setAttribute('data-theme', theme);
           var meta = document.getElementById('theme-meta');

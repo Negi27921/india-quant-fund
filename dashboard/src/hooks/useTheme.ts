@@ -2,9 +2,11 @@ import { useState, useEffect } from "react";
 
 export type Theme = "light" | "dark";
 
+const THEME_KEY = "op-theme";
+
 export function useTheme() {
   const [theme, setTheme] = useState<Theme>(() => {
-    return (localStorage.getItem("iqf-theme") as Theme) ?? "dark";
+    return (localStorage.getItem(THEME_KEY) as Theme) ?? "dark";
   });
 
   useEffect(() => {
@@ -14,7 +16,7 @@ export function useTheme() {
     } else {
       root.removeAttribute("data-theme");
     }
-    localStorage.setItem("iqf-theme", theme);
+    localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
 
   const toggle = () => setTheme(t => t === "dark" ? "light" : "dark");

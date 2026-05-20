@@ -26,7 +26,13 @@ interface PaperTrade {
   pnl_pct?: number;
 }
 
-const PAPER_KEY = "iqf_paper_trades";
+const PAPER_KEY = "op_paper_trades";
+
+// One-time migration from legacy key
+if (typeof window !== "undefined" && !localStorage.getItem(PAPER_KEY) && localStorage.getItem("iqf_paper_trades")) {
+  localStorage.setItem(PAPER_KEY, localStorage.getItem("iqf_paper_trades")!);
+  localStorage.removeItem("iqf_paper_trades");
+}
 
 function loadPaperTrades(): PaperTrade[] {
   try { return JSON.parse(localStorage.getItem(PAPER_KEY) || "[]"); } catch { return []; }

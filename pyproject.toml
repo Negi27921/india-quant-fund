@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "india-quant-fund"
+name = "one-piece"
 version = "1.0.0"
 description = "Production-grade automated hedge fund for Indian equity markets"
 requires-python = ">=3.11,<3.13"

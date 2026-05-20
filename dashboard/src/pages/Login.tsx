@@ -5,9 +5,9 @@ import type { Theme } from "@/hooks/useTheme";
 
 const ACCESS_PHRASE: string = import.meta.env.VITE_AUTH_PHRASE || "One piece is real";
 
-export const AUTH_KEY  = "iqf_matrix_auth";
-export const LOCK_KEY  = "iqf_lock_until";
-export const FAIL_KEY  = "iqf_fail_count";
+export const AUTH_KEY  = "op_matrix_auth";
+export const LOCK_KEY  = "op_lock_until";
+export const FAIL_KEY  = "op_fail_count";
 const MAX_FAILS        = 5;
 const LOCK_MS          = 15 * 60 * 1000;
 const SESSION_TTL_MS   = 8  * 60 * 60 * 1000;

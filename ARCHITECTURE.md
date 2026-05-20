@@ -1,8 +1,8 @@
-# India Quant Fund — System Architecture
+# One Piece — System Architecture
 
 ## Overview
 
-IQF is a full-stack automated quantitative hedge fund for Indian equities (NSE/BSE). It consists of a FastAPI backend, a React dashboard, and a set of Python strategy/execution modules. The system supports two runtime environments:
+One Piece is a full-stack automated quantitative hedge fund for Indian equities (NSE/BSE). It consists of a FastAPI backend, a React dashboard, and a set of Python strategy/execution modules. The system supports two runtime environments:
 
 | Mode | Entry point | Storage | WebSocket | Deployed on |
 |------|------------|---------|-----------|-------------|
@@ -14,7 +14,7 @@ IQF is a full-stack automated quantitative hedge fund for Indian equities (NSE/B
 ## Directory Map
 
 ```
-india-quant-fund/
+one-piece/
 ├── api/                    # FastAPI application
 │   ├── _config.py          # Shared CORS, versioning, router prefixes (single source of truth)
 │   ├── main.py             # Local dev entry point (DuckDB + WebSocket)

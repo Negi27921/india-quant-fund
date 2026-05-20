@@ -24,8 +24,8 @@ RUN poetry install --without dev --no-root
 COPY . .
 
 # Create non-root user
-RUN useradd -m -u 1001 iqf && chown -R iqf:iqf /app
-USER iqf
+RUN useradd -m -u 1001 onepiece && chown -R onepiece:onepiece /app
+USER onepiece
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \

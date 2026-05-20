@@ -24,9 +24,9 @@ from api.routers import (
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    logger.info("IQF API starting — local mode (DuckDB + WebSocket)")
+    logger.info("One Piece API starting — local mode (DuckDB + WebSocket)")
     yield
-    logger.info("IQF API shutting down")
+    logger.info("One Piece API shutting down")
 
 
 app = FastAPI(

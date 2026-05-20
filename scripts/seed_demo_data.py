@@ -113,7 +113,7 @@ DAILY_PNL = [
 def main():
     today = date.today()
     print("=" * 55)
-    print("  IQF Demo Data Seeder")
+    print("  One Piece Demo Data Seeder")
     print("=" * 55)
 
     if not SUPABASE_URL or not SUPABASE_KEY:

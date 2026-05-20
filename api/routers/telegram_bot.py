@@ -25,7 +25,7 @@ BOT_TOKEN    = os.getenv("TELEGRAM_BOT_TOKEN", "")
 CHAT_ID      = os.getenv("TELEGRAM_CHAT_ID", "")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
-API_BASE     = os.getenv("SCREENER_API_URL", "https://india-quant-fund.vercel.app")
+API_BASE     = os.getenv("SCREENER_API_URL", "https://onepiece-labs.vercel.app")
 
 _TG_BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
@@ -187,7 +187,7 @@ def _format_results(strategy: str, results: list[dict], scanned_at: str | None) 
 
 
 def _format_all_summary(all_data: list[tuple[str, list[dict], str | None]]) -> str:
-    lines = ["📊 *IQF — All Strategy Scan Summary*", ""]
+    lines = ["📊 *One Piece — All Strategy Scan Summary*", ""]
     for strategy, results, scanned_at in all_data:
         label = _strategy_label(strategy)
         age   = _cache_age_mins(scanned_at)
