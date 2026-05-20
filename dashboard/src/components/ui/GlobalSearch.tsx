@@ -27,7 +27,7 @@ function addRecent(symbol: string): void {
   try {
     const prev = getRecent().filter(s => s !== symbol);
     localStorage.setItem(RECENT_KEY, JSON.stringify([symbol, ...prev].slice(0, 8)));
-  } catch {}
+  } catch { /* localStorage unavailable */ }
 }
 
 interface Props {

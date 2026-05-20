@@ -5,10 +5,18 @@ import { fileURLToPath, URL } from "node:url";
 export default defineConfig({
   plugins: [react()],
   build: {
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         entryFileNames: `assets/[name]-[hash]-v2.js`,
         chunkFileNames: `assets/[name]-[hash]-v2.js`,
+        manualChunks: {
+          "vendor-charts": ["recharts"],
+          "vendor-motion": ["framer-motion"],
+          "vendor-icons":  ["lucide-react"],
+          "vendor-query":  ["@tanstack/react-query"],
+          "nse-data":      ["./src/lib/nse-stocks"],
+        },
       },
     },
   },

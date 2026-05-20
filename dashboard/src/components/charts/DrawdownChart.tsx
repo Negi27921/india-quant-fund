@@ -119,7 +119,6 @@ export function DrawdownChart({
       ro.disconnect();
       chart.remove();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, height, alertLevel, limitLevel]);
 
   if (!data.length) return null;

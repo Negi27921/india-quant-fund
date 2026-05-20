@@ -154,7 +154,6 @@ export function EquityChart({ data, height = 280, showBenchmark = true }: Equity
       ro.disconnect();
       chart.remove();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, height, showBenchmark]);
 
   if (!data.length) return null;

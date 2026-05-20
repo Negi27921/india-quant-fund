@@ -40,7 +40,7 @@ import { STRATEGY_LABELS } from "@/lib/constants";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type MainTab = "holdings" | "pnl" | "trades" | "live";
-type HoldingsTab = "paper" | "live";
+type HoldingsTabValue = "paper" | "live";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const numColor = (v: number) => (v > 0 ? "var(--green)" : v < 0 ? "var(--red)" : "var(--text-3)");
@@ -114,7 +114,7 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
   openChart: (sym: string, name: string) => void;
 }) {
   const [addOpen, setAddOpen] = useState(false);
-  const [tab, setTab] = useState<HoldingsTab>("paper");
+  const [tab, setTab] = useState<HoldingsTabValue>("paper");
   const [exitTarget, setExitTarget] = useState<PaperPosition | null>(null);
   const [exitOpen, setExitOpen] = useState(false);
 

@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  frontend:
+    name: Frontend — lint, typecheck, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_API_BASE: ${{ secrets.VITE_API_BASE || 'http://localhost:8000' }}
+
+  backend:
+    name: Backend — ruff lint, pyright typecheck
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install API dependencies
+        run: pip install -r requirements-api.txt ruff pyright
+
+      - name: Ruff lint
+        run: ruff check api/
+
+      - name: Ruff format check
+        run: ruff format --check api/
+
+      - name: Pyright typecheck
+        run: pyright api/
+        continue-on-error: true  # informational until strict types are enforced

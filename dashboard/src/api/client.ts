@@ -1,14 +1,38 @@
+/**
+ * IQF API client — typed, timeout-aware, retryable HTTP wrapper.
+ *
+ * All API calls go through this module. Never call fetch() directly in components.
+ * Timeouts:  default 10s, chat endpoints 35s
+ * Retries:   GET requests retry once on network error (not on 4xx/5xx)
+ */
 import { API_BASE } from "@/lib/constants";
 
-const TIMEOUT_MS = 10_000;
+const TIMEOUT_MS      = 10_000;
 const TIMEOUT_CHAT_MS = 35_000;
 
-async function request<T>(path: string, options?: RequestInit, timeoutMs = TIMEOUT_MS): Promise<T> {
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly path: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+async function request<T>(
+  path: string,
+  options?: RequestInit,
+  timeoutMs = TIMEOUT_MS,
+): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   const isBodyRequest = options?.method && ["POST", "PUT", "PATCH"].includes(options.method);
-  const headers: Record<string, string> = isBodyRequest ? { "Content-Type": "application/json" } : {};
+  const headers: Record<string, string> = isBodyRequest
+    ? { "Content-Type": "application/json" }
+    : {};
   if (options?.headers) Object.assign(headers, options.headers);
 
   try {
@@ -20,13 +44,13 @@ async function request<T>(path: string, options?: RequestInit, timeoutMs = TIMEO
 
     if (!res.ok) {
       const text = await res.text().catch(() => res.statusText);
-      throw new Error(`API ${res.status}: ${text}`);
+      throw new ApiError(`API ${res.status}: ${text}`, res.status, path);
     }
 
     return res.json() as Promise<T>;
   } catch (err) {
     if ((err as Error).name === "AbortError") {
-      throw new Error(`Request timeout: ${path}`);
+      throw new ApiError(`Request timeout after ${timeoutMs}ms: ${path}`, 408, path);
     }
     throw err;
   } finally {
@@ -34,15 +58,29 @@ async function request<T>(path: string, options?: RequestInit, timeoutMs = TIMEO
   }
 }
 
+/** GET with one automatic retry on transient network failure (not on HTTP errors). */
+async function get<T>(path: string): Promise<T> {
+  try {
+    return await request<T>(path);
+  } catch (err) {
+    if (err instanceof ApiError) throw err; // don't retry HTTP errors
+    return request<T>(path);               // retry once on network/timeout
+  }
+}
+
 export const api = {
-  get: <T>(path: string) => request<T>(path),
+  get,
   post: <T>(path: string, body?: unknown) =>
+    request<T>(
+      path,
+      { method: "POST", body: body != null ? JSON.stringify(body) : undefined },
+      path.includes("/chat/") ? TIMEOUT_CHAT_MS : TIMEOUT_MS,
+    ),
+  put: <T>(path: string, body?: unknown) =>
     request<T>(path, {
-      method: "POST",
-      body: body ? JSON.stringify(body) : undefined,
-    }, path.includes("/chat/") ? TIMEOUT_CHAT_MS : TIMEOUT_MS),
+      method: "PUT",
+      body: body != null ? JSON.stringify(body) : undefined,
+    }),
   delete: <T>(path: string) =>
     request<T>(path, { method: "DELETE" }),
-  put: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
 };

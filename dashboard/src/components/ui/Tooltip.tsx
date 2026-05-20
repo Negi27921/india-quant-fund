@@ -1,58 +1,38 @@
-import { useState, useRef } from "react";
-import { createPortal } from "react-dom";
+import * as RadixTooltip from "@radix-ui/react-tooltip";
 
 interface TooltipProps {
   content: string;
   children: React.ReactNode;
+  side?: "top" | "right" | "bottom" | "left";
 }
 
-export function Tooltip({ content, children }: TooltipProps) {
-  const [visible, setVisible] = useState(false);
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-  const ref = useRef<HTMLSpanElement>(null);
-
-  const show = () => {
-    if (ref.current) {
-      const r = ref.current.getBoundingClientRect();
-      setPos({ x: r.left + r.width / 2, y: r.top - 8 });
-    }
-    setVisible(true);
-  };
-
+export function Tooltip({ content, children, side = "top" }: TooltipProps) {
   return (
-    <>
-      <span
-        ref={ref}
-        onMouseEnter={show}
-        onMouseLeave={() => setVisible(false)}
-        style={{ cursor: "help", borderBottom: "1px dotted var(--text-4)" }}
-      >
-        {children}
-      </span>
-      {visible && createPortal(
-        <div style={{
-          position: "fixed",
-          left: pos.x,
-          top: pos.y,
-          transform: "translate(-50%, -100%)",
-          zIndex: 9999,
-          background: "var(--surface)",
-          border: "1px solid var(--border-2)",
-          borderRadius: 6,
-          padding: "6px 10px",
-          fontSize: 11,
-          color: "var(--text-2)",
-          fontFamily: "var(--font-body)",
-          maxWidth: 220,
-          boxShadow: "var(--shadow-md)",
-          whiteSpace: "normal",
-          lineHeight: 1.4,
-          pointerEvents: "none",
-        }}>
-          {content}
-        </div>,
-        document.body
-      )}
-    </>
+    <RadixTooltip.Provider delayDuration={300}>
+      <RadixTooltip.Root>
+        <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
+        <RadixTooltip.Portal>
+          <RadixTooltip.Content
+            side={side}
+            sideOffset={6}
+            style={{
+              background: "var(--surface-3, #1e2535)",
+              color: "var(--text-1, #e2e8f0)",
+              fontSize: "11px",
+              lineHeight: 1.5,
+              padding: "6px 10px",
+              borderRadius: 6,
+              maxWidth: 280,
+              border: "1px solid var(--border, rgba(255,255,255,0.08))",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.3)",
+              zIndex: 9999,
+            }}
+          >
+            {content}
+            <RadixTooltip.Arrow style={{ fill: "var(--surface-3, #1e2535)" }} />
+          </RadixTooltip.Content>
+        </RadixTooltip.Portal>
+      </RadixTooltip.Root>
+    </RadixTooltip.Provider>
   );
 }

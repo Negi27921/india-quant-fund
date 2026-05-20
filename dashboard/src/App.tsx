@@ -1,38 +1,38 @@
 import React, { useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { api } from "@/api/client";
 import { Layout } from "@/components/layout/Layout";
-import { MarketPage }          from "@/pages/Market";
-import { ScreenerPage }        from "@/pages/Screener";
-import { PortfolioPage }       from "@/pages/Portfolio";
-import { RiskPage }            from "@/pages/Risk";
-import { StrategiesPage }      from "@/pages/Strategies";
-import { SettingsPage }        from "@/pages/Settings";
-import { TradingJournalPage }  from "@/pages/TradingJournal";
-import { ResultsPage }         from "@/pages/Results";
+import { MarketPage }         from "@/pages/Market";
+import { ScreenerPage }       from "@/pages/Screener";
+import { PortfolioPage }      from "@/pages/Portfolio";
+import { RiskPage }           from "@/pages/Risk";
+import { StrategiesPage }     from "@/pages/Strategies";
+import { SettingsPage }       from "@/pages/Settings";
+import { TradingJournalPage } from "@/pages/TradingJournal";
+import { ResultsPage }        from "@/pages/Results";
 import { LoginPage, hasValidSession } from "@/pages/Login";
 
-/* ── Error boundary ───────────────────────────────────────────────────────── */
+/* ── Global error boundary ────────────────────────────────────────────────── */
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { error: Error | null }
 > {
-  constructor(props: { children: React.ReactNode }) {
-    super(props);
-    this.state = { error: null };
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
   }
-  static getDerivedStateFromError(error: Error) { return { error }; }
 
   render() {
-    if (this.state.error) {
+    const { error } = this.state;
+    if (error) {
       return (
         <div style={{
           display: "flex", flexDirection: "column", alignItems: "center",
           justifyContent: "center", height: "100vh",
-          background: "#F8F9FC", gap: 16,
-          fontFamily: 'var(--font-body)',
-          padding: 32, textAlign: "center",
+          background: "var(--bg)", gap: 16,
+          fontFamily: "var(--font-body)", padding: 32, textAlign: "center",
         }}>
           <div style={{
             width: 56, height: 56, borderRadius: "50%",
@@ -41,11 +41,11 @@ class ErrorBoundary extends React.Component<
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 28,
           }}>⚠</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: "#121317", letterSpacing: "-0.01em" }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-1)", letterSpacing: "-0.01em" }}>
             Something went wrong
           </div>
           <div style={{ fontSize: 12, color: "var(--text-3)", maxWidth: 480, lineHeight: 1.7 }}>
-            {this.state.error.message}
+            {error.message}
           </div>
           <button
             onClick={() => { this.setState({ error: null }); window.location.href = "/"; }}
@@ -55,7 +55,6 @@ class ErrorBoundary extends React.Component<
               border: "none", borderRadius: 9999,
               cursor: "pointer", fontSize: 13, fontWeight: 600,
               fontFamily: "var(--font-body)",
-              boxShadow: "0 4px 16px rgba(106,98,86,0.3)",
             }}
           >
             Reload Terminal
@@ -67,12 +66,13 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-/* ── App ──────────────────────────────────────────────────────────────────── */
+/* ── Application root ─────────────────────────────────────────────────────── */
 export default function App() {
   const [authed, setAuthed] = useState(() => hasValidSession());
 
   useEffect(() => {
     if (!authed) return;
+    // Pre-warm the screener scan cache so first search is fast
     api.post("/screener/prewarm?universe=nifty500").catch(() => {});
   }, [authed]);
 
@@ -84,8 +84,7 @@ export default function App() {
         <AnimatePresence mode="wait">
           <Routes>
             <Route element={<Layout />}>
-              {/* 6 pages — P&L / Live / Trades merged into Portfolio */}
-              <Route index          element={<MarketPage />} />
+              <Route index              element={<MarketPage />} />
               <Route path="screener"   element={<ScreenerPage />} />
               <Route path="portfolio"  element={<PortfolioPage />} />
               <Route path="risk"       element={<RiskPage />} />
@@ -93,7 +92,6 @@ export default function App() {
               <Route path="settings"   element={<SettingsPage />} />
               <Route path="journal"    element={<TradingJournalPage />} />
               <Route path="results"    element={<ResultsPage />} />
-              <Route path="risk"       element={<Navigate to="/settings" replace />} />
             </Route>
           </Routes>
         </AnimatePresence>
