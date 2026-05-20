@@ -4,8 +4,10 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
+
+from api.middleware.security import require_internal_key
 
 from data.storage import supabase_db as sdb
 
@@ -91,7 +93,7 @@ async def all_trades(limit: int = Query(100, ge=1, le=500)):
 
 
 @router.post("/")
-async def add_trade(req: TradeRequest):
+async def add_trade(req: TradeRequest, _: None = Depends(require_internal_key)):
     entry = {
         "trade_date": req.trade_date,
         "ticker": req.ticker.upper(),

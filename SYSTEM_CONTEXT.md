@@ -302,10 +302,10 @@ DHAN_ACCESS_TOKEN     = ...
 
 ### GitHub Secrets
 ```
-RESEND_API_KEY        ✅ set (re_faPbhjDX...)
-REPORT_EMAIL          ✅ negi2950@gmail.com
-TELEGRAM_BOT_TOKEN    ✅ 8632500920:AAE...
-TELEGRAM_CHAT_ID      ✅ 7166042146
+RESEND_API_KEY        ✅ set
+REPORT_EMAIL          ✅ set
+TELEGRAM_BOT_TOKEN    ✅ set
+TELEGRAM_CHAT_ID      ✅ set
 SUPABASE_URL          ✅
 SUPABASE_KEY          ✅
 GROQ_API_KEY          → add for strategy agent LLM

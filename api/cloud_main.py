@@ -9,11 +9,11 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from api._config import API_TITLE, API_VERSION, CORS_CONFIG, get_allowed_origins
-from api.middleware.security import SecurityHeadersMiddleware
+from api.middleware.security import SecurityHeadersMiddleware, require_internal_key
 from api.routers import (
     chat, journal, market, portfolio, risk,
     screener, settings, strategies, telegram_bot, trades,
@@ -37,9 +37,44 @@ async def system_health() -> dict[str, Any]:
 
 @_system.get("/kill-switch/status")
 async def kill_switch_status() -> dict[str, Any]:
-    # Cloud deployment does not run a local kill-switch daemon.
-    # Use the Supabase dashboard or Telegram bot to manage risk limits.
+    try:
+        import json as _json
+        from data.storage import supabase_db as sdb
+        rows = sdb.select("app_config", cols="value", filters={"key": "kill_switch"}, limit=1)
+        if rows:
+            data = rows[0].get("value") or {}
+            if isinstance(data, str):
+                data = _json.loads(data)
+            return {
+                "active": bool(data.get("active", False)),
+                "triggered_at": data.get("triggered_at"),
+                "reason": data.get("reason"),
+            }
+    except Exception:
+        pass
     return {"active": False, "triggered_at": None, "reason": None}
+
+
+@_system.post("/kill-switch")
+async def set_kill_switch(
+    body: dict[str, Any],
+    _: None = Depends(require_internal_key),
+) -> dict[str, Any]:
+    try:
+        from data.storage import supabase_db as sdb
+        value = {
+            "active":       bool(body.get("active", False)),
+            "triggered_at": body.get("triggered_at") or datetime.now(timezone.utc).isoformat(),
+            "reason":       body.get("reason"),
+        }
+        existing = sdb.select("app_config", cols="key", filters={"key": "kill_switch"}, limit=1)
+        if existing:
+            sdb.update("app_config", {"value": value}, {"key": "kill_switch"})
+        else:
+            sdb.insert("app_config", {"key": "kill_switch", "value": value})
+        return {"ok": True, **value}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @_system.get("/audit-log")

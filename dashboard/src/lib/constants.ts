@@ -3,6 +3,10 @@
 // v2 — journal-only NAV header, index card CHART badge, full NSE screener
 export const API_BASE = (import.meta.env.VITE_API_URL ?? "") + "/api";
 
+// Optional internal API key — sent as X-Api-Key on all requests.
+// Set VITE_API_KEY in Vercel env vars to enable backend auth.
+export const API_KEY: string = import.meta.env.VITE_API_KEY ?? "";
+
 const wsBase = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace(/^http/, "ws")
   : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;

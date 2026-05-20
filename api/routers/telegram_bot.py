@@ -21,11 +21,12 @@ from fastapi import APIRouter, Request, Response
 
 router = APIRouter()
 
-BOT_TOKEN    = os.getenv("TELEGRAM_BOT_TOKEN", "")
-CHAT_ID      = os.getenv("TELEGRAM_CHAT_ID", "")
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
-API_BASE     = os.getenv("SCREENER_API_URL", "https://onepiece-labs.vercel.app")
+BOT_TOKEN       = os.getenv("TELEGRAM_BOT_TOKEN", "")
+CHAT_ID         = os.getenv("TELEGRAM_CHAT_ID", "")
+WEBHOOK_SECRET  = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
+SUPABASE_URL    = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY    = os.getenv("SUPABASE_KEY", "")
+API_BASE        = os.getenv("SCREENER_API_URL", "https://onepiece-labs.vercel.app")
 
 _TG_BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
@@ -246,6 +247,11 @@ async def _handle_strategy(chat_id: int | str, strategy: str) -> None:
 @router.post("")
 async def telegram_webhook(request: Request):
     """Receives all updates from Telegram."""
+    if WEBHOOK_SECRET:
+        token = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+        if token != WEBHOOK_SECRET:
+            return Response(status_code=403)
+
     try:
         body = await request.json()
     except Exception:
@@ -282,14 +288,17 @@ async def telegram_webhook(request: Request):
 @router.get("/setup")
 async def setup_webhook(request: Request):
     """Register the webhook URL with Telegram. Call once after deployment."""
-    base    = str(request.base_url).rstrip("/")
-    wh_url  = f"{base}/api/telegram"
-    result  = _tg_post("setWebhook", {
-        "url":             wh_url,
-        "allowed_updates": ["message", "callback_query"],
+    base   = str(request.base_url).rstrip("/")
+    wh_url = f"{base}/api/telegram"
+    payload: dict = {
+        "url":              wh_url,
+        "allowed_updates":  ["message", "callback_query"],
         "drop_pending_updates": True,
-    })
-    return {"webhook_url": wh_url, "telegram_response": result}
+    }
+    if WEBHOOK_SECRET:
+        payload["secret_token"] = WEBHOOK_SECRET
+    result = _tg_post("setWebhook", payload)
+    return {"webhook_url": wh_url, "secret_token_set": bool(WEBHOOK_SECRET), "telegram_response": result}
 
 
 @router.get("/info")

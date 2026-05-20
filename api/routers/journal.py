@@ -9,8 +9,10 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+
+from api.middleware.security import require_internal_key
 
 router = APIRouter()
 _executor = ThreadPoolExecutor(max_workers=4)
@@ -127,12 +129,12 @@ class JournalChatResponse(BaseModel):
 # ── CRUD endpoints ─────────────────────────────────────────────────────────────
 
 @router.get("/trades")
-def get_trades():
+def get_trades(_: None = Depends(require_internal_key)):
     return _all_trades()
 
 
 @router.post("/trades")
-def upsert_trade(body: TradeRecord):
+def upsert_trade(body: TradeRecord, _: None = Depends(require_internal_key)):
     now = datetime.now(timezone.utc).isoformat()
     row = {
         "id":            body.id,
@@ -167,7 +169,7 @@ def upsert_trade(body: TradeRecord):
 
 
 @router.delete("/trades/{trade_id}")
-def delete_trade(trade_id: str):
+def delete_trade(trade_id: str, _: None = Depends(require_internal_key)):
     if not trade_id or len(trade_id) > 64:
         raise HTTPException(status_code=400, detail="Invalid trade id")
     try:
@@ -214,7 +216,7 @@ async def get_live_prices(symbols: str = ""):
 # ── Portfolio endpoints (Journal = Live Portfolio) ─────────────────────────────
 
 @router.get("/positions")
-async def journal_positions():
+async def journal_positions(_: None = Depends(require_internal_key)):
     """Open journal trades as portfolio positions with live CMPs."""
     def _compute():
         trades = _all_trades()
@@ -262,7 +264,7 @@ async def journal_positions():
 
 
 @router.get("/summary")
-async def journal_summary():
+async def journal_summary(_: None = Depends(require_internal_key)):
     """NAV, Day P&L, drawdown — computed from journal trades + live prices."""
     def _compute():
         trades = _all_trades()
@@ -330,7 +332,7 @@ async def journal_summary():
 
 
 @router.get("/pnl-calendar")
-async def journal_pnl_calendar(year: int | None = None):
+async def journal_pnl_calendar(year: int | None = None, _: None = Depends(require_internal_key)):
     """Daily P&L from closed journal trades grouped by exit date."""
     def _compute():
         trades = _all_trades()
@@ -563,7 +565,7 @@ def _llm(system: str, user_msg: str, history: list[dict] | None = None) -> tuple
 # ── AI chat endpoint ───────────────────────────────────────────────────────────
 
 @router.post("/chat", response_model=JournalChatResponse)
-async def journal_chat(body: JournalChatRequest):
+async def journal_chat(body: JournalChatRequest, _: None = Depends(require_internal_key)):
     loop = asyncio.get_running_loop()
 
     def _fetch_and_chat():

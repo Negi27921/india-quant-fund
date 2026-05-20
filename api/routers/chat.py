@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field, field_validator
 
-from api.middleware.security import rate_limit_chat
+from api.middleware.security import rate_limit_chat, require_internal_key
 
 router = APIRouter()
 
@@ -224,7 +224,7 @@ def _llm_complete(system: str, user_msg: str, history: list[dict] | None = None)
     )
 
 
-@router.post("/message", response_model=ChatResponse, dependencies=[Depends(rate_limit_chat)])
+@router.post("/message", response_model=ChatResponse, dependencies=[Depends(rate_limit_chat), Depends(require_internal_key)])
 async def chat_message(body: ChatMessage):
     loop = asyncio.get_running_loop()
 

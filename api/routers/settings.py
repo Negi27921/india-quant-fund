@@ -1,7 +1,9 @@
 """Settings and connectivity diagnostics API."""
 from __future__ import annotations
 import os
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from api.middleware.security import require_internal_key
 
 router = APIRouter()
 
@@ -81,7 +83,7 @@ async def get_providers():
 
 
 @router.post("/providers/probe")
-async def probe_providers():
+async def probe_providers(_: None = Depends(require_internal_key)):
     """Live-test every configured LLM provider. Takes a few seconds."""
     from agents.base import BaseLLMClient
     client = BaseLLMClient()
@@ -125,7 +127,7 @@ async def get_alert_config():
 
 
 @router.post("/alerts/test-telegram")
-async def test_telegram():
+async def test_telegram(_: None = Depends(require_internal_key)):
     """Send a test message to the configured Telegram chat."""
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
@@ -191,7 +193,7 @@ async def get_agent_config():
 
 
 @router.put("/agent-config")
-async def update_agent_config(body: dict):
+async def update_agent_config(body: dict, _: None = Depends(require_internal_key)):
     """Persist trading agent configuration to Supabase app_config table."""
     import json as _json
     ALLOWED = {

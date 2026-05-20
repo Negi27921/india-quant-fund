@@ -40,7 +40,6 @@ dependencies = [
     "beautifulsoup4>=4.12.0",
     "lxml>=5.2.0",
     # Reporting
-    "jinja2>=3.1.4",
     "weasyprint>=62.0",
     "matplotlib>=3.8.0",
     "plotly>=5.22.0",
@@ -58,8 +57,6 @@ dependencies = [
     "tenacity>=8.3.0",
     "aiofiles>=23.2.0",
     "apscheduler>=3.10.0",
-    "smtplib-ssl>=1.0.0",
-    "jinja2>=3.1.4",
 ]
 
 [project.optional-dependencies]

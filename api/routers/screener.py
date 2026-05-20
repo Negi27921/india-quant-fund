@@ -20,7 +20,9 @@ warnings.filterwarnings("ignore")
 import yfinance as yf
 import pandas as pd
 import numpy as np
-from fastapi import APIRouter, BackgroundTasks, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
+
+from api.middleware.security import require_internal_key
 
 router = APIRouter()
 _executor = ThreadPoolExecutor(max_workers=20)
@@ -792,6 +794,7 @@ async def get_screener_results(
 async def trigger_scan(
     strategy: str = Query("vcp", pattern=_STRATEGY_RE),
     universe: str = Query("nifty500", pattern="^(nifty500|full)$"),
+    _: None = Depends(require_internal_key),
 ):
     """Force a fresh background scan (clears in-process cache first)."""
     if strategy == "custom":
@@ -869,6 +872,7 @@ def _sequential_prewarm(universe_name: str) -> None:
 @router.post("/prewarm")
 async def prewarm_all_strategies(
     universe: str = Query("nifty500", pattern="^(nifty500|full)$"),
+    _: None = Depends(require_internal_key),
 ):
     """Called once on app login. Scans all 7 strategies sequentially in the background
     so results are ready when the user opens the Screener page."""

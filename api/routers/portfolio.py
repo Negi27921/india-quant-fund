@@ -6,9 +6,10 @@ from datetime import date, datetime, timedelta
 from typing import Optional
 
 import yfinance as yf
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from api.middleware.security import require_internal_key
 from data.storage import supabase_db as sdb
 
 router = APIRouter()
@@ -321,7 +322,7 @@ async def paper_positions():
 
 
 @router.post("/paper-positions")
-async def add_paper_position(req: PositionRequest):
+async def add_paper_position(req: PositionRequest, _: None = Depends(require_internal_key)):
     ticker = _normalize_ticker(req.ticker)
     existing = sdb.select("paper_positions", filters={"ticker": ticker})
     entry = {
@@ -338,7 +339,7 @@ async def add_paper_position(req: PositionRequest):
 
 
 @router.delete("/paper-positions/{ticker}")
-async def delete_paper_position(ticker: str):
+async def delete_paper_position(ticker: str, _: None = Depends(require_internal_key)):
     t = _normalize_ticker(ticker)
     # Try paper_positions first, fall back to paper_trades
     rows = sdb.select("paper_positions", filters={"ticker": t})
@@ -356,7 +357,7 @@ async def delete_paper_position(ticker: str):
 
 
 @router.put("/paper-positions/{ticker}/exit")
-async def exit_paper_position(ticker: str, req: ExitRequest):
+async def exit_paper_position(ticker: str, req: ExitRequest, _: None = Depends(require_internal_key)):
     t = _normalize_ticker(ticker)
     # Try paper_positions first, fall back to paper_trades
     rows = sdb.select("paper_positions", filters={"ticker": t})
@@ -396,7 +397,7 @@ async def live_positions():
 
 
 @router.post("/live-positions")
-async def add_live_position(req: PositionRequest):
+async def add_live_position(req: PositionRequest, _: None = Depends(require_internal_key)):
     ticker = _normalize_ticker(req.ticker)
     existing = sdb.select("live_positions", filters={"ticker": ticker})
     entry = {
@@ -413,7 +414,7 @@ async def add_live_position(req: PositionRequest):
 
 
 @router.delete("/live-positions/{ticker}")
-async def delete_live_position(ticker: str):
+async def delete_live_position(ticker: str, _: None = Depends(require_internal_key)):
     t = _normalize_ticker(ticker)
     rows = sdb.select("live_positions", filters={"ticker": t})
     if not rows:
@@ -423,7 +424,7 @@ async def delete_live_position(ticker: str):
 
 
 @router.put("/live-positions/{ticker}/exit")
-async def exit_live_position(ticker: str, req: ExitRequest):
+async def exit_live_position(ticker: str, req: ExitRequest, _: None = Depends(require_internal_key)):
     t = _normalize_ticker(ticker)
     rows = sdb.select("live_positions", filters={"ticker": t})
     if not rows:

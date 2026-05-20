@@ -5,7 +5,7 @@
  * Timeouts:  default 10s, chat endpoints 35s
  * Retries:   GET requests retry once on network error (not on 4xx/5xx)
  */
-import { API_BASE } from "@/lib/constants";
+import { API_BASE, API_KEY } from "@/lib/constants";
 
 const TIMEOUT_MS      = 10_000;
 const TIMEOUT_CHAT_MS = 35_000;
@@ -30,9 +30,9 @@ async function request<T>(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   const isBodyRequest = options?.method && ["POST", "PUT", "PATCH"].includes(options.method);
-  const headers: Record<string, string> = isBodyRequest
-    ? { "Content-Type": "application/json" }
-    : {};
+  const headers: Record<string, string> = {};
+  if (API_KEY) headers["X-Api-Key"] = API_KEY;
+  if (isBodyRequest) headers["Content-Type"] = "application/json";
   if (options?.headers) Object.assign(headers, options.headers);
 
   try {
