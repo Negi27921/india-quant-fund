@@ -1,72 +1,363 @@
-# 🏴‍☠️ One Piece Quant — Automated Indian Equity Trading System
+# India Quant Fund (IQF)
 
-> Production-grade automated hedge fund for NSE/BSE cash segment.
-> Self-improving AI screeners, paper trading, and real-time dashboard.
+> Automated quant hedge fund for Indian equities (NSE/BSE). Real-time dashboard, 7 screener strategies, automated paper trading, AI chat, Telegram alerts, and Zerodha Kite execution.
 
-**Live Dashboard:** [luffy-labs.vercel.app](https://luffy-labs.vercel.app)
-**API:** [onepiece-labs.vercel.app](https://onepiece-labs.vercel.app)
-**GitHub:** [Negi27921/india-quant-fund](https://github.com/Negi27921/india-quant-fund)
+**Live Dashboard →** [luffy-labs.vercel.app](https://luffy-labs.vercel.app)
+**API →** [onepiece-labs.vercel.app](https://onepiece-labs.vercel.app)
+**Repo →** [github.com/Negi27921/india-quant-fund](https://github.com/Negi27921/india-quant-fund)
 
 ---
 
 ## What It Does
 
-- **Screens 500–2,137 NSE stocks** across 7 strategies with sub-second cached responses
-- **Never-block scan architecture** — HTTP returns immediately with stale/cached data; fresh scans run in the background and persist to Supabase
-- **Paper trades ₹25,000/pick** on every ≥70% confidence signal automatically
-- **Self-improving AI agent** (Hermes-style) analyses win rates and improves strategies daily
-- **10 PM daily Telegram + email report** with performance, insights, and top picks
-- **Real-time dashboard** — market data, screener, portfolio, risk, strategies, earnings results
-- **Kill switch + target/SL** on every paper trade, automatic exit tracking
-- **Earnings Results page** — earningspulse-style rating cards (Excellent → Weak) with metric trends
-- **AI Chatbot** — Groq → Gemini → OpenRouter fallback, <9s total timeout budget
+- Screens 500–2,137 NSE stocks across **7 strategies** with sub-second cached responses
+- **Never-blocking scan** — GET always returns cached data instantly; fresh scans run in background threads
+- Auto paper-trades ₹25,000/pick on every ≥70% confidence signal via GitHub Actions
+- **10 PM daily report** — Telegram + email with P&L, strategy breakdown, and top picks
+- Real-time dashboard with market data, AI chat, portfolio analytics, risk monitoring, and earnings results
+- Kill switch with configurable drawdown limit; auto-exits on target/SL/expiry
+- Live trading journal (LIVE tab) separate from screener paper trades
 
 ---
 
-## Architecture
+## System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     GitHub Actions (Cron)                        │
-│  9:30AM → paper_trader (open)    3:15PM → paper_trader (check)  │
-│  10:30AM+2PM → multibagger_alert            10PM → daily_report │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-              ┌──────────────▼──────────────┐
-              │   Supabase (PostgreSQL)      │
-              │  screener_cache              │
-              │  paper_trades                │
-              │  strategy_notes              │
-              │  trades / daily_pnl          │
-              └──────────────┬──────────────┘
-                             │
-    ┌────────────────────────┼────────────────────────┐
-    │                        │                        │
-    ▼                        ▼                        ▼
-FastAPI Backend        React Dashboard          Telegram Bot
-onepiece-labs.vercel   luffy-labs.vercel        Daily alerts
-9 API routers          8 pages                  Trade exits
-WebSocket              Luxury dark theme        10PM report
-Groq/Gemini AI chat    TanStack Query
-Screener cache         Framer Motion
+                    ┌──────────────────────────────────────────────┐
+                    │         GitHub Actions (Cron, Mon–Fri)        │
+                    │  9:30 AM  paper_trader --open                 │
+                    │  10:30 AM multibagger_alert                   │
+                    │  2:00 PM  multibagger_alert                   │
+                    │  3:15 PM  paper_trader --check                │
+                    │  10:00 PM strategy_agent + daily_report       │
+                    │  1st/mo   monthly_report                      │
+                    └─────────────────┬────────────────────────────┘
+                                      │
+                       ┌──────────────▼──────────────┐
+                       │      Supabase (PostgreSQL)   │
+                       │  paper_trades                │
+                       │  screener_cache              │
+                       │  strategy_notes              │
+                       │  journal_trades              │
+                       └──────────────┬──────────────┘
+                                      │
+          ┌───────────────────────────┼────────────────────────────┐
+          │                           │                            │
+          ▼                           ▼                            ▼
+  FastAPI Backend             React Dashboard              Telegram Bot
+  onepiece-labs.vercel        luffy-labs.vercel            Alerts + Reports
+  cloud_main.py               9 pages                      Webhook via FastAPI
+  11 API routers              TanStack Query v5
+                              Framer Motion
 ```
+
+### Two Runtime Modes
+
+| | Local Dev | Cloud (Vercel) |
+|--|-----------|----------------|
+| Entry point | `api/main.py` | `api/cloud_main.py` |
+| Database | DuckDB (local file) | Supabase (PostgreSQL) |
+| WebSocket `/ws` | Yes (5s portfolio broadcast) | No (serverless limitation) |
+| System endpoints | Full (DuckDB-backed) | Lightweight stubs |
+
+---
+
+## Repository Structure
+
+```
+india-quant-fund/
+├── api/                        # FastAPI application
+│   ├── _config.py              # Shared CORS, versioning, prefixes (single source of truth)
+│   ├── main.py                 # Local dev entry point (DuckDB + WebSocket)
+│   ├── cloud_main.py           # Vercel entry point (Supabase, no WebSocket)
+│   ├── middleware/security.py  # Security headers
+│   └── routers/
+│       ├── chat.py             # AI assistant (Groq → Gemini → OpenRouter cascade)
+│       ├── journal.py          # Live trading journal CRUD + NAV + prices
+│       ├── market.py           # Live market data (indices, FII/DII, movers, filings)
+│       ├── portfolio.py        # Paper portfolio positions and equity curve
+│       ├── risk.py             # Risk metrics, drawdown, kill switch
+│       ├── screener.py         # NSE/BSE stock screener + background scan engine
+│       ├── settings.py         # LLM providers, broker config, agent settings
+│       ├── strategies.py       # Strategy performance, signals, allocation
+│       ├── system.py           # Kill switch, audit log (local DuckDB)
+│       ├── telegram_bot.py     # Telegram webhook (cloud only)
+│       └── trades.py           # Screener auto-trade log
+│
+├── dashboard/                  # React + TypeScript frontend (Vite 5)
+│   ├── src/
+│   │   ├── api/
+│   │   │   ├── client.ts           # Typed HTTP wrapper (timeout, retry, ApiError)
+│   │   │   ├── queries.ts          # Portfolio, risk, strategy, system hooks
+│   │   │   ├── market-queries.ts   # Market data hooks (indices, FII/DII, screener)
+│   │   │   ├── pnl-queries.ts      # P&L calendar, paper positions, journal hooks
+│   │   │   ├── settings-queries.ts # LLM/broker/alert config hooks
+│   │   │   └── types.ts            # Shared TypeScript types
+│   │   ├── lib/
+│   │   │   ├── constants.ts        # API_BASE, colors, strategy labels, refetch intervals
+│   │   │   ├── nse-stocks.ts       # Static NSE 500 symbol list (lazy-loaded chunk)
+│   │   │   └── utils.ts            # formatCurrency, formatPct, cn()
+│   │   ├── pages/
+│   │   │   ├── Market.tsx          # Market terminal (indices, FII/DII, movers, chat)
+│   │   │   ├── Screener.tsx        # Stock screener (7 strategies, confidence filters)
+│   │   │   ├── Portfolio.tsx       # Holdings, P&L calendar, auto-trades, live tab
+│   │   │   ├── Risk.tsx            # Drawdown, VaR, kill switch status
+│   │   │   ├── Strategies.tsx      # Per-strategy performance + signal cards
+│   │   │   ├── TradingJournal.tsx  # Manual live trade journal
+│   │   │   ├── Results.tsx         # Quarterly earnings results (rated cards)
+│   │   │   ├── Settings.tsx        # Agent config, broker, alerts, risk monitor
+│   │   │   └── Login.tsx           # Password-gated entry
+│   │   └── components/
+│   │       ├── charts/             # EquityChart, DrawdownChart, BarChart, MiniChart, SectorPieChart, ChartDrawer
+│   │       ├── layout/             # Layout, Sidebar, Header
+│   │       ├── ui/                 # AddPositionModal, ExitPositionModal, ChatBot, FilingsFeed,
+│   │       │                       # GlobalSearch, KillSwitchBanner, Skeleton, Badge, StatCard,
+│   │       │                       # AnimatedNumber, Tooltip
+│   │       └── tables/
+│   ├── vite.config.ts          # Code-split vendor chunks, cache-bust suffix
+│   ├── eslint.config.js        # ESLint v9 flat config
+│   └── vercel.json             # SPA rewrites, API proxy, security headers, asset caching
+│
+├── data/                       # Data pipeline and DuckDB storage layer
+├── execution/                  # OMS, smart order routing, slippage, reconciliation
+│   └── brokers/                # Dhan, Shoonya adapters + Zerodha Kite (MCP)
+├── risk/                       # Kill switch, position sizer, drawdown, liquidity checks
+├── backtest/                   # Strategy backtesting engine
+├── orchestration/              # Job scheduling and coordination
+├── monitoring/                 # Alerting and observability
+├── reporting/                  # Daily/monthly report generators
+├── config/                     # Strategy and system configuration files
+└── .github/workflows/
+    ├── ci.yml                  # Frontend lint/typecheck/build + backend ruff/pyright
+    ├── screener_scan.yml       # Daily NSE 500 scan (weekdays)
+    ├── paper_trading.yml       # Open/check paper trades (weekdays)
+    ├── daily_report.yml        # 10 PM Telegram + email report
+    ├── monthly_report.yml      # 1st of month P&L summary
+    ├── multibagger_alert.yml   # Morning + afternoon high-conviction alerts
+    └── keep-alive.yml          # Prevents Vercel cold starts
+```
+
+---
+
+## Frontend Routes
+
+| Route | Page | Description |
+|-------|------|-------------|
+| `/` | Market Terminal | Live indices (Indian + global), FII/DII flows, sector heatmap, top movers, BSE filings feed, AI chatbot |
+| `/screener` | Screener | 7 strategies, confidence filter, universe toggle (Nifty 500 / Full NSE), background scan, CHART badge hover |
+| `/portfolio` | Portfolio | Holdings tab (Paper / Live subtabs), P&L calendar heatmap, Screener Auto-Trades, equity curve |
+| `/risk` | Risk | Drawdown chart, VaR, Sharpe, kill switch status, position/sector limits |
+| `/strategies` | Strategies | Per-strategy allocation bars, Sharpe ratios, signal cards with approve/reject |
+| `/journal` | Trading Journal | Live trades CRUD — add, exit, delete manual positions; NAV from cost basis |
+| `/results` | Earnings Results | Quarterly results with Excellent/Great/Good/Ok/Weak ratings, metric trends, mini sparklines |
+| `/settings` | Settings | Trading Agent config, LLM providers, broker connections, Telegram/email alerts, risk monitor |
+
+---
+
+## Screener Strategies
+
+| Strategy | Signal | SL | Hold |
+|----------|--------|----|------|
+| **VCP** | 4-wave volatility contraction, drying volume, EMA stack | 4% | 15d |
+| **IPO Base** | First consolidation after IPO (<4 months), tight range, vol dry-up | 6% | 20d |
+| **Rocket Base** | 60%+ move in 90d, correction ≤20%, vol contracting into base | 10% | 10d |
+| **Breakout** | Within 3% of 52W high, vol surge 1.8×, range expansion | 8% | 10d |
+| **RSI Reversal** | RSI recovered from <33, positive divergence, vol surge | 6% | 7d |
+| **Golden Cross** | EMA20 crossed EMA50 ≤10 bars ago, SMA200 slope rising | 8% | 20d |
+| **Multibagger** | 12-condition deep scan (see below) | 15% | 30d |
+
+### Multibagger 12 Conditions
+
+```
+Technical (from 16 FY2025–26 multi-bagger reverse-engineering):
+1.  EMA Stack          EMA9 > EMA20 > EMA50
+2.  Above SMA200       Price > SMA200
+3.  SMA200 Slope       Rising over last 10 bars
+4.  RSI Sweet Spot     55 ≤ RSI ≤ 78
+5.  Recovery from Low  +15% from 90-day swing low
+6.  52W Proximity      Within 40% of 52-week high
+7.  Base Forming       20-day range < 30%
+
+Fundamental Proxies (institutional behaviour signals):
+8.  Revenue Accel      90d momentum > ½ × 180d momentum
+9.  Institutional Buy  5d avg vol > 20d avg vol
+10. Vol Re-entry       3d avg vol ≥ 1.5× 20d avg vol
+11. Not Extended       Price within 20% of EMA50
+12. Liquidity          Avg volume > 75,000 shares/day
+
+Confidence = conditions_passed / 12 × 100%
+Threshold for auto paper trade: ≥ 70%
+```
+
+### Scan Performance
+- **Nifty 500** (503 stocks): 30–60s first scan, instant from cache (4h TTL)
+- **Full NSE** (~2,137 stocks): 3–8 min first scan, instant from cache
+- **Architecture**: never-block GET → ThreadPoolExecutor background scan → Supabase persistence
+
+---
+
+## API Reference
+
+### Market
+```
+GET /api/market/status                         # Market open/closed, IST time
+GET /api/market/indices                        # Nifty50, Sensex, BankNifty, NiftyIT, Midcap
+GET /api/market/global-indices                 # GIFT Nifty, Brent Crude, Dow Jones
+GET /api/market/fii-dii                        # FII/DII flows (69-day history)
+GET /api/market/fii-dii/today                  # Today's FII/DII data
+GET /api/market/fii-dii/sectors                # Sector-wise FII ownership
+GET /api/market/movers?limit=8                 # Top gainers/losers + breadth
+GET /api/market/sectors                        # Sector performance
+GET /api/market/filings?limit=15               # BSE corporate filings feed
+GET /api/market/corporate-actions              # Dividends, splits, bonuses
+GET /api/market/advances-declines              # Advances/declines/unchanged
+GET /api/market/results-calendar               # Upcoming earnings meetings
+GET /api/market/quarterly-results              # Rated earnings cards (Excellent→Weak)
+GET /api/market/history/{ticker}?period&interval  # OHLCV candlestick data
+GET /api/market/quote?tickers=RELIANCE,INFY   # Live stock quotes
+```
+
+### Screener
+```
+GET  /api/screener/results?strategy=vcp&universe=nifty500&min_confidence=70
+POST /api/screener/scan?strategy=multibagger&universe=full   # force background scan
+POST /api/screener/prewarm?universe=nifty500                 # warm cache on app load
+```
+Strategies: `vcp` | `ipo_base` | `rocket_base` | `breakout` | `rsi_reversal` | `golden_cross` | `multibagger`
+
+### Portfolio (Screener Paper Trades)
+```
+GET  /api/portfolio/summary
+GET  /api/portfolio/positions
+GET  /api/portfolio/equity-curve?days=252
+GET  /api/portfolio/sector-exposure
+GET  /api/portfolio/pnl-calendar?year=2025
+GET  /api/portfolio/pnl-stats
+GET  /api/portfolio/paper-positions
+POST /api/portfolio/paper-positions
+DELETE /api/portfolio/paper-positions/{ticker}
+PUT  /api/portfolio/paper-positions/{ticker}/exit
+GET  /api/portfolio/paper-trades?status=all&limit=200
+GET  /api/portfolio/strategy-pnl
+GET  /api/portfolio/live-positions
+POST /api/portfolio/live-positions
+DELETE /api/portfolio/live-positions/{ticker}
+PUT  /api/portfolio/live-positions/{ticker}/exit
+```
+
+### Trading Journal (Live Portfolio)
+```
+GET    /api/journal/trades              # All journal entries
+POST   /api/journal/trades              # Add trade
+PUT    /api/journal/trades/{id}         # Update trade
+DELETE /api/journal/trades/{id}         # Delete trade
+GET    /api/journal/summary             # NAV (cost-basis), realized P&L, open count
+GET    /api/journal/prices              # Live yFinance prices for open positions (parallel)
+GET    /api/journal/positions           # Journal positions with current prices
+GET    /api/journal/pnl-calendar?year=2025  # Daily P&L calendar for equity curve
+```
+
+### Risk
+```
+GET /api/risk/metrics                   # Drawdown, Sharpe, daily loss, position/sector utilization
+GET /api/risk/limits                    # Position, sector, drawdown, liquidity limits
+```
+
+### Strategies
+```
+GET /api/strategies/performance         # Per-strategy Sharpe, return, drawdown, win rate
+GET /api/strategies/signals             # Recent buy/sell signals with approval status
+GET /api/strategies/allocation          # Current strategy allocation weights
+```
+
+### Trades
+```
+GET /api/trades/orders?status=all       # Order blotter
+GET /api/trades/fills?days=30           # Filled trades
+GET /api/trades/stats?days=30           # Summary stats
+```
+
+### Settings
+```
+GET  /api/settings/providers            # LLM providers (Groq, Gemini, OpenRouter)
+POST /api/settings/providers/probe      # Live test all providers
+GET  /api/settings/brokers              # Broker connections (Zerodha, Dhan, Shoonya)
+GET  /api/settings/alerts               # Telegram + email config
+POST /api/settings/alerts/test-telegram # Send test Telegram message
+GET  /api/settings/env                  # Environment summary
+GET  /api/settings/agent-config         # Trading agent parameters
+PUT  /api/settings/agent-config         # Update agent parameters
+```
+
+### System + Chat
+```
+GET  /api/system/health
+GET  /api/system/kill-switch/status
+GET  /api/system/audit-log
+POST /api/chat/message                  # AI chat (Groq → Gemini → OpenRouter, <9s budget)
+POST /api/telegram                      # Telegram webhook
+GET  /health                            # Root health check
+WS   /ws                                # Live portfolio broadcast, 5s interval (local only)
+```
+
+---
+
+## AI Chat
+
+**Endpoint:** `POST /api/chat/message`
+
+Cascading fallback with strict per-provider timeouts:
+1. **Groq** (Llama 3.3 70B) — 5s timeout, 800 tokens
+2. **Gemini Flash** — 6s timeout, 800 tokens
+3. **OpenRouter** (Claude Haiku / Mistral) — 6s timeout
+4. **Helpful fallback message** if all fail
+
+Total asyncio budget: 8.5s (within Vercel's 10s function limit).
+Context injected: live indices, FII/DII flows, sector performance, screener cache status, market regime.
+
+---
+
+## Paper Trading System
+
+**Runs via:** `.github/workflows/paper_trading.yml` → `scripts/paper_trader.py`
+
+| Rule | Value |
+|------|-------|
+| Capital per trade | ₹25,000 |
+| Min confidence | 70% |
+| Max open trades | 30 |
+| Kill switch trigger | Daily realized loss > 15% |
+| Auto-exit conditions | Target hit / SL hit / held past `hold_days` |
+
+**Exit statuses:** `open` → `target_hit` / `sl_hit` / `expired` / `killed`
+
+---
+
+## Scheduled Jobs
+
+| Time (IST) | Days | Job |
+|------------|------|-----|
+| 9:30 AM | Mon–Fri | Open new paper trades from screener cache |
+| 10:30 AM | Mon–Fri | Multibagger alert (morning) |
+| 2:00 PM | Mon–Fri | Multibagger alert (afternoon) |
+| 3:15 PM | Mon–Fri | Check exits (target/SL/expiry) before close |
+| 10:00 PM | Mon–Fri | Strategy agent analysis + Telegram/email report |
+| 1st of month | Always | Monthly P&L summary |
 
 ---
 
 ## Quick Start
 
 ### Prerequisites
-```bash
-python 3.11+
-node 18+
-supabase account
-resend.com account
-telegram bot token
+```
+Python 3.11+, Node 20+
+Supabase account
+Resend API key (email)
+Telegram bot token
 ```
 
 ### Backend (local dev)
 ```bash
-cd india-quant-fund
 cp .env.example .env          # fill in keys
 pip install -r requirements-api.txt
 uvicorn api.main:app --reload --port 8000
@@ -79,250 +370,104 @@ npm install
 npm run dev                   # → http://localhost:3000
 ```
 
-### Run screener alert manually
+### Scripts (run manually)
 ```bash
-python scripts/multibagger_alert.py
+python scripts/paper_trader.py --open     # open new trades
+python scripts/paper_trader.py --check    # check exits
+python scripts/paper_trader.py --both     # open + check
+python scripts/multibagger_alert.py       # send high-conviction alert
+python scripts/daily_report.py            # 10 PM report
+python scripts/strategy_agent.py          # AI strategy analysis
 ```
 
-### Run paper trader manually
+### Frontend quality checks
 ```bash
-python scripts/paper_trader.py --open    # open new trades from screener cache
-python scripts/paper_trader.py --check   # check exits (target/SL/expiry)
-python scripts/paper_trader.py --both    # do both
+cd dashboard
+npm run typecheck    # tsc strict (no emit)
+npm run lint         # ESLint v9, 0 warnings allowed
+npm run build        # tsc + vite production build
 ```
 
-### Run daily report manually
+### Backend quality checks
 ```bash
-python scripts/daily_report.py
+ruff check api/           # lint
+ruff format --check api/  # formatting
+pyright api/              # type checking
 ```
 
 ---
 
-## Screener Strategies
+## Deployment
 
-| Strategy | Key Conditions | Data Period | SL | Hold Days |
-|----------|---------------|------------|-----|-----------|
-| **VCP** | 4-wave volatility contraction, drying volume, EMA stack | 60d | 4% | 15 |
-| **IPO Base** | Recent IPO (<4mo data), tight 15d range, vol dry-up | 60d | 6% | 20 |
-| **Rocket Base** | 60%+ move in 90d, correction ≤20%, vol contracting | 120d | 10% | 10 |
-| **Breakout** | Near 52W high (<3%), vol surge 1.8×, range expansion | 260d | 8% | 10 |
-| **RSI Reversal** | RSI recovered from <33, positive divergence, vol surge | 60d | 6% | 7 |
-| **Golden Cross** | EMA20 crossed EMA50 (≤10d ago), SMA200 slope ↑ | 260d | 8% | 20 |
-| **Multibagger / CUSTOM** | 12-condition deep scan (below) | 260d | 15% | 30 |
-
-### Multibagger 12 Conditions (confidence = conditions_passed / 12 × 100)
+### Frontend → Vercel
+```bash
+cd dashboard
+npx vercel --prod       # builds dist/ and deploys
 ```
-Technical DNA (from price analysis of 16 actual FY25-26 winners):
-1.  EMA Stack:             EMA9 > EMA20 > EMA50
-2.  Above SMA200:          Price > SMA200
-3.  SMA200 Slope:          Rising over 10d
-4.  RSI Sweet Spot:        55 ≤ RSI ≤ 78
-5.  Recovery from Low:     +15% from 90-day swing low
-6.  Within 40% of 52W High
-7.  Base Forming:          20d range < 30%
+Env var required: `VITE_API_URL=https://onepiece-labs.vercel.app`
 
-Fundamental Proxies (from concall/rating/announcement research):
-8.  Revenue Accel Proxy:   90d momentum > ½ × 180d (stock pricing in order wins)
-9.  Inst. Accumulation:    5d avg vol > 20d avg vol (post-rating/concall buying)
-10. Volume Re-entry:       3d avg ≥ 1.5× 20d avg
-11. Not Extended:          Price within 20% of EMA50 (entry zone, not chasing)
-12. Liquidity:             Avg volume > 75,000 shares
-```
-
-### Scan Performance
-- **Nifty 500 (503 stocks):** ~30–60s first scan, instant from cache thereafter
-- **Full NSE (2,137 stocks):** ~3–8 min first scan, instant from cache (4h TTL)
-- **Cache architecture:** in-process memory → Supabase PostgreSQL (survives serverless restarts)
-- **Never-block GET:** `/screener/results` always responds instantly; scans run in background threads
+### Backend → Vercel (Serverless)
+Entry point: `api/cloud_main.py` (configured in root `vercel.json`).
+All state in Supabase. No DuckDB, no WebSocket.
 
 ---
 
-## Paper Trading System
+## Tech Stack
 
-**Script:** `scripts/paper_trader.py`
-
-**Rules:**
-- Fixed **₹25,000 per trade**
-- Only stocks with confidence **≥ 70%** (Strong tier)
-- Max **30 open trades** simultaneously
-- **Kill switch**: halt new trades if daily realised loss > 15%
-- Auto-exit on: **target hit** / **SL hit** / held past **hold_days**
-
-**Frontend tracking:** High-confidence screener results are auto-recorded in browser localStorage as paper trades with real-time P&L, SL/TP monitoring, and per-strategy breakdown cards.
-
-**Supabase table:** `paper_trades`
-
-**Exit statuses:** `open` → `target_hit` / `sl_hit` / `expired` / `killed`
-
----
-
-## Strategy Agent (Self-Improving AI)
-
-**Script:** `scripts/strategy_agent.py`
-
-Uses Groq Llama 3.3 70B with tool-calling to analyse win rates and improve strategies daily.
-
-**Agent loop:**
-1. **Observe** — queries 30 days of paper trade results
-2. **Reason** — Groq Llama 3.3 70B calls tools to analyse each strategy
-3. **Act** — saves insights + parameter notes to `strategy_notes` table
-4. **Report** — returns summary included in 10 PM daily report
-
-**Tools:**
-```python
-query_trade_performance(strategy, days=30)   # win rate, avg PNL, exit breakdown
-get_overall_stats(days=30)                   # cross-strategy ranking
-save_strategy_insight(strategy, insight, action, win_rate)  # persist learning
-```
-
-**Fallback:** pure Python statistical analysis if no LLM key configured
+| Layer | Technology |
+|-------|-----------|
+| Backend | FastAPI 0.111 + Python 3.11, Vercel serverless |
+| Frontend | React 19, Vite 5, TypeScript (strict), Tailwind CSS |
+| Animation | Framer Motion 11 |
+| Charts | TradingView lightweight-charts (OHLCV) + Recharts (analytics) |
+| Server state | TanStack Query v5 |
+| UI state | Zustand 5 |
+| Database | Supabase (PostgreSQL cloud), DuckDB (local dev) |
+| AI Chat | Groq Llama 3.3 70B → Gemini Flash → OpenRouter (cascade, <9s) |
+| Market data | yFinance, nsepython, BeautifulSoup4 (FII/DII scraping) |
+| Portfolio optimisation | PyPortfolioOpt |
+| Email | Resend API |
+| Notifications | Telegram Bot API |
+| Scheduling | GitHub Actions cron |
+| Brokers | Zerodha Kite (MCP), Dhan, Shoonya |
+| CI | ESLint v9, Ruff, Pyright, GitHub Actions |
 
 ---
 
-## AI Chatbot
+## Bundle Chunks (Vite Code Splitting)
 
-**Endpoint:** `POST /api/chat/message`
-
-**Fallback chain with strict timeouts:**
-1. **Groq** (Llama 3.3 70B) — 5s timeout, max 800 tokens
-2. **Gemini Flash** — 6s timeout, max 800 tokens
-3. **OpenRouter** (Claude Haiku / Mistral) — 6s timeout
-4. **Helpful fallback message** if all fail
-
-Total asyncio budget: 8.5s (safely within Vercel 10s limit)
-
-Context injected: live indices, FII/DII flows, sector performance, screener status, market regime.
+| Chunk | Contents | Gzip |
+|-------|---------|------|
+| `vendor-charts` | recharts | ~112 KB |
+| `vendor-motion` | framer-motion | ~40 KB |
+| `vendor-icons` | lucide-react | ~6 KB |
+| `vendor-query` | @tanstack/react-query | ~15 KB |
+| `nse-data` | NSE 500 symbol list | ~38 KB |
+| `index` | App code | ~235 KB |
 
 ---
 
-## Earnings Results Page
+## GitHub Secrets
 
-**Route:** `/results`
-
-Earningspulse.ai-style quarterly earnings analysis dashboard:
-- **Rating system:** Excellent / Great / Good / Ok / Weak
-- **Metric cards:** Revenue, Other Income, Operating Profit, OPM%, PAT, EPS with QoQ/YoY change
-- **Mini trend charts:** Revenue, PAT, EPS inline bar sparklines
-- **Filters:** Rating pills, search, sort (time/rating/sales/PAT), grid/list toggle
-- **Live data:** Backend at `/api/market/quarterly-results`; falls back to curated sample data
-
----
-
-## Daily Report (10 PM IST)
-
-**Script:** `scripts/daily_report.py`
-
-Sent via: **Telegram** + **Email (Resend)**
-
-Report sections:
-1. Screener hits per strategy (≥70% confidence count)
-2. Paper trading today (exits, PNL, win rate, open exposure)
-3. 30-day win rates by strategy
-4. Strategy agent insights
-5. Top picks for tomorrow (≥90% confidence)
-
-**Failure handling:** Telegram fails → email error alert; Email fails → Telegram error alert
-
----
-
-## Scheduled Jobs
-
-| Time (IST) | Mon–Fri | Script |
-|-----------|---------|--------|
-| 9:30 AM | Open new paper trades from screener cache | `paper_trader.py --open` |
-| 10:30 AM | Multibagger alert (morning run) | `multibagger_alert.py` |
-| 2:00 PM | Multibagger alert (afternoon run) | `multibagger_alert.py` |
-| 3:15 PM | Check paper trade exits before market close | `paper_trader.py --check` |
-| 10:00 PM | Strategy agent analysis + daily Telegram/email report | `daily_report.py` |
-| 1st of month | Monthly P&L summary | `monthly_report.py` |
-
----
-
-## API Reference
-
-### Screener
-```
-GET  /api/screener/results?strategy=vcp&universe=nifty500   # instant (cached)
-GET  /api/screener/results?strategy=multibagger&universe=full
-POST /api/screener/scan?strategy=multibagger&universe=nifty500  # force refresh
-GET  /api/screener/status   # cache state for all strategies
-```
-
-**Strategies:** `vcp` | `ipo_base` | `rocket_base` | `breakout` | `rsi_reversal` | `golden_cross` | `multibagger` | `custom` (alias for multibagger)
-
-### Market
-```
-GET /api/market/indices          # Nifty 50, Sensex, Bank Nifty, Nifty IT, Midcap
-GET /api/market/global-indices   # GIFT NIFTY, Brent Crude, Dow Jones
-GET /api/market/fii-dii          # FII/DII flows + 69-day history
-GET /api/market/movers           # Top gainers/losers
-GET /api/market/sectors          # Sector performance
-GET /api/market/filings          # BSE corporate filings feed
-GET /api/market/history/{ticker} # OHLCV candlestick data (lightweight-charts)
-GET /api/market/quarterly-results # Earnings results with ratings
-```
-
-### Portfolio / Trades / Risk
-```
-GET /api/portfolio/summary       # Value, P&L, drawdown
-GET /api/portfolio/positions     # Holdings list
-GET /api/trades/history          # Trade blotter (filterable by status, date)
-GET /api/risk/metrics            # VaR, Sharpe, drawdown
-GET /api/strategies/performance  # Per-strategy stats
-```
-
-### Trading Journal
-```
-GET  /api/journal/trades         # All journal entries
-POST /api/journal/trades         # Add trade
-PUT  /api/journal/trades/{id}    # Update trade
-DELETE /api/journal/trades/{id}  # Delete trade
-GET  /api/journal/summary        # NAV (cost-basis), realized P&L, open count
-GET  /api/journal/prices         # Live yFinance prices for open positions (parallel fetch)
-GET  /api/journal/pnl-calendar   # Daily P&L calendar for equity curve
-```
-
-### AI + System
-```
-POST /api/chat/message           # AI chat with live market context
-POST /api/telegram               # Telegram webhook
-GET  /health                     # Health check
-WS   /ws                         # Live P&L WebSocket (5s interval, local only)
-```
-
----
-
-## Frontend Pages
-
-| Route | Page | Features |
-|-------|------|---------|
-| `/` | Market Terminal | Indices chips (Indian + Global), FII/DII flows, sector heatmap, top movers, BSE filings feed, AI chatbot |
-| `/screener` | Screener | 7 strategies + CUSTOM, confidence badges, Supabase cache, background scan, paper trade auto-recording |
-| `/portfolio` | Portfolio | HOLDINGS \| P&L \| TRADES \| LIVE tabs |
-| `/results` | Earnings Results | Quarterly results with Excellent/Great/Good/Ok/Weak ratings, metric trends, mini charts |
-| `/strategies` | Strategies | Per-strategy performance + signal cards |
-| `/journal` | Trading Journal | Trade notes and analysis |
-| `/settings` | Settings | Trading Agent Config \| Connections & Alerts \| Risk Monitor (3-tab, Risk merged here) |
-
----
-
-## Chart System
-
-OHLCV charts use **TradingView lightweight-charts** (native, no iframe):
-- Data sourced from backend `/api/market/history/{ticker}` via yfinance
-- Timeframes: 5m, 15m, 1h, 1D, 1W, 1M
-- Candlestick + volume bars on separate price scale
-- "Open in TradingView" external link preserved
-- Slide-in drawer with spring animation
-- Works for all NSE stocks + indices (^NSEI, BZ=F, ^DJI)
+| Secret | Purpose |
+|--------|---------|
+| `SUPABASE_URL` | Database URL |
+| `SUPABASE_KEY` | Database service key |
+| `RESEND_API_KEY` | Email (Resend) |
+| `REPORT_EMAIL` | Recipient email address |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot |
+| `TELEGRAM_CHAT_ID` | Telegram chat/group ID |
+| `GROQ_API_KEY` | AI chat (primary) + strategy agent |
+| `GEMINI_API_KEY` | AI chat fallback #1 |
+| `OPENROUTER_API_KEY` | AI chat fallback #2 (optional) |
 
 ---
 
 ## Supabase Schema
 
 ```sql
--- Paper trades
-CREATE TABLE IF NOT EXISTS paper_trades (
+-- Screener auto paper trades
+CREATE TABLE paper_trades (
   id            BIGSERIAL PRIMARY KEY,
   strategy      TEXT NOT NULL,
   ticker        TEXT NOT NULL,
@@ -338,13 +483,13 @@ CREATE TABLE IF NOT EXISTS paper_trades (
   exit_price    DECIMAL(12,2),
   pnl           DECIMAL(12,2),
   pnl_pct       DECIMAL(8,4),
-  status        TEXT DEFAULT 'open',  -- open/target_hit/sl_hit/expired/killed
+  status        TEXT DEFAULT 'open',  -- open | target_hit | sl_hit | expired | killed
   notes         TEXT,
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Strategy agent learnings
-CREATE TABLE IF NOT EXISTS strategy_notes (
+CREATE TABLE strategy_notes (
   strategy    TEXT PRIMARY KEY,
   insight     TEXT,
   action      TEXT,
@@ -352,8 +497,8 @@ CREATE TABLE IF NOT EXISTS strategy_notes (
   updated_at  DATE
 );
 
--- Screener cache (survived serverless restarts)
-CREATE TABLE IF NOT EXISTS screener_cache (
+-- Screener results cache (survives serverless restarts)
+CREATE TABLE screener_cache (
   strategy    TEXT NOT NULL,
   universe    TEXT NOT NULL,
   results     JSONB,
@@ -361,75 +506,34 @@ CREATE TABLE IF NOT EXISTS screener_cache (
   is_scanning BOOLEAN DEFAULT FALSE,
   PRIMARY KEY (strategy, universe)
 );
+
+-- Manual live trading journal
+CREATE TABLE journal_trades (
+  id          BIGSERIAL PRIMARY KEY,
+  ticker      TEXT NOT NULL,
+  name        TEXT,
+  quantity    INTEGER NOT NULL,
+  buy_price   DECIMAL(12,2) NOT NULL,
+  buy_date    DATE NOT NULL,
+  sell_price  DECIMAL(12,2),
+  sell_date   DATE,
+  status      TEXT DEFAULT 'open',  -- open | closed
+  notes       TEXT,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
 ```
 
 ---
 
-## GitHub Secrets
+## Architecture Notes
 
-| Secret | Status | Purpose |
-|--------|--------|---------|
-| `SUPABASE_URL` | ✅ Set | Database URL |
-| `SUPABASE_KEY` | ✅ Set | Database service key |
-| `RESEND_API_KEY` | ✅ Set | Email |
-| `REPORT_EMAIL` | ✅ Set | Recipient email |
-| `TELEGRAM_BOT_TOKEN` | ✅ Set | Bot token |
-| `TELEGRAM_CHAT_ID` | ✅ Set | Chat ID |
-| `GROQ_API_KEY` | ✅ Set | AI chat + strategy agent |
-| `GEMINI_API_KEY` | ✅ Set | AI chat fallback #1 |
-| `OPENROUTER_API_KEY` | Optional | AI chat fallback #2 |
+**NAV computation** — `/api/journal/summary` computes NAV from `buy_price × quantity` (cost basis), not live prices. This avoids sequential yFinance HTTP calls in the critical path which can exceed Vercel's 10s function timeout. Live prices are fetched separately via `/api/journal/prices` using parallel `ThreadPoolExecutor` with a 6-second total timeout.
 
----
+**Screener cache** — Results are never computed on GET. A POST `/scan` triggers a background thread that writes to Supabase. The GET always returns the last cached result plus an `is_scanning` flag. Cache TTL is 4 hours.
 
-## Tech Stack
+**Bundle caching** — All JS chunks are named `[name]-[hash]-v2.js`. The `v2` suffix ensures browsers fetch new files after any deployment, bypassing CDN/browser cache.
 
-| Layer | Technology |
-|-------|-----------|
-| Backend | FastAPI + Python 3.11, Vercel serverless |
-| Frontend | React 19 + Vite + TypeScript + Tailwind + Framer Motion |
-| Charts | TradingView lightweight-charts (OHLCV candlesticks) + Recharts (analytics) |
-| Server state | TanStack Query v5 |
-| UI state | Zustand |
-| Database | Supabase (PostgreSQL cloud) |
-| AI Chat | Groq Llama 3.3 70B → Gemini Flash → OpenRouter (cascading fallback, <9s) |
-| AI Agent | Groq + OpenRouter (tool-calling, self-improving strategy loop) |
-| Market data | yfinance (batch downloads, 500 stocks / batch) |
-| Email | Resend API |
-| Notifications | Telegram Bot API |
-| Scheduling | GitHub Actions cron |
-| Brokers | Zerodha Kite API (MCP integration) |
-
----
-
-## Developer Tooling
-
-```bash
-# Frontend quality checks
-cd dashboard
-npm run typecheck   # tsc strict typecheck (no emit)
-npm run lint        # ESLint v9 flat config (0 warnings allowed)
-npm run build       # tsc + vite production build
-
-# Backend checks
-ruff check api/          # linting
-ruff format --check api/ # formatting
-```
-
-**CI** (`.github/workflows/ci.yml`) runs automatically on every push to `main`:
-- Frontend: lint → typecheck → build
-- Backend: ruff lint → ruff format → pyright
-
-**Architecture:** See [ARCHITECTURE.md](ARCHITECTURE.md) for the full system map, data flows, and deployment guide.
-
----
-
-## Performance Notes
-
-- **Vercel hobby plan:** 10s function timeout — all endpoints designed to return in <2s
-- **Screener:** GET /results never blocks; scans run in ThreadPoolExecutor background threads
-- **AI chat:** 3-provider fallback with per-provider 5-6s timeout, total budget 8.5s
-- **Caching:** 4h in-process + Supabase persistence; stale-while-revalidate pattern
-- **yfinance batching:** 100 tickers per `yf.download()` call with `threads=True`
+For full system documentation see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
