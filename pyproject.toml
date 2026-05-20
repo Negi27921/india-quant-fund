@@ -82,6 +82,12 @@ backfill = "scripts.backfill:main"
 target-version = "py311"
 line-length = 100
 select = ["E", "F", "I", "N", "W"]
+ignore = [
+    "E221",  # multiple spaces before operator — codebase uses alignment style
+    "E241",  # multiple spaces after ',' — codebase uses alignment style
+    "N803",  # argument name should be lowercase — some external API shapes use caps
+    "N806",  # variable in function should be lowercase — pandas df ops use caps (df["Close"])
+]
 
 [tool.mypy]
 python_version = "3.11"

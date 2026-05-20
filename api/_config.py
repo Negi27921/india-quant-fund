@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 
 # ── Versioning ────────────────────────────────────────────────────────────────
-API_TITLE   = "India Quant Fund API"
+API_TITLE = "India Quant Fund API"
 API_VERSION = "2.1.0"
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
