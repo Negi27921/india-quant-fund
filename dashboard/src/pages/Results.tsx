@@ -394,7 +394,7 @@ export function ResultsPage() {
   const [sortBy, setSortBy] = useState<"time" | "rating" | "sales" | "pat">("time");
 
   const { data: apiResults, isLoading, isFetching, refetch } = useQuarterlyResults();
-  const results = apiResults ?? [];
+  const results = useMemo(() => apiResults ?? [], [apiResults]);
 
   const filtered = useMemo(() => {
     let r = results;

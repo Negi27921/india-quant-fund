@@ -604,7 +604,6 @@ export function ScreenerPage() {
   // Abort any in-flight scan when strategy/universe changes
   useEffect(() => {
     scanAbortRef.current = true;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [strategy, universe]);
 
   // Auto-trigger scan on mount only when there are no cached results at all

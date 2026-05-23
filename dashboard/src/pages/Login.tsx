@@ -275,7 +275,8 @@ function AgentStatusPanel({ theme }: { theme: Theme }) {
       }, delay);
     });
     return () => ids.forEach(clearInterval);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const dotStyle = (color: string, state: AgentState): React.CSSProperties => ({
     width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
@@ -461,7 +462,7 @@ function MatrixRainCanvas({ fadeOut }: { fadeOut: boolean }) {
 
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // stable empty-dep animation loop
 
   return (
     <canvas
@@ -522,7 +523,8 @@ function MatrixAccessOverlay({ onDone }: { onDone: () => void }) {
     const t4 = setTimeout(() => onDone(),             4500);
 
     return () => [t1, t2, t3, t4].forEach(clearTimeout);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const isGranted = phase === "granted" || phase === "fadeout";
   const fadeOut   = phase === "fadeout";
