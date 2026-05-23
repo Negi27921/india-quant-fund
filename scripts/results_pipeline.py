@@ -88,8 +88,14 @@ _BSE_HEADERS = {
 
 
 def _fetch_bse_filings(pages: int = 2) -> list[dict]:
-    """Pull recent BSE announcements (last N pages, ~20 items/page, sorted newest-first)."""
+    """
+    Pull BSE announcements (N pages, ~20 items/page, newest-first).
+    Does NOT break on a single empty page — BSE sometimes returns empty
+    pages interleaved with data, especially during off-hours.
+    Only stops after 5 consecutive empty pages (true end-of-archive signal).
+    """
     items: list[dict] = []
+    empty_streak = 0
     for page in range(1, pages + 1):
         url = (
             "https://api.bseindia.com/BseIndiaAPI/api/AnnSubCategoryGetData/w"
@@ -102,8 +108,12 @@ def _fetch_bse_filings(pages: int = 2) -> list[dict]:
                 data = json.loads(resp.read())
             batch = data.get("Table", [])
             if not batch:
-                break
-            items.extend(batch)
+                empty_streak += 1
+                if empty_streak >= 5:   # 5 consecutive empty = real end of data
+                    break
+            else:
+                empty_streak = 0
+                items.extend(batch)
         except Exception as exc:
             print(f"  [BSE] page {page} failed: {exc}")
         time.sleep(0.4)
