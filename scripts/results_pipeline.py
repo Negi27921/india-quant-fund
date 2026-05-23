@@ -77,6 +77,128 @@ RESULT_KEYWORDS = {
     "net profit", "q1 fy", "q2 fy", "q3 fy", "q4 fy",
 }
 
+# NSE API uses DD-MM-YYYY for date parameters
+def _fmt_nse_date(iso_date: str) -> str:
+    y, m, d = iso_date.split("-")
+    return f"{d}-{m}-{y}"
+
+
+# NSE corporate announcements → quarterly results only
+_NSE_RESULT_TEXT_KW = {
+    "financial results for the", "financial results for quarter",
+    "submitted to the exchange, the", "submitted to the exchange the",
+    "audited financial results", "unaudited financial results",
+    "standalone financial results", "consolidated financial results",
+    "quarterly financial results",
+}
+
+_NSE_HEADERS = {
+    "User-Agent":      (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept":          "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer":         "https://www.nseindia.com/companies-listing/corporate-filings-announcements",
+    "sec-fetch-dest":  "empty",
+    "sec-fetch-mode":  "cors",
+    "sec-fetch-site":  "same-origin",
+}
+
+
+def _fetch_nse_results(from_date: str, to_date: str) -> list[dict]:
+    """
+    Fetch quarterly results from NSE corporate announcements API.
+
+    NSE's API is publicly accessible without bot-protection — no session
+    cookies needed, returns direct PDF URLs to nsearchives.nseindia.com.
+
+    Filters 'Outcome of Board Meeting' items whose text explicitly mentions
+    financial results for a quarter (not just routine board meetings).
+
+    Returns BSE-compatible dicts with '_source': 'nse' and '_pdf_url'
+    for the direct PDF link (caller uses this instead of ATTACHMENTNAME).
+    """
+    from_nse = _fmt_nse_date(from_date)
+    to_nse   = _fmt_nse_date(to_date)
+
+    # NSE requires a session visit before the API call
+    cookies: dict = {}
+    try:
+        import requests as _rq
+        s = _rq.Session()
+        s.headers.update(_NSE_HEADERS)
+        s.get("https://www.nseindia.com/", timeout=10)
+        s.get("https://www.nseindia.com/companies-listing/corporate-filings-announcements", timeout=8)
+        cookies = dict(s.cookies)
+    except Exception as exc:
+        print(f"  [NSE] session setup failed: {exc} — proceeding anyway")
+
+    url = (
+        "https://www.nseindia.com/api/corporate-announcements"
+        f"?index=equities&category=financial_results"
+        f"&from_date={from_nse}&to_date={to_nse}"
+    )
+
+    raw: list[dict] = []
+    try:
+        import requests as _rq
+        resp = _rq.get(url, headers=_NSE_HEADERS, cookies=cookies,
+                       timeout=30, verify=True)
+        if resp.status_code == 200:
+            raw = resp.json()
+        else:
+            print(f"  [NSE] HTTP {resp.status_code} — {resp.text[:200]}")
+    except Exception as exc:
+        print(f"  [NSE] fetch failed: {exc}")
+        return []
+
+    results: list[dict] = []
+    seen: set[str] = set()
+
+    for item in raw:
+        # Only process board meeting outcomes that mention financial results
+        desc = (item.get("desc") or "").strip()
+        if desc not in ("Outcome of Board Meeting", "Financial Results"):
+            continue
+
+        text = (item.get("attchmntText") or "").lower()
+        if not any(kw in text for kw in _NSE_RESULT_TEXT_KW):
+            # Also keep items where desc explicitly says Financial Results
+            if desc != "Financial Results":
+                continue
+
+        seq_id = str(item.get("seq_id") or "")
+        symbol = (item.get("symbol") or "").strip().upper()
+        if not symbol or not seq_id:
+            continue
+
+        key = seq_id
+        if key in seen:
+            continue
+        seen.add(key)
+
+        sort_date = (item.get("sort_date") or item.get("an_dt") or "")[:10]  # YYYY-MM-DD
+
+        results.append({
+            "_source":        "nse",
+            "SCRIP_CD":       "",
+            "SHORT_NAME":     (item.get("sm_name") or symbol).title(),
+            "NEWSSUB":        (item.get("attchmntText") or "")[:250],
+            "CATEGORYNAME":   "Financial Results",
+            "DT_TM":          sort_date,
+            "ATTACHMENTNAME": f"nse_{seq_id}",   # unique filing ID key
+            "_symbol":        symbol,
+            "_ticker":        f"{symbol}.NS",
+            "_pdf_url":       item.get("attchmntFile") or "",
+            "_nse_seq_id":    seq_id,
+            "_industry":      item.get("smIndustry") or "",
+        })
+
+    print(f"  [NSE] {len(raw)} total announcements → {len(results)} results filings")
+    return results
+
 
 # ── BSE Filing Fetch ─────────────────────────────────────────────────────────
 

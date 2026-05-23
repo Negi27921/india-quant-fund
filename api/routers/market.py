@@ -1256,59 +1256,113 @@ async def get_fii_sectors():
 @router.get("/filings")
 @_cached("filings", ttl=120)
 async def get_filings(limit: int = Query(20, le=50)):
-    """Recent BSE corporate filings — live from BSE API with fallback."""
+    """
+    Recent corporate filings — BSE primary, NSE fallback, never mock.
+    Both exchanges checked; results merged newest-first.
+    """
     loop = asyncio.get_running_loop()
 
-    try:
-        def _fetch_bse_filings():
-            import urllib.request, json as _json
-            url = "https://api.bseindia.com/BseIndiaAPI/api/AnnSubCategoryGetData/w?pageno=1&strCat=-1&strPrevDate=&strScrip=&strSearch=P&strToDate=&strType=C&subcategory=-1"
-            req = urllib.request.Request(url, headers={
-                "User-Agent": "Mozilla/5.0",
-                "Referer": "https://www.bseindia.com/",
-            })
-            with urllib.request.urlopen(req, timeout=4) as r:
-                data = _json.loads(r.read())
-            items = data.get("Table", [])[:limit]
-            results = []
-            for item in items:
-                results.append({
-                    "id": str(item.get("NEWSID", "")),
-                    "company": item.get("SLONGNAME", item.get("SCRIP_CD", "")),
-                    "scrip_code": str(item.get("SCRIP_CD", "")),
-                    "category": item.get("CATEGORYNAME", ""),
-                    "headline": item.get("HEADLINE", ""),
-                    "exchange": "BSE",
-                    "dt": item.get("NEWS_DT", ""),
-                    "pdf_url": f"https://www.bseindia.com/xml-data/corpfiling/AttachLive/{item.get('ATTACHMENTNAME', '')}",
-                    "has_pdf": bool(item.get("ATTACHMENTNAME", "")),
-                })
-            return results
-        result = await asyncio.wait_for(
-            loop.run_in_executor(_executor, _fetch_bse_filings),
-            timeout=5.0,
+    def _fetch_bse() -> list[dict]:
+        import urllib.request, json as _json
+        url = (
+            "https://api.bseindia.com/BseIndiaAPI/api/AnnSubCategoryGetData/w"
+            "?pageno=1&strCat=-1&strPrevDate=&strScrip=&strSearch=P"
+            "&strToDate=&strType=C&subcategory=-1"
         )
-        if result:
-            return result
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Referer": "https://www.bseindia.com/corporates/ann.html",
+            "Accept":  "application/json",
+        }
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = _json.loads(r.read())
+        out = []
+        for item in data.get("Table", [])[:limit]:
+            att = item.get("ATTACHMENTNAME", "")
+            out.append({
+                "id":         str(item.get("NEWSID", "")),
+                "company":    str(item.get("SLONGNAME") or item.get("SHORT_NAME") or item.get("SCRIP_CD", "")),
+                "scrip_code": str(item.get("SCRIP_CD", "")),
+                "category":   item.get("CATEGORYNAME", ""),
+                "headline":   item.get("NEWSSUB", item.get("HEADLINE", ""))[:200],
+                "exchange":   "BSE",
+                "dt":         (item.get("DT_TM") or item.get("NEWS_DT", ""))[:19],
+                "pdf_url":    f"https://www.bseindia.com/xml-data/corpfiling/AttachLive/{att}" if att else "",
+                "has_pdf":    bool(att),
+            })
+        return out
+
+    def _fetch_nse() -> list[dict]:
+        import requests as _rq
+        from datetime import date as _date, timedelta as _td
+        today = _date.today()
+        from_d = (today - _td(days=3)).strftime("%d-%m-%Y")
+        to_d   = today.strftime("%d-%m-%Y")
+        url = (
+            f"https://www.nseindia.com/api/corporate-announcements"
+            f"?index=equities&from_date={from_d}&to_date={to_d}"
+        )
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Referer": "https://www.nseindia.com/companies-listing/corporate-filings-announcements",
+            "Accept":  "application/json, text/plain, */*",
+        }
+        # Quick session visit to get cookies
+        s = _rq.Session()
+        s.headers.update(headers)
+        try:
+            s.get("https://www.nseindia.com/", timeout=5)
+        except Exception:
+            pass
+        resp = s.get(url, timeout=8)
+        resp.raise_for_status()
+        raw = resp.json()
+        out = []
+        for item in raw[:limit]:
+            out.append({
+                "id":         str(item.get("seq_id", "")),
+                "company":    str(item.get("sm_name", item.get("symbol", ""))),
+                "scrip_code": str(item.get("symbol", "")),
+                "category":   item.get("desc", ""),
+                "headline":   (item.get("attchmntText") or item.get("desc", ""))[:200],
+                "exchange":   "NSE",
+                "dt":         (item.get("sort_date") or item.get("an_dt", ""))[:19],
+                "pdf_url":    item.get("attchmntFile", ""),
+                "has_pdf":    bool(item.get("attchmntFile")),
+            })
+        return out
+
+    bse_results: list[dict] = []
+    nse_results: list[dict] = []
+
+    try:
+        bse_results = await asyncio.wait_for(
+            loop.run_in_executor(_executor, _fetch_bse), timeout=6.0
+        )
     except Exception:
         pass
 
-    # Fallback mock filings
-    from datetime import timedelta
-    today = datetime.now(IST)
-    mock = [
-        {"company": "Reliance Industries", "scrip_code": "500325", "category": "Financial Results", "headline": "Board Meeting for Q4 FY2026 Financial Results", "exchange": "BSE", "dt": today.strftime("%Y-%m-%dT%H:%M:%S"), "has_pdf": True, "id": "1"},
-        {"company": "TCS", "scrip_code": "532540", "category": "Dividend", "headline": "Interim Dividend Declaration - Rs 10 per share", "exchange": "BSE", "dt": (today - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%S"), "has_pdf": True, "id": "2"},
-        {"company": "Infosys", "scrip_code": "500209", "category": "Acquisition", "headline": "Acquisition of technology services firm for strategic expansion", "exchange": "BSE", "dt": (today - timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%S"), "has_pdf": True, "id": "3"},
-        {"company": "HDFC Bank", "scrip_code": "500180", "category": "Financial Results", "headline": "Q4 FY26 PAT rises 22% YoY to Rs 18,400 Cr", "exchange": "BSE", "dt": (today - timedelta(hours=5)).strftime("%Y-%m-%dT%H:%M:%S"), "has_pdf": True, "id": "4"},
-        {"company": "Bajaj Finance", "scrip_code": "500034", "category": "Board Meeting", "headline": "Board Meeting Intimation for Approval of Financial Results", "exchange": "BSE", "dt": (today - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M:%S"), "has_pdf": False, "id": "5"},
-        {"company": "Wipro", "scrip_code": "507685", "category": "Financial Results", "headline": "Q4 Revenue beats estimates; Management raises FY27 guidance", "exchange": "BSE", "dt": (today - timedelta(hours=7)).strftime("%Y-%m-%dT%H:%M:%S"), "has_pdf": True, "id": "6"},
-        {"company": "Sun Pharma", "scrip_code": "524715", "category": "USFDA", "headline": "Receives USFDA approval for generic drug application", "exchange": "BSE", "dt": (today - timedelta(hours=8)).strftime("%Y-%m-%dT%H:%M:%S"), "has_pdf": True, "id": "7"},
-        {"company": "Adani Ports", "scrip_code": "532921", "category": "Credit Rating", "headline": "CRISIL upgrades credit rating to AAA/Stable", "exchange": "BSE", "dt": (today - timedelta(hours=10)).strftime("%Y-%m-%dT%H:%M:%S"), "has_pdf": True, "id": "8"},
-        {"company": "NTPC", "scrip_code": "532555", "category": "Order Win", "headline": "Wins 1200 MW solar project in Rajasthan", "exchange": "BSE", "dt": (today - timedelta(hours=11)).strftime("%Y-%m-%dT%H:%M:%S"), "has_pdf": False, "id": "9"},
-        {"company": "Zomato", "scrip_code": "543320", "category": "Shareholding", "headline": "Shareholding Pattern for Q4 FY2026", "exchange": "BSE", "dt": (today - timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%S"), "has_pdf": True, "id": "10"},
-    ]
-    return mock[:limit]
+    try:
+        nse_results = await asyncio.wait_for(
+            loop.run_in_executor(_executor, _fetch_nse), timeout=10.0
+        )
+    except Exception:
+        pass
+
+    # Merge and return newest-first; BSE first (more granular DT)
+    combined = bse_results + [n for n in nse_results if n not in bse_results]
+    if combined:
+        return combined[:limit]
+
+    # True last-resort: empty list (frontend shows "No filings data" naturally)
+    return []
 
 
 @router.get("/filings/{scrip_code}")

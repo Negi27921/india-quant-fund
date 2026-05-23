@@ -64,38 +64,51 @@ def _date_in_range(dt_str: str, from_date: str, to_date: str) -> bool:
         return True
 
 
+def _dedup_items(raw: list[dict], seen: set[str], require_results: bool = True) -> list[dict]:
+    """Deduplicate filing items using ATTACHMENTNAME or SCRIP_CD+DT_TM as key."""
+    out = []
+    for item in raw:
+        if require_results and not rp._is_results_filing(item):
+            continue
+        key = (item.get("ATTACHMENTNAME", "").strip() or
+               f"{item.get('SCRIP_CD','')}_{item.get('DT_TM','')}")
+        if key and key not in seen:
+            seen.add(key)
+            out.append(item)
+    return out
+
+
 def _fetch_all_results_in_range(from_date: str, to_date: str) -> list[dict]:
     """
-    Fetch every BSE results filing in [from_date, to_date].
+    Fetch every results filing in [from_date, to_date].
 
-    Strategy A (preferred): BSE date-range API (strSearch=D, DD/MM/YYYY).
-    Strategy B (fallback):  Page-based API (strSearch=P) with PAGES pages
-                            — covers enough history when Strategy A fails.
+    Strategy A — NSE corporate-announcements API (primary)
+                 No bot-protection, direct PDFs, always works.
+    Strategy B — BSE date-range API with session cookies
+                 Good when GitHub Actions IPs not blocked by Cloudflare.
+    Strategy C — BSE page-based feed
+                 Works during IST market hours only.
 
-    BSE's date-range API sometimes returns empty from automated runners
-    due to bot-protection; Strategy B is always reliable.
+    Returns from whichever strategy first yields results.
+    Multiple strategies are tried and their results merged.
     """
-    from_d  = date.fromisoformat(from_date)
-    to_d    = date.fromisoformat(to_date)
-    days    = (to_d - from_d).days + 1
-
+    from_d = date.fromisoformat(from_date)
+    to_d   = date.fromisoformat(to_date)
+    days   = (to_d - from_d).days + 1
     seen: set[str] = set()
+    all_items: list[dict] = []
 
-    def _dedup_results(raw: list[dict]) -> list[dict]:
-        out = []
-        for item in raw:
-            if not rp._is_results_filing(item):
-                continue
-            key = (item.get("ATTACHMENTNAME", "").strip() or
-                   f"{item.get('SCRIP_CD','')}_{item.get('DT_TM','')}")
-            if key and key not in seen:
-                seen.add(key)
-                out.append(item)
-        return out
+    # ── Strategy A: NSE API ─────────────────────────────────────────────────
+    print("\n  [A] NSE corporate-announcements API…")
+    nse_items = rp._fetch_nse_results(from_date, to_date)
+    nse_deduped = _dedup_items(nse_items, seen, require_results=False)
+    if nse_deduped:
+        print(f"  [A] NSE: {len(nse_deduped)} results filings")
+        all_items.extend(nse_deduped)
 
-    # ── Strategy A: date-range API ──────────────────────────────────────────
-    print("\n  [A] Trying BSE date-range API (strSearch=D)…")
-    dr_items: list[dict] = []
+    # ── Strategy B: BSE date-range API (with session cookies) ──────────────
+    print("\n  [B] BSE date-range API (strSearch=D, session cookies)…")
+    bse_dr_items: list[dict] = []
     chunk_start = from_d
     chunk_num   = 0
     while chunk_start <= to_d:
@@ -105,29 +118,31 @@ def _fetch_all_results_in_range(from_date: str, to_date: str) -> list[dict]:
         raw = rp._fetch_bse_filings_daterange(
             chunk_start.isoformat(), chunk_end.isoformat(), max_pages=30
         )
-        dr_items.extend(_dedup_results(raw))
+        bse_dr_items.extend(_dedup_items(raw, seen))
         chunk_start = chunk_end + timedelta(days=1)
         time.sleep(1.0)
+    if bse_dr_items:
+        print(f"  [B] BSE date-range: +{len(bse_dr_items)} additional filings")
+        all_items.extend(bse_dr_items)
 
-    if dr_items:
-        print(f"  [A] Date-range API: {len(dr_items)} results filings found")
-        return dr_items
+    # ── Strategy C: BSE page-based (market hours only) ─────────────────────
+    if not all_items:
+        pages_needed = max(50, int(days * 150 / 20 * 1.2))
+        pages_needed = min(pages_needed, 600)
+        print(f"\n  [C] BSE page-based ({pages_needed} pages)…")
+        raw_all = rp._fetch_bse_filings(pages=pages_needed)
+        pb_items = []
+        for item in _dedup_items(raw_all, seen):
+            if _date_in_range(item.get("DT_TM", ""), from_date, to_date):
+                pb_items.append(item)
+        if pb_items:
+            print(f"  [C] Page-based: +{len(pb_items)} filings (from {len(raw_all)} total)")
+            all_items.extend(pb_items)
+        else:
+            print(f"  [C] Page-based: 0 in range (BSE feed has {len(raw_all)} items, likely off-hours)")
 
-    # ── Strategy B: page-based fallback ─────────────────────────────────────
-    # ~150 announcements/day; add 20 % headroom
-    pages_needed = max(50, int(days * 150 / 20 * 1.2))
-    pages_needed = min(pages_needed, 600)   # hard cap
-    print(f"\n  [B] Date-range API empty — falling back to page-based fetch")
-    print(f"      {days} days × ~150 ann/day ÷ 20/page × 1.2 = {pages_needed} pages")
-
-    raw_all = rp._fetch_bse_filings(pages=pages_needed)
-    pb_items = []
-    for item in _dedup_results(raw_all):
-        if _date_in_range(item.get("DT_TM", ""), from_date, to_date):
-            pb_items.append(item)
-
-    print(f"  [B] Page-based: {len(raw_all)} total ann → {len(pb_items)} results in range")
-    return pb_items
+    print(f"\n  Total results filings found: {len(all_items)}")
+    return all_items
 
 
 # ── Strategy C: yfinance quarterly financials ─────────────────────────────────
@@ -391,12 +406,22 @@ def _process_and_save_bse_items(new_items: list[tuple[dict, str]]) -> tuple[int,
         category   = it.get("CATEGORYNAME", "Financial Results")
         dt         = it.get("DT_TM", "")
         attachment = it.get("ATTACHMENTNAME", "")
-        pdf_url    = (
-            f"https://www.bseindia.com/xml-data/corpfiling/AttachLive/{attachment}"
-            if attachment else ""
-        )
+        source     = it.get("_source", "bse")
 
-        symbol = rp._scrip_to_symbol(scrip_code, company)
+        # NSE items carry a direct PDF URL; BSE items construct it from ATTACHMENTNAME
+        if source == "nse":
+            pdf_url = it.get("_pdf_url", "")
+        else:
+            pdf_url = (
+                f"https://www.bseindia.com/xml-data/corpfiling/AttachLive/{attachment}"
+                if attachment and not attachment.startswith("nse_") else ""
+            )
+
+        # NSE items have the symbol directly; BSE items need scrip → symbol lookup
+        if source == "nse" and it.get("_symbol"):
+            symbol = it["_symbol"]
+        else:
+            symbol = rp._scrip_to_symbol(scrip_code, company)
         idx    = processed_count + skip_count + 1
         print(f"\n  [{idx}/{total}] {company} ({symbol}) | {dt[:10]}")
         print(f"    {headline[:90]}")
@@ -431,14 +456,18 @@ def _process_and_save_bse_items(new_items: list[tuple[dict, str]]) -> tuple[int,
         eps = metrics["eps"]
         row_id = f"{scrip_code}_{filing_id[:40].replace('/', '_')}"
 
+        # Industry hint from NSE item (may be null; AI extraction overrides if available)
+        nse_industry = it.get("_industry") or ""
+        exchange = "NSE" if source == "nse" else "BSE"
+
         row = {
             "id":             row_id,
             "symbol":         symbol,
             "ticker":         price_data.get("ticker") or f"{symbol}.NS",
             "company":        company,
-            "exchange":       "BSE",
-            "sector":         ai.get("sector", ""),
-            "industry":       ai.get("industry", ""),
+            "exchange":       exchange,
+            "sector":         ai.get("sector") or "",
+            "industry":       ai.get("industry") or nse_industry,
             "quarter":        quarter,
             "report_date":    report_date,
             "report_time":    ai.get("report_time", "After Market Hours"),

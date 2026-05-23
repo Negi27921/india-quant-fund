@@ -43,6 +43,41 @@ def _sb_get(path: str) -> Any:
         raise HTTPException(status_code=e.code, detail=f"Supabase: {body[:200]}")
 
 
+def _sb_get_all(path: str, page_size: int = 1000) -> list[Any]:
+    """
+    Fetch ALL rows bypassing Supabase PostgREST's default 1000-row cap.
+    Uses Range header pagination: Range: 0-999, 1000-1999, etc.
+    Stops when the response contains fewer rows than page_size.
+    """
+    if not (_SB_URL and _SB_KEY):
+        raise HTTPException(status_code=503, detail="Supabase credentials not configured")
+    all_rows: list[Any] = []
+    offset = 0
+    while True:
+        headers = {
+            **_sb_headers(),
+            "Range-Unit": "items",
+            "Range":      f"{offset}-{offset + page_size - 1}",
+            "Prefer":     "count=none",
+        }
+        req = urllib.request.Request(f"{_SB_URL}/rest/v1/{path}", headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=15) as r:
+                batch = json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            if e.code == 416:   # Range Not Satisfiable = no more rows
+                break
+            body = e.read().decode(errors="ignore")
+            raise HTTPException(status_code=e.code, detail=f"Supabase: {body[:200]}")
+        if not batch:
+            break
+        all_rows.extend(batch)
+        if len(batch) < page_size:
+            break
+        offset += page_size
+    return all_rows
+
+
 def _sb_post(path: str, body: dict, upsert: bool = False) -> Any:
     if not (_SB_URL and _SB_KEY):
         raise HTTPException(status_code=503, detail="Supabase credentials not configured")
@@ -290,13 +325,51 @@ async def delete_watchlist(watchlist_id: str) -> dict:
 
 @router.get("/{watchlist_id}/items")
 async def get_watchlist_items(watchlist_id: str) -> list[dict]:
-    """Get all stocks in a watchlist."""
+    """
+    Get all stocks in a watchlist.
+
+    Uses Range-header pagination to bypass Supabase's 1000-row default cap
+    so the Universe watchlist (2137 stocks) is returned in full.
+
+    For items with blank sector/industry, enriches from stock_universe table
+    so the industry filter chips work on the dashboard.
+    """
     try:
-        rows = _sb_get(
-            f"watchlist_items?watchlist_id=eq.{watchlist_id}"
-            f"&order=added_at.desc&select=*"
+        rows = _sb_get_all(
+            f"watchlist_items?watchlist_id=eq.{watchlist_id}&order=added_at.desc&select=*"
         )
-        return rows if isinstance(rows, list) else []
+        if not isinstance(rows, list):
+            return []
+
+        # Enrich sector/industry for items that have empty values
+        missing_sector = [r["symbol"] for r in rows
+                          if not r.get("sector") and not r.get("industry")
+                          and r.get("symbol")]
+
+        if missing_sector:
+            # Fetch universe data for these symbols in one shot (chunked for large lists)
+            sector_map: dict[str, dict] = {}
+            chunk_size = 200
+            for i in range(0, len(missing_sector), chunk_size):
+                chunk = missing_sector[i: i + chunk_size]
+                sym_filter = ",".join(chunk)
+                try:
+                    univ = _sb_get(
+                        f"stock_universe?symbol=in.({sym_filter})"
+                        f"&select=symbol,sector,industry&limit={chunk_size}"
+                    )
+                    for u in (univ if isinstance(univ, list) else []):
+                        sector_map[u["symbol"]] = u
+                except Exception:
+                    pass
+
+            for r in rows:
+                sym = r.get("symbol", "")
+                if sym in sector_map and not r.get("sector") and not r.get("industry"):
+                    r["sector"]   = sector_map[sym].get("sector") or ""
+                    r["industry"] = sector_map[sym].get("industry") or ""
+
+        return rows
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
