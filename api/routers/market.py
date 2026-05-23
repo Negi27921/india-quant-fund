@@ -1850,8 +1850,8 @@ async def get_quarterly_results():
         )
         t.start()
 
-    # 5. Static fallback while background fetch runs
-    return _qr_fallback()
+    # 5. Return empty — pipeline populates quarterly_results table in real-time
+    return []
 
 
 # ── Sparkline endpoint — 30 daily closes for hover mini-charts ─────────────────

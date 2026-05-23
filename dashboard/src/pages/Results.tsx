@@ -394,7 +394,7 @@ export function ResultsPage() {
   const [sortBy, setSortBy] = useState<"time" | "rating" | "sales" | "pat">("time");
 
   const { data: apiResults, isLoading, isFetching, refetch } = useQuarterlyResults();
-  const results = (apiResults && apiResults.length > 0) ? apiResults : SAMPLE_RESULTS;
+  const results = apiResults ?? [];
 
   const filtered = useMemo(() => {
     let r = results;
@@ -436,8 +436,8 @@ export function ResultsPage() {
               Earnings Results
             </h1>
             <p style={{ fontSize: 12, color: "var(--text-3)", fontFamily: "var(--font-body)", marginTop: 5, marginBottom: 0 }}>
-              Q4 FY26 quarterly results with AI-powered pulse rating · {results.length} results loaded
-              {!apiResults && <span style={{ color: "var(--amber)", marginLeft: 8 }}>· Demo data (connect backend for live results)</span>}
+              BSE quarterly results from May 2026 · {results.length} result{results.length !== 1 ? "s" : ""} loaded
+              {isFetching && <span style={{ color: "var(--accent)", marginLeft: 8 }}>· Refreshing…</span>}
             </p>
           </div>
 
@@ -578,6 +578,32 @@ export function ResultsPage() {
             </motion.div>
             <div style={{ fontSize: 13, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>Loading results...</div>
           </div>
+        ) : results.length === 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", gap: 14, textAlign: "center" }}>
+            <div style={{ fontSize: 44 }}>📡</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-heading)" }}>
+              Pipeline fetching live BSE results
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text-3)", fontFamily: "var(--font-body)", maxWidth: 460, lineHeight: 1.8 }}>
+              The results pipeline runs every <strong style={{ color: "var(--text-2)" }}>20 minutes</strong> during market hours (8:30 AM–6 PM IST).<br />
+              To load all results from <strong style={{ color: "var(--text-2)" }}>May 1st 2026</strong>, trigger the <strong style={{ color: "var(--accent)" }}>Backfill Results</strong> workflow in GitHub Actions.
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+              <button onClick={() => refetch()} style={{
+                padding: "9px 22px", borderRadius: 10, background: "var(--accent)", color: "#fff",
+                border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "var(--font-body)",
+              }}>
+                Check Now
+              </button>
+              <a href="https://github.com/Negi27921/one-piece/actions" target="_blank" rel="noopener noreferrer" style={{
+                padding: "9px 22px", borderRadius: 10, border: "1px solid var(--border)",
+                color: "var(--text-2)", fontSize: 12, fontWeight: 600, textDecoration: "none",
+                fontFamily: "var(--font-body)", display: "flex", alignItems: "center", gap: 6,
+              }}>
+                GitHub Actions →
+              </a>
+            </div>
+          </div>
         ) : filtered.length === 0 ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 80, gap: 12 }}>
             <div style={{ fontSize: 40 }}>📊</div>
@@ -618,192 +644,6 @@ export function ResultsPage() {
   );
 }
 
-// ── Sample data (shown when backend /api/market/quarterly-results is unavailable) ─
-const Q = ["Mar'25", "Jun'25", "Sep'25", "Dec'25", "Mar'26"] as const;
+// ── End of Results page ────────────────────────────────────────────────────────
+// SAMPLE_RESULTS removed — live data comes from BSE pipeline → quarterly_results table
 
-const SAMPLE_RESULTS: QuarterlyResult[] = [
-  {
-    id: "jkpaper_q4fy26",
-    symbol: "JKPAPER", company: "JK Paper", exchange: "NSE",
-    sector: "Paper", industry: "Paper & Paper Products",
-    quarter: "Q4 FY26", report_date: "2026-05-18", report_time: "18-May-26 20:11",
-    rating: "Excellent",
-    rating_note: "Strong beat on all fronts",
-    cmp: 372.6, market_cap: 6300, pe: 24.4,
-    currency_unit: "Cr",
-    metrics: {
-      sales:        { qoq: 15, yoy: 17, q1: 1966, q2: 1717, q3: 1677 },
-      other_income: { qoq: null, yoy: null, q1: 2, q2: 17, q3: 12 },
-      op:           { qoq: 57, yoy: 27, q1: 276, q2: 176, q3: 217 },
-      opm:          { qoq: 379, yoy: 110, q1: 14.1, q2: 10.3, q3: 13.0 },
-      pat:          { qoq: 336, yoy: 36, q1: 92, q2: 21, q3: 68 },
-      eps:          { qoq: 325, yoy: 38, q1: 5.1, q2: 1.2, q3: 3.7 },
-    },
-    insight: "Strong operating beat driven by volume recovery and price mix. Watch rising debt and stretched receivables — net debt up ₹180 Cr QoQ.",
-    revenue_trend: [1677, 1750, 1680, 1717, 1966],
-    pat_trend:     [68, 77.2, 79, 21, 92],
-    eps_trend:     [3.7, 4.3, 4.4, 1.2, 5.1],
-    quarter_labels: Q as unknown as string[],
-  },
-  {
-    id: "getd_q4fy26",
-    symbol: "GET&D", company: "GE Vernova T&D India", exchange: "NSE",
-    sector: "Capital Goods", industry: "T&D Equipment",
-    quarter: "Q4 FY26", report_date: "2026-05-18", report_time: "18-May-26 17:45",
-    rating: "Excellent",
-    rating_note: "Order book at all-time high",
-    cmp: 4427, market_cap: 113510, pe: 88.7,
-    currency_unit: "Cr",
-    metrics: {
-      sales:        { qoq: -4, yoy: 42, q1: 1637, q2: 1701, q3: 1153 },
-      other_income: { qoq: null, yoy: null, q1: 8, q2: 6, q3: 5 },
-      op:           { qoq: -2, yoy: 76, q1: 445, q2: 455, q3: 252 },
-      opm:          { qoq: 70, yoy: 630, q1: 27.2, q2: 26.7, q3: 21.9 },
-      pat:          { qoq: 21, yoy: 86, q1: 352, q2: 291, q3: 186 },
-      eps:          { qoq: 21, yoy: 89, q1: 13.74, q2: 11.36, q3: 7.28 },
-    },
-    insight: "Structural re-rating story intact. T&D capex tailwind strong with ₹9L Cr national grid investment. Margins at record high; order book ₹18,400 Cr.",
-    revenue_trend: [1153, 1280, 1450, 1701, 1637],
-    pat_trend:     [186, 210, 240, 291, 352],
-    eps_trend:     [7.28, 8.2, 9.4, 11.36, 13.74],
-    quarter_labels: Q as unknown as string[],
-  },
-  {
-    id: "dixon_q4fy26",
-    symbol: "DIXON", company: "Dixon Technologies", exchange: "NSE",
-    sector: "Electronics", industry: "Consumer Durable - Electronic",
-    quarter: "Q4 FY26", report_date: "2026-05-16", report_time: "16-May-26 19:00",
-    rating: "Great",
-    rating_note: "Revenue doubled YoY on PLI-led scale-up",
-    cmp: 18540, market_cap: 110000, pe: 148.2,
-    currency_unit: "Cr",
-    metrics: {
-      sales:        { qoq: 12, yoy: 98, q1: 8840, q2: 7890, q3: 4461 },
-      other_income: { qoq: null, yoy: null, q1: 18, q2: 22, q3: 14 },
-      op:           { qoq: 18, yoy: 82, q1: 292, q2: 248, q3: 160 },
-      opm:          { qoq: 18, yoy: -80, q1: 3.3, q2: 3.1, q3: 3.6 },
-      pat:          { qoq: 24, yoy: 92, q1: 202, q2: 163, q3: 105 },
-      eps:          { qoq: 24, yoy: 90, q1: 33.8, q2: 27.3, q3: 17.8 },
-    },
-    insight: "Volume-driven revenue surge from smartphone PLI. Margin compress is expected at this scale — focus shifts to absolute EBITDA trajectory.",
-    revenue_trend: [4461, 5200, 7120, 7890, 8840],
-    pat_trend:     [105, 120, 145, 163, 202],
-    eps_trend:     [17.8, 20.1, 24.3, 27.3, 33.8],
-    quarter_labels: Q as unknown as string[],
-  },
-  {
-    id: "hdfcbank_q4fy26",
-    symbol: "HDFCBANK", company: "HDFC Bank", exchange: "NSE",
-    sector: "Financial Services", industry: "Banks - Private",
-    quarter: "Q4 FY26", report_date: "2026-04-19", report_time: "19-Apr-26 16:30",
-    rating: "Good",
-    rating_note: "Stable NIM, loan growth recovering",
-    cmp: 1918, market_cap: 1460000, pe: 18.2,
-    currency_unit: "Cr",
-    metrics: {
-      sales:        { qoq: 3, yoy: 9, q1: 34910, q2: 33907, q3: 32070 },
-      other_income: { qoq: null, yoy: null, q1: 12400, q2: 11800, q3: 11200 },
-      op:           { qoq: 4, yoy: 11, q1: 22640, q2: 21750, q3: 20390 },
-      opm:          { qoq: 30, yoy: 40, q1: 64.9, q2: 64.2, q3: 63.6 },
-      pat:          { qoq: 2, yoy: 7, q1: 17616, q2: 17260, q3: 16510 },
-      eps:          { qoq: 2, yoy: 7, q1: 23.1, q2: 22.6, q3: 21.6 },
-    },
-    insight: "Steady as she goes. Loan growth at 7% YoY — below system average. NIM stable at 3.46%. CD ratio normalising, credit costs benign. Dividend ₹22/share.",
-    revenue_trend: [32070, 32900, 33400, 33907, 34910],
-    pat_trend:     [16510, 16736, 17026, 17260, 17616],
-    eps_trend:     [21.6, 21.9, 22.3, 22.6, 23.1],
-    quarter_labels: Q as unknown as string[],
-  },
-  {
-    id: "rvnl_q4fy26",
-    symbol: "RVNL", company: "Rail Vikas Nigam", exchange: "NSE",
-    sector: "Industrials", industry: "Civil Construction",
-    quarter: "Q4 FY26", report_date: "2026-05-14", report_time: "14-May-26 20:00",
-    rating: "Great",
-    rating_note: "Order book at ₹85,000 Cr; execution ramp",
-    cmp: 447, market_cap: 23400, pe: 34.1,
-    currency_unit: "Cr",
-    metrics: {
-      sales:        { qoq: 22, yoy: 28, q1: 6840, q2: 5610, q3: 5344 },
-      other_income: { qoq: null, yoy: null, q1: 42, q2: 38, q3: 31 },
-      op:           { qoq: 24, yoy: 30, q1: 362, q2: 292, q3: 278 },
-      opm:          { qoq: 10, yoy: 10, q1: 5.3, q2: 5.2, q3: 5.2 },
-      pat:          { qoq: 18, yoy: 22, q1: 318, q2: 270, q3: 260 },
-      eps:          { qoq: 18, yoy: 22, q1: 6.1, q2: 5.2, q3: 5.0 },
-    },
-    insight: "Kavach deployment adding top-line momentum. Record order inflow from metros + dedicated freight corridor. On track for 25% revenue CAGR over FY27-28.",
-    revenue_trend: [5344, 5100, 5800, 5610, 6840],
-    pat_trend:     [260, 250, 280, 270, 318],
-    eps_trend:     [5.0, 4.8, 5.4, 5.2, 6.1],
-    quarter_labels: Q as unknown as string[],
-  },
-  {
-    id: "zomato_q4fy26",
-    symbol: "ZOMATO", company: "Zomato (Eternal)", exchange: "NSE",
-    sector: "Consumer", industry: "Internet & E-Commerce",
-    quarter: "Q4 FY26", report_date: "2026-05-13", report_time: "13-May-26 17:15",
-    rating: "Good",
-    rating_note: "Profitability established; Blinkit scaling fast",
-    cmp: 242, market_cap: 214000, pe: 96.4,
-    currency_unit: "Cr",
-    metrics: {
-      sales:        { qoq: 9, yoy: 64, q1: 5833, q2: 5352, q3: 3562 },
-      other_income: { qoq: null, yoy: null, q1: 210, q2: 195, q3: 180 },
-      op:           { qoq: 15, yoy: null, q1: 188, q2: 163, q3: -142 },
-      opm:          { qoq: 50, yoy: 600, q1: 3.2, q2: 3.0, q3: -4.0 },
-      pat:          { qoq: 18, yoy: null, q1: 268, q2: 226, q3: -188 },
-      eps:          { qoq: 18, yoy: null, q1: 0.30, q2: 0.25, q3: -0.21 },
-    },
-    insight: "Maiden sustained profitability across food + quick commerce. Blinkit GOV at ₹9,400 Cr/qtr growing 95% YoY. Unit economics improving with scale.",
-    revenue_trend: [3562, 4206, 4799, 5352, 5833],
-    pat_trend:     [-188, -60, 176, 226, 268],
-    eps_trend:     [-0.21, -0.07, 0.20, 0.25, 0.30],
-    quarter_labels: Q as unknown as string[],
-  },
-  {
-    id: "tatamotors_q4fy26",
-    symbol: "TATAMOTORS", company: "Tata Motors", exchange: "NSE",
-    sector: "Auto", industry: "Automobiles",
-    quarter: "Q4 FY26", report_date: "2026-05-08", report_time: "08-May-26 16:00",
-    rating: "Ok",
-    rating_note: "JLR margin pressure; EV ramp costs",
-    cmp: 724, market_cap: 265000, pe: 9.1,
-    currency_unit: "Cr",
-    metrics: {
-      sales:        { qoq: -6, yoy: 4, q1: 119086, q2: 126620, q3: 114413 },
-      other_income: { qoq: null, yoy: null, q1: 890, q2: 940, q3: 820 },
-      op:           { qoq: -12, yoy: -8, q1: 14640, q2: 16610, q3: 15920 },
-      opm:          { qoq: -80, yoy: -160, q1: 12.3, q2: 13.1, q3: 13.9 },
-      pat:          { qoq: -21, yoy: -15, q1: 8536, q2: 10779, q3: 10124 },
-      eps:          { qoq: -21, yoy: -15, q1: 23.1, q2: 29.2, q3: 27.4 },
-    },
-    insight: "JLR demand moderating in key UK/EU markets with macro headwinds. India CV business showing early-cycle slowdown. FY27 outlook cautious — watch JLR volume guidance.",
-    revenue_trend: [114413, 108924, 112455, 126620, 119086],
-    pat_trend:     [10124, 7506, 8469, 10779, 8536],
-    eps_trend:     [27.4, 20.3, 22.9, 29.2, 23.1],
-    quarter_labels: Q as unknown as string[],
-  },
-  {
-    id: "paytm_q4fy26",
-    symbol: "PAYTM", company: "One97 Communications", exchange: "NSE",
-    sector: "Financial Services", industry: "Fintech",
-    quarter: "Q4 FY26", report_date: "2026-05-06", report_time: "06-May-26 18:30",
-    rating: "Weak",
-    rating_note: "Revenue decline; path to profitability unclear",
-    cmp: 812, market_cap: 51800, pe: null,
-    currency_unit: "Cr",
-    metrics: {
-      sales:        { qoq: -8, yoy: -22, q1: 1544, q2: 1679, q3: 1981 },
-      other_income: { qoq: null, yoy: null, q1: 62, q2: 58, q3: 71 },
-      op:           { qoq: -18, yoy: -41, q1: -122, q2: -100, q3: -208 },
-      opm:          { qoq: -80, yoy: -290, q1: -7.9, q2: -5.9, q3: -10.5 },
-      pat:          { qoq: -22, yoy: -38, q1: -568, q2: -462, q3: -916 },
-      eps:          { qoq: -22, yoy: -38, q1: -8.9, q2: -7.2, q3: -14.4 },
-    },
-    insight: "Revenue erosion accelerating post-RBI restrictions on Paytm Payments Bank. Merchant subscriber base declining. Cost rationalisation underway but inadequate to offset top-line pressure.",
-    revenue_trend: [1981, 1836, 1660, 1679, 1544],
-    pat_trend:     [-916, -780, -620, -462, -568],
-    eps_trend:     [-14.4, -12.2, -9.7, -7.2, -8.9],
-    quarter_labels: Q as unknown as string[],
-  },
-];

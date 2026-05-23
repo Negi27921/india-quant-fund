@@ -1,0 +1,59 @@
+name: Backfill Results
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_date:
+        description: "Start date (YYYY-MM-DD)"
+        required: false
+        default: "2026-05-01"
+      to_date:
+        description: "End date (YYYY-MM-DD, blank = today)"
+        required: false
+        default: ""
+      max_process:
+        description: "Max filings to process per run"
+        required: false
+        default: "60"
+      seed_universe:
+        description: "Also seed Universe watchlist from full_universe.py?"
+        required: false
+        default: "true"
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Seed Universe Watchlist
+        if: ${{ github.event.inputs.seed_universe == 'true' }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python scripts/seed_universe_watchlist.py
+
+      - name: Run Backfill
+        env:
+          SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:       ${{ secrets.SUPABASE_KEY }}
+          NVIDIA_API_KEY:     ${{ secrets.NVIDIA_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          FROM_DATE:          ${{ github.event.inputs.from_date }}
+          TO_DATE:            ${{ github.event.inputs.to_date }}
+          MAX_PROCESS:        ${{ github.event.inputs.max_process }}
+          BSE_PAGES:          "20"
+        run: python scripts/backfill_results.py
