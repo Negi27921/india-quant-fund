@@ -798,7 +798,7 @@ def _auto_watchlist_add(symbol: str, ticker: str, company: str, rating: str,
             "sector":            sector,
             "industry":          industry,
         }
-        url = f"{SUPABASE_URL}/rest/v1/watchlist_items"
+        url = f"{SUPABASE_URL}/rest/v1/watchlist_items?on_conflict=watchlist_id,symbol"
         data = json.dumps(item, default=str).encode()
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
         try:

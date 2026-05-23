@@ -33,8 +33,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import scripts.results_pipeline as rp
 
 # ── Config ────────────────────────────────────────────────────────────────────
-FROM_DATE        = os.getenv("FROM_DATE", "2026-05-01")
-TO_DATE          = os.getenv("TO_DATE",   date.today().isoformat())
+FROM_DATE        = os.getenv("FROM_DATE", "").strip() or "2026-05-01"
+TO_DATE          = os.getenv("TO_DATE",   "").strip() or date.today().isoformat()
 MAX_PROCESS      = int(os.getenv("MAX_PROCESS",      "100"))
 WEEK_CHUNK_DAYS  = int(os.getenv("WEEK_CHUNK_DAYS",  "7"))
 

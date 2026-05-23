@@ -309,7 +309,7 @@ async def add_watchlist_item(watchlist_id: str, body: AddItemRequest) -> dict:
         raise HTTPException(status_code=400, detail="Invalid symbol")
     try:
         result = _sb_post(
-            "watchlist_items",
+            "watchlist_items?on_conflict=watchlist_id,symbol",
             {
                 "watchlist_id": watchlist_id,
                 "symbol": symbol,
