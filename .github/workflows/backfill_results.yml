@@ -66,7 +66,11 @@ jobs:
           SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY:       ${{ secrets.SUPABASE_KEY }}
           NVIDIA_API_KEY:     ${{ secrets.NVIDIA_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          NVIDIA_MODEL:       ${{ secrets.NVIDIA_MODEL }}
+          GROQ_API_KEY:       ${{ secrets.GROQ_API_KEY }}
+          GROQ_MODEL:         ${{ secrets.GROQ_MODEL }}
+          GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL:       ${{ secrets.GEMINI_MODEL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
           FROM_DATE:          ${{ github.event.inputs.from_date || '' }}

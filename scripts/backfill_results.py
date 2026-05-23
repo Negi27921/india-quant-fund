@@ -594,11 +594,13 @@ def main() -> None:
     total_saved   = 0
     total_skipped = 0
 
-    # ── Strategies A + B: BSE API ─────────────────────────────────────────────
+    has_llm = bool(rp.NVIDIA_API_KEY or rp.GROQ_API_KEY or rp.GEMINI_API_KEY)
+
+    # ── Strategies A + B + C: NSE/BSE API ────────────────────────────────────
     if not USE_YFINANCE:
-        if not rp.NVIDIA_API_KEY and not rp.OPENROUTER_KEY:
-            print("\nWARNING: No LLM key set — BSE strategies require AI for extraction.")
-            print("         Skipping A+B and going straight to Strategy C (yfinance).")
+        if not has_llm:
+            print("\nWARNING: No LLM key set — BSE/NSE strategies require AI for extraction.")
+            print("         Skipping A/B/C and going straight to Strategy D (yfinance).")
         else:
             print("\n[1] Fetching BSE results filings in date range…")
             results_items = _fetch_all_results_in_range(FROM_DATE, TO_DATE)
@@ -623,9 +625,9 @@ def main() -> None:
                     if remaining:
                         print(f"\n  {remaining} filings still pending — re-trigger workflow to continue")
             else:
-                print("\n  BSE A+B returned 0 results — falling through to Strategy C (yfinance).")
+                print("\n  NSE/BSE strategies returned 0 results — falling through to yfinance.")
 
-    # ── Strategy C: yfinance (runs when BSE fails OR USE_YFINANCE=true) ────────
+    # ── Strategy D: yfinance (runs when A/B/C fail OR USE_YFINANCE=true) ──────
     if USE_YFINANCE or total_saved == 0:
         print("\n[C] Strategy C: yfinance quarterly financials…")
         yf_items = _fetch_yfinance_results(FROM_DATE, TO_DATE,

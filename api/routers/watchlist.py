@@ -141,7 +141,9 @@ class AnalyseRequest(BaseModel):
     history: list[dict] | None = None
 
 
-# ── NIM DeepSeek R1 ───────────────────────────────────────────────────────────
+# ── LLM config ────────────────────────────────────────────────────────────────
+# Fallback chain: NVIDIA NIM → Groq → Gemini
+# All providers use the OpenAI-compatible chat-completions format.
 
 _WL_SYSTEM = """You are the One Piece Quant Analyst — an expert in Indian equity markets (NSE/BSE).
 You analyse stocks for Indian retail investors using fundamental data, quarterly results, and technical context.
@@ -157,37 +159,102 @@ Rules:
 """
 
 
-def _nim_analyse(symbol: str, question: str, context: str, history: list[dict] | None) -> str:
-    import requests as _req
-    key = os.getenv("NVIDIA_API_KEY", "").strip()
-    if not key:
-        raise ValueError("NVIDIA_API_KEY not set")
-    model = os.getenv("NVIDIA_MODEL", "deepseek-ai/deepseek-r1").strip()
+def _strip_think(text: str) -> str:
+    """Remove <think>…</think> reasoning blocks (DeepSeek R1 / NIM artefact)."""
+    if "<think>" in text and "</think>" in text:
+        after = text.split("</think>", 1)[-1].strip()
+        if after:
+            return after
+    return text
 
+
+def _openai_compat_call(endpoint: str, api_key: str, model: str,
+                         messages: list[dict], max_tokens: int = 900,
+                         temperature: float = 0.3, timeout: int = 25) -> str:
+    """
+    Call any OpenAI-compatible chat-completions endpoint.
+    Returns the assistant reply text.
+    Raises on HTTP error or missing content.
+    """
+    import requests as _req
+    r = _req.post(
+        endpoint,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type":  "application/json",
+            "Accept":        "application/json",
+        },
+        json={
+            "model":       model,
+            "messages":    messages,
+            "temperature": temperature,
+            "max_tokens":  max_tokens,
+            "stream":      False,
+        },
+        timeout=timeout,
+    )
+    r.raise_for_status()
+    return r.json()["choices"][0]["message"]["content"]
+
+
+def _analyse_with_fallback(symbol: str, question: str,
+                            context: str, history: list[dict] | None) -> str:
+    """
+    Try NVIDIA NIM → Groq → Gemini in order.
+    Returns the first successful response or raises if all providers fail.
+    """
     user_msg = f"Stock: {symbol}\n\n{context}\n\nQuestion: {question}"
     messages: list[dict] = [{"role": "system", "content": _WL_SYSTEM}]
     if history:
-        for turn in history[-6:]:  # keep last 6 turns for context
-            messages.append({"role": turn.get("role", "user"), "content": str(turn.get("content", ""))})
+        for turn in history[-6:]:
+            messages.append({
+                "role":    turn.get("role", "user"),
+                "content": str(turn.get("content", "")),
+            })
     messages.append({"role": "user", "content": user_msg})
 
-    r = _req.post(
-        "https://integrate.api.nvidia.com/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-        json={"model": model, "messages": messages, "temperature": 0.3, "max_tokens": 900, "stream": False},
-        timeout=20,
-    )
-    r.raise_for_status()
-    content = r.json()["choices"][0]["message"]["content"]
-    if "<think>" in content and "</think>" in content:
-        after = content.split("</think>", 1)[-1].strip()
-        if after:
-            content = after
-    return content
+    errors: list[str] = []
+
+    # ── 1. NVIDIA NIM ────────────────────────────────────────────────────────
+    nim_key = os.getenv("NVIDIA_API_KEY", "").strip()
+    nim_model = os.getenv("NVIDIA_MODEL", "meta/llama-3.1-70b-instruct").strip()
+    if nim_key:
+        try:
+            raw = _openai_compat_call(
+                "https://integrate.api.nvidia.com/v1/chat/completions",
+                nim_key, nim_model, messages, timeout=25,
+            )
+            return _strip_think(raw)
+        except Exception as exc:
+            errors.append(f"NIM({nim_model}): {exc}")
+
+    # ── 2. Groq — llama-3.3-70b-versatile ───────────────────────────────────
+    groq_key   = os.getenv("GROQ_API_KEY", "").strip()
+    groq_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
+    if groq_key:
+        try:
+            raw = _openai_compat_call(
+                "https://api.groq.com/openai/v1/chat/completions",
+                groq_key, groq_model, messages, timeout=20,
+            )
+            return _strip_think(raw)
+        except Exception as exc:
+            errors.append(f"Groq({groq_model}): {exc}")
+
+    # ── 3. Gemini — gemini-2.5-flash (OpenAI-compatible endpoint) ───────────
+    gemini_key   = os.getenv("GEMINI_API_KEY", "").strip()
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+    if gemini_key:
+        try:
+            raw = _openai_compat_call(
+                "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+                gemini_key, gemini_model, messages, timeout=30,
+            )
+            return _strip_think(raw)
+        except Exception as exc:
+            errors.append(f"Gemini({gemini_model}): {exc}")
+
+    raise ValueError(f"All LLM providers failed: {'; '.join(errors)}")
 
 
 def _build_stock_context(symbol: str) -> str:
@@ -426,9 +493,19 @@ async def analyse_stock(body: AnalyseRequest) -> dict:
 
     try:
         reply = await loop.run_in_executor(
-            _executor, _nim_analyse, symbol, body.question, context, body.history
+            _executor, _analyse_with_fallback, symbol, body.question, context, body.history
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AI error: {e}")
 
-    return {"symbol": symbol, "response": reply, "provider": "nvidia-nim/deepseek-r1"}
+    # Report which provider actually answered (first key found in env)
+    nim_key   = os.getenv("NVIDIA_API_KEY", "").strip()
+    groq_key  = os.getenv("GROQ_API_KEY", "").strip()
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+    provider = (
+        f"nvidia-nim/{os.getenv('NVIDIA_MODEL','meta/llama-3.1-70b-instruct')}" if nim_key else
+        f"groq/{os.getenv('GROQ_MODEL','llama-3.3-70b-versatile')}"             if groq_key else
+        f"gemini/{os.getenv('GEMINI_MODEL','gemini-2.5-flash')}"                if gemini_key else
+        "unknown"
+    )
+    return {"symbol": symbol, "response": reply, "provider": provider}

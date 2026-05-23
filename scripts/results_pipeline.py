@@ -46,19 +46,21 @@ from datetime import datetime, timezone
 from io import BytesIO
 
 # ── Config ──────────────────────────────────────────────────────────────────
-SUPABASE_URL    = os.getenv("SUPABASE_URL", "").strip()
-SUPABASE_KEY    = os.getenv("SUPABASE_KEY", "").strip()
-NVIDIA_API_KEY  = os.getenv("NVIDIA_API_KEY", "").strip()        # primary
-OPENROUTER_KEY  = os.getenv("OPENROUTER_API_KEY", "").strip()    # fallback
+SUPABASE_URL    = os.getenv("SUPABASE_URL",    "").strip()
+SUPABASE_KEY    = os.getenv("SUPABASE_KEY",    "").strip()
+NVIDIA_API_KEY  = os.getenv("NVIDIA_API_KEY",  "").strip()
+GROQ_API_KEY    = os.getenv("GROQ_API_KEY",    "").strip()
+GEMINI_API_KEY  = os.getenv("GEMINI_API_KEY",  "").strip()
 TG_TOKEN        = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-TG_CHAT_ID      = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+TG_CHAT_ID      = os.getenv("TELEGRAM_CHAT_ID",   "").strip()
 
-# NVIDIA NIM — DeepSeek R1 (reasoning, best for structured financial extraction)
-NIM_MODEL       = "deepseek-ai/deepseek-r1"
+# LLM providers — fallback chain: NIM → Groq → Gemini
+NIM_MODEL       = os.getenv("NVIDIA_MODEL", "meta/llama-3.1-70b-instruct").strip()
 NIM_ENDPOINT    = "https://integrate.api.nvidia.com/v1/chat/completions"
-# Fallback via OpenRouter
-OR_MODEL        = "deepseek/deepseek-chat"
-OR_ENDPOINT     = "https://openrouter.ai/api/v1/chat/completions"
+GROQ_MODEL      = os.getenv("GROQ_MODEL",   "llama-3.3-70b-versatile").strip()
+GROQ_ENDPOINT   = "https://api.groq.com/openai/v1/chat/completions"
+GEMINI_MODEL    = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 
 DASHBOARD_URL   = "https://luffy-labs.vercel.app"
 
@@ -403,10 +405,10 @@ def _extract_pdf_text(pdf_url: str, max_chars: int = 4000) -> str:
         return ""
 
 
-# ── DeepSeek R1 via NVIDIA NIM (+ OpenRouter fallback) ───────────────────────
+# ── LLM extraction — NIM → Groq → Gemini ─────────────────────────────────────
 
 _SYSTEM = (
-    "You are a senior Indian equity analyst. Extract financial results from BSE filing data. "
+    "You are a senior Indian equity analyst. Extract financial results from BSE/NSE filing data. "
     "Return ONLY a valid JSON object — no markdown, no explanation, no code fences. "
     "For numbers in the PDF, use Crores (Cr) as the unit. "
     "If the PDF uses Lakhs, divide by 100 to convert to Crores."
@@ -460,9 +462,46 @@ Return ONLY this JSON (no extra text, no markdown fences):
 """
 
 
+def _clean_json_response(raw: str) -> str:
+    """Strip <think> blocks and markdown fences; return clean JSON string."""
+    raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+    raw = re.sub(r"^```[a-z]*\n?", "", raw)
+    raw = re.sub(r"\n?```$", "", raw).strip()
+    return raw
+
+
+def _llm_post(endpoint: str, api_key: str, model: str,
+              messages: list[dict], max_tokens: int = 1024) -> str:
+    """POST to any OpenAI-compatible endpoint. Returns raw content string."""
+    import urllib.request as _ur
+    payload = json.dumps({
+        "model":       model,
+        "messages":    messages,
+        "max_tokens":  max_tokens,
+        "temperature": 0.1,
+        "stream":      False,
+    }).encode()
+    req = _ur.Request(
+        endpoint,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type":  "application/json",
+            "Accept":        "application/json",
+        },
+        method="POST",
+    )
+    with _ur.urlopen(req, timeout=45) as resp:
+        return json.loads(resp.read())["choices"][0]["message"]["content"]
+
+
 def _call_nim_deepseek(company: str, scrip_code: str, dt: str,
                         category: str, headline: str, pdf_text: str) -> dict | None:
-    """Call NVIDIA NIM DeepSeek R1 (primary), fall back to OpenRouter DeepSeek-V3."""
+    """
+    Extract structured financial results JSON from a filing.
+    Tries NVIDIA NIM → Groq → Gemini in order.
+    Returns parsed dict or None if all providers fail.
+    """
     pdf_section = (
         f"\nPDF Extract ({len(pdf_text)} chars):\n{pdf_text}\n"
         if pdf_text else ""
@@ -476,68 +515,29 @@ def _call_nim_deepseek(company: str, scrip_code: str, dt: str,
         {"role": "user",   "content": prompt},
     ]
 
-    # ── Try NVIDIA NIM first ──────────────────────────────────────────────────
+    providers = []
     if NVIDIA_API_KEY:
-        print("    Using NVIDIA NIM — DeepSeek R1")
-        payload = {
-            "model": NIM_MODEL,
-            "messages": messages,
-            "max_tokens": 1024,
-            "temperature": 0.1,
-            "stream": False,
-        }
-        req = urllib.request.Request(
-            NIM_ENDPOINT,
-            data=json.dumps(payload).encode(),
-            headers={
-                "Authorization": f"Bearer {NVIDIA_API_KEY}",
-                "Content-Type":  "application/json",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=45) as resp:
-                data = json.loads(resp.read())
-            raw = data["choices"][0]["message"]["content"].strip()
-            # DeepSeek R1 wraps reasoning in <think>…</think> — strip it
-            raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
-            raw = re.sub(r"^```[a-z]*\n?", "", raw)
-            raw = re.sub(r"\n?```$", "", raw).strip()
-            return json.loads(raw)
-        except Exception as exc:
-            print(f"    [NIM] failed: {exc} — falling back to OpenRouter")
+        providers.append(("NIM",    NIM_ENDPOINT,    NVIDIA_API_KEY, NIM_MODEL))
+    if GROQ_API_KEY:
+        providers.append(("Groq",   GROQ_ENDPOINT,   GROQ_API_KEY,   GROQ_MODEL))
+    if GEMINI_API_KEY:
+        providers.append(("Gemini", GEMINI_ENDPOINT, GEMINI_API_KEY, GEMINI_MODEL))
 
-    # ── Fallback: OpenRouter DeepSeek-V3 ─────────────────────────────────────
-    if OPENROUTER_KEY:
-        print("    Using OpenRouter — DeepSeek-V3")
-        payload = {
-            "model": OR_MODEL,
-            "messages": messages,
-            "max_tokens": 900,
-            "temperature": 0.1,
-        }
-        req = urllib.request.Request(
-            OR_ENDPOINT,
-            data=json.dumps(payload).encode(),
-            headers={
-                "Authorization": f"Bearer {OPENROUTER_KEY}",
-                "Content-Type":  "application/json",
-                "HTTP-Referer":  DASHBOARD_URL,
-                "X-Title":       "One Piece Quant — Results Pipeline",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.loads(resp.read())
-            raw = data["choices"][0]["message"]["content"].strip()
-            raw = re.sub(r"^```[a-z]*\n?", "", raw)
-            raw = re.sub(r"\n?```$", "", raw).strip()
-            return json.loads(raw)
-        except Exception as exc:
-            print(f"    [OpenRouter] failed: {exc}")
+    if not providers:
+        print("    No LLM key available — skipping extraction")
+        return None
 
-    print("    No AI key available — skipping extraction")
+    for name, endpoint, key, model in providers:
+        print(f"    [{name}] {model}")
+        try:
+            raw = _llm_post(endpoint, key, model, messages)
+            return json.loads(_clean_json_response(raw))
+        except json.JSONDecodeError as exc:
+            print(f"    [{name}] JSON parse failed: {exc}")
+        except Exception as exc:
+            print(f"    [{name}] failed: {exc}")
+
+    print("    All LLM providers failed — skipping")
     return None
 
 
