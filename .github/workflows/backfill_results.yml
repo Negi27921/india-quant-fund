@@ -8,22 +8,26 @@ on:
         required: false
         default: "2026-05-01"
       to_date:
-        description: "End date (YYYY-MM-DD, blank = today)"
+        description: "End date (YYYY-MM-DD, leave blank for today)"
         required: false
         default: ""
       max_process:
-        description: "Max filings to process per run"
+        description: "Max filings to process this run (100 = ~2.5 hrs)"
         required: false
-        default: "60"
+        default: "100"
       seed_universe:
-        description: "Also seed Universe watchlist from full_universe.py?"
+        description: "Seed Universe watchlist from full_universe.py? (true/false)"
         required: false
         default: "true"
+      week_chunk_days:
+        description: "Days per BSE API chunk (7 = weekly, 3 = finer)"
+        required: false
+        default: "7"
 
 jobs:
   backfill:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180   # 3 hrs for large historical runs
 
     steps:
       - uses: actions/checkout@v4
@@ -35,8 +39,9 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install yfinance pdfminer.six requests
 
+      # ── Universe seed ──────────────────────────────────────────────────────────
       - name: Seed Universe Watchlist
         if: ${{ github.event.inputs.seed_universe == 'true' }}
         env:
@@ -44,6 +49,7 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: python scripts/seed_universe_watchlist.py
 
+      # ── Historical results backfill ────────────────────────────────────────────
       - name: Run Backfill
         env:
           SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
@@ -55,5 +61,5 @@ jobs:
           FROM_DATE:          ${{ github.event.inputs.from_date }}
           TO_DATE:            ${{ github.event.inputs.to_date }}
           MAX_PROCESS:        ${{ github.event.inputs.max_process }}
-          BSE_PAGES:          "20"
+          WEEK_CHUNK_DAYS:    ${{ github.event.inputs.week_chunk_days }}
         run: python scripts/backfill_results.py

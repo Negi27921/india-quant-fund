@@ -33,15 +33,19 @@ def _sb_headers() -> dict[str, str]:
 
 def _sb_get(path: str) -> Any:
     if not (_SB_URL and _SB_KEY):
-        return []
+        raise HTTPException(status_code=503, detail="Supabase credentials not configured")
     req = urllib.request.Request(f"{_SB_URL}/rest/v1/{path}", headers=_sb_headers())
-    with urllib.request.urlopen(req, timeout=8) as r:
-        return json.loads(r.read())
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors="ignore")
+        raise HTTPException(status_code=e.code, detail=f"Supabase: {body[:200]}")
 
 
 def _sb_post(path: str, body: dict, upsert: bool = False) -> Any:
     if not (_SB_URL and _SB_KEY):
-        return {}
+        raise HTTPException(status_code=503, detail="Supabase credentials not configured")
     headers = _sb_headers()
     if upsert:
         headers["Prefer"] = "resolution=merge-duplicates,return=representation"
@@ -49,19 +53,27 @@ def _sb_post(path: str, body: dict, upsert: bool = False) -> Any:
     req = urllib.request.Request(
         f"{_SB_URL}/rest/v1/{path}", data=data, headers=headers, method="POST"
     )
-    with urllib.request.urlopen(req, timeout=8) as r:
-        resp = r.read()
-        return json.loads(resp) if resp else {}
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            resp = r.read()
+            return json.loads(resp) if resp else {}
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors="ignore")
+        raise HTTPException(status_code=e.code, detail=f"Supabase: {body[:200]}")
 
 
 def _sb_delete(path: str) -> None:
     if not (_SB_URL and _SB_KEY):
-        return
+        raise HTTPException(status_code=503, detail="Supabase credentials not configured")
     req = urllib.request.Request(
         f"{_SB_URL}/rest/v1/{path}", headers=_sb_headers(), method="DELETE"
     )
-    with urllib.request.urlopen(req, timeout=8):
-        pass
+    try:
+        with urllib.request.urlopen(req, timeout=10):
+            pass
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors="ignore")
+        raise HTTPException(status_code=e.code, detail=f"Supabase: {body[:200]}")
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
@@ -217,14 +229,27 @@ def _build_stock_context(symbol: str) -> str:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+@router.get("/health")
+async def watchlist_health() -> dict:
+    """Quick DB connectivity check — useful for diagnosing blank watchlist page."""
+    if not (_SB_URL and _SB_KEY):
+        return {"ok": False, "error": "SUPABASE_URL or SUPABASE_KEY not set in env"}
+    try:
+        rows = _sb_get("watchlists?select=id,name,type&order=created_at.asc")
+        return {
+            "ok":         True,
+            "watchlists": len(rows) if isinstance(rows, list) else 0,
+            "names":      [r.get("name") for r in rows] if isinstance(rows, list) else [],
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 @router.get("")
 async def list_watchlists() -> list[dict]:
     """List all watchlists ordered by created_at."""
-    try:
-        rows = _sb_get("watchlists?order=created_at.asc&select=*")
-        return rows if isinstance(rows, list) else []
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    rows = _sb_get("watchlists?order=created_at.asc&select=*")
+    return rows if isinstance(rows, list) else []
 
 
 @router.post("")

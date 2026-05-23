@@ -80,13 +80,15 @@ RESULT_KEYWORDS = {
 
 # ── BSE Filing Fetch ─────────────────────────────────────────────────────────
 
+_BSE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Referer":    "https://www.bseindia.com/",
+    "Accept":     "application/json",
+}
+
+
 def _fetch_bse_filings(pages: int = 2) -> list[dict]:
-    """Pull recent BSE announcements across all categories."""
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Referer":    "https://www.bseindia.com/",
-        "Accept":     "application/json",
-    }
+    """Pull recent BSE announcements (last N pages, ~20 items/page, sorted newest-first)."""
     items: list[dict] = []
     for page in range(1, pages + 1):
         url = (
@@ -95,13 +97,68 @@ def _fetch_bse_filings(pages: int = 2) -> list[dict]:
             "&strToDate=&strType=C&subcategory=-1"
         )
         try:
-            req = urllib.request.Request(url, headers=headers)
+            req = urllib.request.Request(url, headers=_BSE_HEADERS)
             with urllib.request.urlopen(req, timeout=15) as resp:
                 data = json.loads(resp.read())
-            items.extend(data.get("Table", []))
+            batch = data.get("Table", [])
+            if not batch:
+                break
+            items.extend(batch)
         except Exception as exc:
             print(f"  [BSE] page {page} failed: {exc}")
         time.sleep(0.4)
+    return items
+
+
+def _fetch_bse_filings_daterange(from_date: str, to_date: str,
+                                  max_pages: int = 60) -> list[dict]:
+    """
+    Fetch ALL BSE announcements between from_date and to_date (YYYY-MM-DD).
+    Uses strSearch=D (date-range mode) — the only way to reach historical filings.
+    Paginates until BSE returns an empty page or max_pages is hit.
+    """
+    from_yyyymmdd = from_date.replace("-", "")
+    to_yyyymmdd   = to_date.replace("-", "")
+    items: list[dict] = []
+    seen: set[str] = set()
+
+    for page in range(1, max_pages + 1):
+        url = (
+            "https://api.bseindia.com/BseIndiaAPI/api/AnnSubCategoryGetData/w"
+            f"?pageno={page}&strCat=-1&strPrevDate={from_yyyymmdd}&strScrip="
+            f"&strSearch=D&strToDate={to_yyyymmdd}&strType=C&subcategory=-1"
+        )
+        try:
+            req = urllib.request.Request(url, headers=_BSE_HEADERS)
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                data = json.loads(resp.read())
+            batch = data.get("Table", [])
+            if not batch:
+                print(f"    [BSE-D] Empty page {page} — done")
+                break
+            new = 0
+            for item in batch:
+                key = (item.get("ATTACHMENTNAME") or
+                       f"{item.get('SCRIP_CD')}_{item.get('DT_TM')}")
+                if key and key not in seen:
+                    seen.add(key)
+                    items.append(item)
+                    new += 1
+            print(f"    [BSE-D] Page {page}: {len(batch)} returned, {new} new (total {len(items)})")
+            if new == 0:
+                break  # all duplicates → reached overlap, stop
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429:
+                print(f"    [BSE-D] Rate-limited p{page} — waiting 8s")
+                time.sleep(8)
+                continue
+            print(f"    [BSE-D] HTTP {exc.code} on page {page}")
+            break
+        except Exception as exc:
+            print(f"    [BSE-D] Page {page} error: {exc}")
+            break
+        time.sleep(0.5)
+
     return items
 
 
@@ -541,10 +598,10 @@ def _sb_headers() -> dict:
 
 
 def _get_processed_filing_ids() -> set[str]:
-    """Return set of already-processed filing_id values (last 7 days)."""
+    """Return set of all filing_ids already saved to quarterly_results."""
     if not (SUPABASE_URL and SUPABASE_KEY):
         return set()
-    url = f"{SUPABASE_URL}/rest/v1/quarterly_results?select=filing_id&limit=500"
+    url = f"{SUPABASE_URL}/rest/v1/quarterly_results?select=filing_id&limit=5000"
     try:
         req = urllib.request.Request(url, headers=_sb_headers())
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -838,6 +895,9 @@ def _ensure_quarterly_watchlist(quarter: str) -> str | None:
 
 # ── Main Pipeline ─────────────────────────────────────────────────────────────
 
+MAX_PER_RUN = int(os.getenv("MAX_PER_RUN", "8"))   # keep low for 20-min cron
+
+
 def main() -> None:
     print("=" * 60)
     print(f"Results Pipeline  {datetime.now(timezone.utc).isoformat()}")
@@ -876,7 +936,7 @@ def main() -> None:
 
     # 5. Process each new filing
     processed_count = 0
-    for it, filing_id in new_items[:8]:  # max 8 per run to stay within Actions time
+    for it, filing_id in new_items[:MAX_PER_RUN]:
         company    = it.get("SHORT_NAME", "Unknown").title()
         scrip_code = str(it.get("SCRIP_CD", ""))
         headline   = it.get("NEWSSUB", "")
@@ -983,8 +1043,9 @@ def main() -> None:
                 extra_watchlist_ids=extra_ids,
             )
 
-        # 5g. Telegram notification
-        _send_telegram(row)
+        # 5g. Telegram notification — only meaningful ratings
+        if rating in ("Excellent", "Great", "Good"):
+            _send_telegram(row)
 
         time.sleep(1)  # be polite to APIs
 

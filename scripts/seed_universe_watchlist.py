@@ -91,7 +91,6 @@ def main() -> None:
                 "symbol":       symbol,
                 "ticker":       ticker,
                 "company":      company,
-                "exchange":     "NSE",
                 "sector":       "",
                 "industry":     "",
                 "added_at":     now,
