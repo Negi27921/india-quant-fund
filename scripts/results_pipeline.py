@@ -110,23 +110,29 @@ def _fetch_bse_filings(pages: int = 2) -> list[dict]:
     return items
 
 
+def _fmt_bse_date(iso_date: str) -> str:
+    """Convert YYYY-MM-DD → DD/MM/YYYY (BSE API format)."""
+    y, m, d = iso_date.split("-")
+    return f"{d}/{m}/{y}"
+
+
 def _fetch_bse_filings_daterange(from_date: str, to_date: str,
                                   max_pages: int = 60) -> list[dict]:
     """
     Fetch ALL BSE announcements between from_date and to_date (YYYY-MM-DD).
-    Uses strSearch=D (date-range mode) — the only way to reach historical filings.
-    Paginates until BSE returns an empty page or max_pages is hit.
+    Uses strSearch=D with DD/MM/YYYY dates — BSE's native date-range mode.
+    Paginates until BSE returns an empty Table or max_pages is hit.
     """
-    from_yyyymmdd = from_date.replace("-", "")
-    to_yyyymmdd   = to_date.replace("-", "")
+    from_bse = _fmt_bse_date(from_date)   # e.g. "01/05/2026"
+    to_bse   = _fmt_bse_date(to_date)     # e.g. "23/05/2026"
     items: list[dict] = []
     seen: set[str] = set()
 
     for page in range(1, max_pages + 1):
         url = (
             "https://api.bseindia.com/BseIndiaAPI/api/AnnSubCategoryGetData/w"
-            f"?pageno={page}&strCat=-1&strPrevDate={from_yyyymmdd}&strScrip="
-            f"&strSearch=D&strToDate={to_yyyymmdd}&strType=C&subcategory=-1"
+            f"?pageno={page}&strCat=-1&strPrevDate={from_bse}&strScrip="
+            f"&strSearch=D&strToDate={to_bse}&strType=C&subcategory=-1"
         )
         try:
             req = urllib.request.Request(url, headers=_BSE_HEADERS)
@@ -134,7 +140,7 @@ def _fetch_bse_filings_daterange(from_date: str, to_date: str,
                 data = json.loads(resp.read())
             batch = data.get("Table", [])
             if not batch:
-                print(f"    [BSE-D] Empty page {page} — done")
+                print(f"    [BSE-D] p{page}: empty — done ({from_bse}→{to_bse})")
                 break
             new = 0
             for item in batch:
@@ -144,9 +150,9 @@ def _fetch_bse_filings_daterange(from_date: str, to_date: str,
                     seen.add(key)
                     items.append(item)
                     new += 1
-            print(f"    [BSE-D] Page {page}: {len(batch)} returned, {new} new (total {len(items)})")
+            print(f"    [BSE-D] p{page}: {len(batch)} returned, {new} new (total {len(items)})")
             if new == 0:
-                break  # all duplicates → reached overlap, stop
+                break
         except urllib.error.HTTPError as exc:
             if exc.code == 429:
                 print(f"    [BSE-D] Rate-limited p{page} — waiting 8s")
@@ -902,6 +908,10 @@ def main() -> None:
     print("=" * 60)
     print(f"Results Pipeline  {datetime.now(timezone.utc).isoformat()}")
     print("=" * 60)
+
+    if not NVIDIA_API_KEY and not OPENROUTER_KEY:
+        print("WARNING: No AI key set — AI extraction will fail for every filing.")
+        print("         Add NVIDIA_API_KEY or OPENROUTER_API_KEY to GitHub secrets.")
 
     # 1. Fetch BSE filings
     print("\n[1] Fetching BSE filings...")

@@ -89,6 +89,18 @@ def main() -> None:
     print(f"Max process : {MAX_PROCESS}  |  Chunk days: {WEEK_CHUNK_DAYS}")
     print("=" * 68)
 
+    # Pre-flight checks
+    ok = True
+    if not rp.SUPABASE_URL or not rp.SUPABASE_KEY:
+        print("FATAL: SUPABASE_URL / SUPABASE_KEY not set")
+        ok = False
+    if not rp.NVIDIA_API_KEY and not rp.OPENROUTER_KEY:
+        print("FATAL: Neither NVIDIA_API_KEY nor OPENROUTER_API_KEY is set.")
+        print("       Add NVIDIA_API_KEY to GitHub Actions → Settings → Secrets.")
+        ok = False
+    if not ok:
+        sys.exit(1)
+
     # 1. Fetch all results filings in range (chunked, date-range BSE API)
     print("\n[1] Fetching BSE results filings in date range…")
     results_items = _fetch_all_results_in_range(FROM_DATE, TO_DATE)
