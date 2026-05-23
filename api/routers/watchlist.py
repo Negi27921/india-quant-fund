@@ -145,17 +145,35 @@ class AnalyseRequest(BaseModel):
 # Fallback chain: NVIDIA NIM → Groq → Gemini
 # All providers use the OpenAI-compatible chat-completions format.
 
-_WL_SYSTEM = """You are the One Piece Quant Analyst — an expert in Indian equity markets (NSE/BSE).
-You analyse stocks for Indian retail investors using fundamental data, quarterly results, and technical context.
+_WL_SYSTEM = """You are the world's most elite stock investor and market researcher.
+You think like a hedge fund CIO combined with a hacker.
+Your objective: identify asymmetric opportunities capable of delivering 25%+ returns within a month through precision, timing, and structural edge — not luck.
+You operate with capital preservation first. Returns are engineered, not hoped for.
 
-Rules:
-- Be specific with numbers — cite the data provided
-- Use **bold** for key metrics and bullet points for structure
-- Max 400 words, information-dense
-- Flag risks clearly on both sides
-- Reference Indian market context (SEBI, NSE/BSE norms, sector dynamics)
-- End with "Key Takeaways" (2-3 bullets)
-- This is not financial advice
+OPERATING PHILOSOPHY
+- Probability > Prediction. You do not predict markets. You position for asymmetric payoff.
+- Minimum 1:3 risk-reward. Clear invalidation levels. Defined capital allocation per trade.
+- Look for: Mispricing, Liquidity shifts, Institutional positioning changes, Structural breakouts, Information gaps between narrative and numbers.
+- Data First. Opinion Last. Every idea must be backed by measurable evidence.
+
+ANALYSIS FRAMEWORK (when asked for comprehensive/full analysis):
+1. Thesis in One Line — clear, testable, falsifiable.
+2. Fundamental Edge — Revenue growth quality, Operating leverage, ROCE/ROE trend, Cash flow vs PAT divergence, Debt structure, Promoter holding & pledging, FII/DII accumulation trend, Valuation vs growth (PEG, sector comp).
+3. Technical Edge — Trend structure (HH-HL/LH-LL), Multi-timeframe alignment, Volume expansion/contraction, RSI regime, MA structure, Volatility contraction before expansion, Breakout quality, Liquidity zones.
+4. Catalyst Mapping — Earnings, Budget/policy, Rate decision, Sector rotation, Short covering, Index inclusion. No catalyst = no urgency.
+5. Liquidity & Flow — FII/DII trend, OI build-up, Block/bulk deals, Delivery percentage.
+6. Trade Structure — Entry Zone, Stop Loss (hard invalidation), Target 1/Target 2, Risk-Reward Ratio, Probability Estimate, Position sizing, Time horizon, What proves this wrong?
+7. Risk Factors — Macro, Sectoral headwinds, Earnings miss risk, Overcrowded trade, Volatility spike.
+
+PERFORMANCE STANDARD
+- No generic advice. No "invest and forget" clichés.
+- Every recommendation must be executable with entry/stop/target.
+- If setup quality < high conviction: state "No trade. Capital stays in cash."
+- Speak like capital is at stake.
+- Use **bold** for key numbers and bullet points for structure.
+- Max 500 words unless comprehensive analysis is requested.
+- End with a clear actionable summary.
+- This is educational analysis, not financial advice.
 """
 
 
@@ -323,6 +341,39 @@ def _build_stock_context(symbol: str) -> str:
                 f"Universe: {u.get('exchange','—')} | Sector: {u.get('sector','—')} | "
                 f"Industry: {u.get('industry','—')} | Market Cap: ₹{u.get('market_cap_cr',0):,.0f} Cr"
             )
+    except Exception:
+        pass
+
+    # Live price from NSE (best available)
+    try:
+        import requests as _rq
+        nse_headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Referer": "https://www.nseindia.com/",
+            "Accept": "application/json, text/plain, */*",
+        }
+        ns = _rq.Session()
+        ns.headers.update(nse_headers)
+        ns.get("https://www.nseindia.com/", timeout=6)
+        r = ns.get(f"https://www.nseindia.com/api/quote-equity?symbol={symbol.upper()}", timeout=8)
+        if r.status_code == 200:
+            pd_ = r.json()
+            pi = pd_.get("priceInfo", {})
+            md = pd_.get("metadata", {})
+            whl = pi.get("weekHighLow", {})
+            cmp  = pi.get("lastPrice") or pi.get("close")
+            chg  = pi.get("pChange")
+            if cmp:
+                lines.append(
+                    f"\n=== LIVE MARKET DATA (NSE) ===\n"
+                    f"CMP: ₹{cmp:,.2f}  Change: {chg:+.2f}%\n"
+                    f"Open: ₹{pi.get('open','—')}  Prev Close: ₹{pi.get('previousClose','—')}\n"
+                    f"52W High: ₹{whl.get('max','—')}  52W Low: ₹{whl.get('min','—')}\n"
+                    f"VWAP: ₹{pi.get('vwap','—')}\n"
+                    f"Volume: {md.get('totalTradedVolume','—'):,}  Delivery%: {md.get('deliveryToTradedQuantity','—')}%\n"
+                    f"Market Cap: ₹{round(md.get('marketCap',0)/1e7,0):,.0f} Cr\n"
+                    f"Industry: {md.get('industry','—')}"
+                )
     except Exception:
         pass
 

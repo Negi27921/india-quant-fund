@@ -18,7 +18,7 @@ from functools import wraps
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 warnings.filterwarnings("ignore")
 import yfinance as yf  # noqa: E402
@@ -1253,6 +1253,117 @@ async def get_fii_sectors():
         return []
 
 
+@router.get("/price/{symbol}")
+async def get_live_price(symbol: str):
+    """
+    Live price for an NSE stock via NSE API (with session cookies) + yfinance fallback.
+    Returns: {symbol, cmp, change, pct_change, open, prev_close, high, low,
+              week_high_52, week_low_52, volume, delivery_pct, market_cap_cr,
+              vwap, pe, company, industry, exchange}
+    """
+    clean = symbol.strip().upper().replace(".NS", "").replace(".BO", "")
+    loop  = asyncio.get_running_loop()
+
+    def _from_nse() -> dict:
+        import requests as _rq
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Referer":         "https://www.nseindia.com/",
+            "Accept":          "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        s = _rq.Session()
+        s.headers.update(headers)
+        s.get("https://www.nseindia.com/", timeout=8)
+        s.get(f"https://www.nseindia.com/get-quotes/equity?symbol={clean}", timeout=6)
+        r = s.get(
+            f"https://www.nseindia.com/api/quote-equity?symbol={clean}",
+            timeout=10,
+        )
+        r.raise_for_status()
+        d = r.json()
+        pi = d.get("priceInfo", {})
+        whl = pi.get("weekHighLow", {})
+        md  = d.get("metadata", {})
+        mc  = d.get("marketDeptOrderBook", {})
+        cmp = pi.get("lastPrice") or pi.get("close")
+        return {
+            "symbol":      clean,
+            "exchange":    "NSE",
+            "company":     md.get("companyName", clean),
+            "industry":    md.get("industry", ""),
+            "cmp":         cmp,
+            "change":      pi.get("change"),
+            "pct_change":  pi.get("pChange"),
+            "open":        pi.get("open"),
+            "prev_close":  pi.get("previousClose"),
+            "high":        pi.get("intraDayHighLow", {}).get("max") or pi.get("open"),
+            "low":         pi.get("intraDayHighLow", {}).get("min") or pi.get("open"),
+            "week_high_52": whl.get("max"),
+            "week_low_52":  whl.get("min"),
+            "vwap":         pi.get("vwap"),
+            "volume":       md.get("totalTradedVolume"),
+            "delivery_pct": md.get("deliveryToTradedQuantity"),
+            "market_cap_cr": round(md.get("marketCap", 0) / 1e7, 2) if md.get("marketCap") else None,
+            "pe":           None,
+            "source":       "nse",
+        }
+
+    def _from_yfinance() -> dict:
+        import yfinance as yf
+        for tkr in [f"{clean}.NS", f"{clean}.BO"]:
+            try:
+                t  = yf.Ticker(tkr)
+                fi = t.fast_info
+                cmp = getattr(fi, "last_price", None) or getattr(fi, "regular_market_price", None)
+                if not cmp:
+                    continue
+                mc_cr = round(getattr(fi, "market_cap", 0) / 1e7, 2)
+                return {
+                    "symbol":      clean,
+                    "exchange":    "NSE" if ".NS" in tkr else "BSE",
+                    "company":     clean,
+                    "industry":    "",
+                    "cmp":         round(float(cmp), 2),
+                    "change":      None,
+                    "pct_change":  None,
+                    "open":        getattr(fi, "open", None),
+                    "prev_close":  getattr(fi, "previous_close", None),
+                    "high":        getattr(fi, "day_high", None),
+                    "low":         getattr(fi, "day_low", None),
+                    "week_high_52": getattr(fi, "fifty_two_week_high", None),
+                    "week_low_52":  getattr(fi, "fifty_two_week_low", None),
+                    "vwap":        None,
+                    "volume":      getattr(fi, "three_month_average_volume", None),
+                    "delivery_pct": None,
+                    "market_cap_cr": mc_cr,
+                    "pe":          None,
+                    "source":      "yfinance",
+                }
+            except Exception:
+                continue
+        raise ValueError(f"No price found for {clean}")
+
+    try:
+        result = await asyncio.wait_for(
+            loop.run_in_executor(_executor, _from_nse), timeout=16.0
+        )
+        return result
+    except Exception:
+        pass
+
+    try:
+        result = await asyncio.wait_for(
+            loop.run_in_executor(_executor, _from_yfinance), timeout=12.0
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Price not found: {e}")
+
+
 @router.get("/filings")
 @_cached("filings", ttl=120)
 async def get_filings(limit: int = Query(20, le=50)):
@@ -1531,14 +1642,6 @@ async def get_results_calendar():
 
 
 # ── Quarterly Results ─────────────────────────────────────────────────────────
-# Primary:  screener.in public JSON API (no auth needed for basic data)
-# Fallback: yfinance quarterly_income_stmt (background thread, writes to Supabase)
-# Ultimate: pre-built realistic Q4 FY2026 data
-
-_QR_CACHE: list[dict] | None = None
-_QR_CACHE_TS: float = 0.0
-_QR_CACHE_TTL = 6 * 3600
-_QR_FETCH_RUNNING = False
 
 _QUARTERLY_STOCKS = [
     # (yf_sym, nse_sym, company, sector)
@@ -1715,39 +1818,6 @@ def _fetch_one_qr_yf(yf_sym: str, nse_sym: str, company: str, sector: str) -> di
         return None
 
 
-def _fetch_quarterly_bg(stocks: list) -> None:
-    global _QR_CACHE, _QR_CACHE_TS, _QR_FETCH_RUNNING
-    try:
-        results = []
-        for yf_sym, nse_sym, company, sector in stocks:
-            r = _fetch_one_qr_yf(yf_sym, nse_sym, company, sector)
-            if r:
-                results.append(r)
-            time.sleep(0.4)  # gentle rate-limit
-
-        if not results:
-            return
-
-        results.sort(key=lambda x: {"Excellent":0,"Great":1,"Good":2,"Ok":3,"Weak":4}.get(x.get("rating","Ok"),3))
-        _QR_CACHE = results
-        _QR_CACHE_TS = time.monotonic()
-
-        # Persist to Supabase screener_cache table
-        try:
-            from data.storage import supabase_db as sdb
-            from datetime import timezone
-            sdb.upsert("screener_cache", {
-                "strategy":   "quarterly_results",
-                "universe":   "nse",
-                "scanned_at": datetime.now(timezone.utc).isoformat(),
-                "results":    json.dumps(results),
-                "is_scanning": False,
-            }, on_conflict="strategy,universe")
-        except Exception:
-            pass
-    finally:
-        _QR_FETCH_RUNNING = False
-
 
 def _qr_fallback() -> list[dict]:
     """Realistic Q4 FY2026 data for 25 Nifty stocks when live fetch is pending."""
@@ -1818,94 +1888,47 @@ def _qr_fallback() -> list[dict]:
 
 
 @router.get("/quarterly-results")
-async def get_quarterly_results():
-    """
-    Quarterly earnings results — real-time from BSE filings (pipeline table),
-    falling back to yfinance cache, then static fallback.
-    """
-    global _QR_CACHE, _QR_CACHE_TS, _QR_FETCH_RUNNING
-    now = time.monotonic()
-
-    # 1. PRIMARY: quarterly_results table (real-time BSE + DeepSeek pipeline)
+async def get_quarterly_results(limit: int = Query(200, le=500)):
+    """Quarterly earnings results from the quarterly_results Supabase table."""
+    import urllib.request as _ur
+    import os as _os
+    sb_url = _os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    sb_key = _os.getenv("SUPABASE_KEY", "").strip()
+    if not sb_url or not sb_key:
+        return []
+    headers = {
+        "apikey":        sb_key,
+        "Authorization": f"Bearer {sb_key}",
+        "Content-Type":  "application/json",
+        "Range-Unit":    "items",
+        "Range":         f"0-{limit - 1}",
+    }
+    url = (
+        f"{sb_url}/rest/v1/quarterly_results"
+        f"?select=*&order=report_date.desc,created_at.desc"
+    )
     try:
-        import urllib.request as _ur
-        import os as _os
-        sb_url = _os.getenv("SUPABASE_URL", "").strip()
-        sb_key = _os.getenv("SUPABASE_KEY", "").strip()
-        if sb_url and sb_key:
-            _headers = {
-                "apikey": sb_key,
-                "Authorization": f"Bearer {sb_key}",
-                "Content-Type": "application/json",
-            }
-            _qr_url = (
-                f"{sb_url}/rest/v1/quarterly_results"
-                "?select=*&order=report_date.desc,created_at.desc&limit=60"
-            )
-            _req = _ur.Request(_qr_url, headers=_headers)
-            with _ur.urlopen(_req, timeout=5) as _resp:
-                _rows = json.loads(_resp.read())
-            if _rows:
-                # normalise metrics from JSONB → Python dict
-                for _r in _rows:
-                    if isinstance(_r.get("metrics"), str):
-                        try:
-                            _r["metrics"] = json.loads(_r["metrics"])
-                        except Exception:
-                            pass
-                    for _k in ("revenue_trend", "pat_trend", "eps_trend", "quarter_labels"):
-                        if isinstance(_r.get(_k), str):
-                            try:
-                                _r[_k] = json.loads(_r[_k])
-                            except Exception:
-                                _r[_k] = []
-                _QR_CACHE = _rows
-                _QR_CACHE_TS = now
-                return _rows
-    except Exception:
-        pass
-
-    # 2. In-process cache hit (yfinance-based)
-    if _QR_CACHE and (now - _QR_CACHE_TS) < _QR_CACHE_TTL:
-        return _QR_CACHE
-
-    # 3. Supabase screener_cache (legacy yfinance blob)
-    try:
-        from data.storage import supabase_db as sdb
-        from datetime import timezone
-        rows = sdb.select("screener_cache",
-                          cols="results,scanned_at",
-                          filters={"strategy": "quarterly_results", "universe": "nse"},
-                          limit=1)
-        if rows:
-            row = rows[0]
-            sa = row.get("scanned_at", "")
-            if sa:
-                scanned = datetime.fromisoformat(sa.replace("Z", "+00:00"))
-                age = (datetime.now(timezone.utc) - scanned).total_seconds()
-                if age < _QR_CACHE_TTL:
-                    raw = row.get("results")
-                    data = json.loads(raw) if isinstance(raw, str) else raw
-                    if data:
-                        _QR_CACHE = data
-                        _QR_CACHE_TS = now
-                        return data
-    except Exception:
-        pass
-
-    # 4. Launch background yfinance fetch if not already running
-    if not _QR_FETCH_RUNNING:
-        _QR_FETCH_RUNNING = True
-        t = _threading.Thread(
-            target=_fetch_quarterly_bg,
-            args=(_QUARTERLY_STOCKS,),
-            daemon=True,
-            name="quarterly-results-fetch",
-        )
-        t.start()
-
-    # 5. Return empty — pipeline populates quarterly_results table in real-time
-    return []
+        req = _ur.Request(url, headers=headers)
+        with _ur.urlopen(req, timeout=12) as resp:
+            rows = json.loads(resp.read())
+        if not isinstance(rows, list):
+            return []
+        for r in rows:
+            if isinstance(r.get("metrics"), str):
+                try:
+                    r["metrics"] = json.loads(r["metrics"])
+                except Exception:
+                    pass
+            for k in ("revenue_trend", "pat_trend", "eps_trend", "quarter_labels"):
+                if isinstance(r.get(k), str):
+                    try:
+                        r[k] = json.loads(r[k])
+                    except Exception:
+                        r[k] = []
+        return rows
+    except Exception as exc:
+        print(f"[quarterly-results] {exc}")
+        return []
 
 
 # ── Sparkline endpoint — 30 daily closes for hover mini-charts ─────────────────

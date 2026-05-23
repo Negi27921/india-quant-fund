@@ -253,6 +253,27 @@ function AIChatTab({ symbol }: { symbol: string }) {
   // Reset chat when stock changes
   useEffect(() => { setMessages([]); }, [symbol]);
 
+  // Auto-send initial comprehensive analysis when stock is first opened
+  useEffect(() => {
+    if (symbol) {
+      const q = "Give full analysis: thesis, fundamentals, technicals, trade structure with entry/stop/target";
+      const userMsg: ChatMsg = { role: "user", content: q };
+      setMessages([userMsg]);
+      analyse.mutate(
+        { symbol, question: q, history: [] },
+        {
+          onSuccess: (data) => {
+            setMessages(prev => [...prev, { role: "assistant", content: data.response }]);
+          },
+          onError: (err) => {
+            setMessages(prev => [...prev, { role: "assistant", content: `Analysis error: ${err.message}. Try asking a specific question.` }]);
+          },
+        },
+      );
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol]);
+
   const sendMessage = useCallback(async () => {
     const q = input.trim();
     if (!q || analyse.isPending) return;
@@ -274,11 +295,12 @@ function AIChatTab({ symbol }: { symbol: string }) {
   }, [input, symbol, messages, analyse]);
 
   const SUGGESTIONS = [
-    "Give me a comprehensive fundamental analysis",
-    "What's the growth trajectory in last 4 quarters?",
-    "Analyse the risk factors for this stock",
-    "Compare margins vs sector peers",
-    "Is the current valuation attractive?",
+    "Give full analysis: thesis, fundamentals, technicals, trade structure",
+    "What is the 1:3 risk-reward setup with entry, stop-loss and targets?",
+    "Analyse FII/DII trend and institutional positioning",
+    "Is there a near-term catalyst that can reprice this fast?",
+    "Where is smart money accumulating? What is the breakout level?",
+    "What are the key risks and invalidation levels for this stock?",
   ];
 
   return (
@@ -292,7 +314,7 @@ function AIChatTab({ symbol }: { symbol: string }) {
               color: "var(--text-2)", fontSize: 14, fontWeight: 600,
             }}>
               <Sparkles style={{ width: 16, height: 16, color: "var(--accent)" }} />
-              Ask DeepSeek R1 about {symbol}
+              Elite Analysis — {symbol}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {SUGGESTIONS.map(s => (
@@ -495,6 +517,23 @@ type TabType = "fundamentals" | "technical" | "ai";
 function StockDetailPane({ item }: { item: WatchlistItem }) {
   const [tab, setTab] = useState<TabType>("fundamentals");
 
+  const [livePrice, setLivePrice] = useState<{
+    cmp: number | null; change: number | null; pct_change: number | null;
+    week_high_52: number | null; week_low_52: number | null;
+    volume: number | null; delivery_pct: number | null; vwap: number | null;
+  } | null>(null);
+  const [priceLoading, setPriceLoading] = useState(false);
+
+  useEffect(() => {
+    setPriceLoading(true);
+    setLivePrice(null);
+    fetch(`/api/market/price/${item.symbol}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setLivePrice(d); })
+      .catch(() => {})
+      .finally(() => setPriceLoading(false));
+  }, [item.symbol]);
+
   const TABS: { id: TabType; label: string; icon: React.ReactNode }[] = [
     { id: "fundamentals", label: "Fundamentals", icon: <BarChart3 style={{ width: 13, height: 13 }} /> },
     { id: "technical",   label: "Technical",    icon: <TrendingUp style={{ width: 13, height: 13 }} /> },
@@ -522,6 +561,74 @@ function StockDetailPane({ item }: { item: WatchlistItem }) {
             )}
           </div>
           <RatingBadge rating={item.result_rating} />
+        </div>
+
+        {/* Live price banner */}
+        <div style={{
+          padding: "12px 16px",
+          background: "var(--surface-2)",
+          borderBottom: "1px solid var(--border)",
+          display: "flex", alignItems: "center", flexWrap: "wrap", gap: 16,
+        }}>
+          {priceLoading ? (
+            <span style={{ fontSize: 12, color: "var(--text-4)" }}>Fetching live price…</span>
+          ) : livePrice?.cmp ? (
+            <>
+              <div>
+                <span style={{ fontSize: 22, fontWeight: 800, fontFamily: "var(--font-mono)", color: "var(--text-1)" }}>
+                  ₹{livePrice.cmp.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                </span>
+                {livePrice.pct_change != null && (
+                  <span style={{
+                    marginLeft: 10, fontSize: 13, fontWeight: 700, fontFamily: "var(--font-mono)",
+                    color: livePrice.pct_change >= 0 ? "#10b981" : "#f87171",
+                  }}>
+                    {livePrice.pct_change >= 0 ? "▲" : "▼"} {Math.abs(livePrice.pct_change).toFixed(2)}%
+                  </span>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                {livePrice.week_high_52 && (
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 9, color: "var(--text-4)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>52W High</div>
+                    <div style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: "#10b981", fontWeight: 700 }}>₹{livePrice.week_high_52.toLocaleString("en-IN")}</div>
+                  </div>
+                )}
+                {livePrice.week_low_52 && (
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 9, color: "var(--text-4)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>52W Low</div>
+                    <div style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: "#f87171", fontWeight: 700 }}>₹{livePrice.week_low_52.toLocaleString("en-IN")}</div>
+                  </div>
+                )}
+                {livePrice.vwap && (
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 9, color: "var(--text-4)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>VWAP</div>
+                    <div style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--text-2)", fontWeight: 700 }}>₹{livePrice.vwap.toLocaleString("en-IN")}</div>
+                  </div>
+                )}
+                {livePrice.volume != null && (
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 9, color: "var(--text-4)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>Volume</div>
+                    <div style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--text-2)", fontWeight: 700 }}>
+                      {livePrice.volume >= 1e6
+                        ? `${(livePrice.volume / 1e6).toFixed(1)}M`
+                        : livePrice.volume >= 1e3
+                        ? `${(livePrice.volume / 1e3).toFixed(0)}K`
+                        : livePrice.volume}
+                    </div>
+                  </div>
+                )}
+                {livePrice.delivery_pct != null && (
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 9, color: "var(--text-4)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase" }}>Delivery%</div>
+                    <div style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--accent)", fontWeight: 700 }}>{Number(livePrice.delivery_pct).toFixed(1)}%</div>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <span style={{ fontSize: 12, color: "var(--text-4)" }}>{item.symbol} · Price unavailable (market closed)</span>
+          )}
         </div>
 
         {/* Tabs */}

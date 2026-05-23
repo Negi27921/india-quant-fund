@@ -372,3 +372,17 @@ export const useQuarterlyResults = () =>
     staleTime: 5 * 60_000,
     refetchInterval: 10 * 60_000,
   });
+
+export const useLivePrice = (symbol: string) =>
+  useQuery({
+    queryKey: ["market", "price", symbol],
+    queryFn:  () => api.get<{
+      cmp: number; change: number; pct_change: number;
+      week_high_52: number; week_low_52: number;
+      volume: number; delivery_pct: number; vwap: number;
+      company: string; industry: string; market_cap_cr: number;
+    }>(`/market/price/${symbol}`),
+    staleTime:      60 * 1000,
+    refetchInterval: 60 * 1000,
+    enabled: !!symbol,
+  });

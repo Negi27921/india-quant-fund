@@ -580,29 +580,20 @@ export function ResultsPage() {
           </div>
         ) : results.length === 0 ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", gap: 14, textAlign: "center" }}>
-            <div style={{ fontSize: 44 }}>📡</div>
+            <div style={{ fontSize: 44 }}>📊</div>
             <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-heading)" }}>
-              Pipeline fetching live BSE results
+              No results yet
             </div>
-            <div style={{ fontSize: 12, color: "var(--text-3)", fontFamily: "var(--font-body)", maxWidth: 460, lineHeight: 1.8 }}>
-              The results pipeline runs every <strong style={{ color: "var(--text-2)" }}>20 minutes</strong> during market hours (8:30 AM–6 PM IST).<br />
-              To load all results from <strong style={{ color: "var(--text-2)" }}>May 1st 2026</strong>, trigger the <strong style={{ color: "var(--accent)" }}>Backfill Results</strong> workflow in GitHub Actions.
+            <div style={{ fontSize: 12, color: "var(--text-3)", fontFamily: "var(--font-body)", maxWidth: 420, lineHeight: 1.8 }}>
+              The pipeline processes earnings filings every 20 minutes during market hours.<br />
+              Results appear here automatically as companies report.
             </div>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
-              <button onClick={() => refetch()} style={{
-                padding: "9px 22px", borderRadius: 10, background: "var(--accent)", color: "#fff",
-                border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "var(--font-body)",
-              }}>
-                Check Now
-              </button>
-              <a href="https://github.com/Negi27921/one-piece/actions" target="_blank" rel="noopener noreferrer" style={{
-                padding: "9px 22px", borderRadius: 10, border: "1px solid var(--border)",
-                color: "var(--text-2)", fontSize: 12, fontWeight: 600, textDecoration: "none",
-                fontFamily: "var(--font-body)", display: "flex", alignItems: "center", gap: 6,
-              }}>
-                GitHub Actions →
-              </a>
-            </div>
+            <button onClick={() => refetch()} style={{
+              padding: "9px 22px", borderRadius: 10, background: "var(--accent)", color: "#fff",
+              border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "var(--font-body)",
+            }}>
+              Refresh
+            </button>
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 80, gap: 12 }}>
