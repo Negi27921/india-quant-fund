@@ -24,8 +24,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from api.full_universe import FULL_NSE_TICKERS
 
 UNIVERSE_WL_ID = "bbbbbbbb-0000-0000-0000-000000000001"
-SUPABASE_URL   = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY   = os.getenv("SUPABASE_KEY", "")
+SUPABASE_URL   = os.getenv("SUPABASE_URL", "").strip()
+SUPABASE_KEY   = os.getenv("SUPABASE_KEY", "").strip()
 BATCH          = 200  # upsert in batches to stay under Supabase payload limits
 
 def _headers() -> dict:

@@ -29,8 +29,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 # ── Config ───────────────────────────────────────────────────────────────────
-SUPABASE_URL    = os.getenv("SUPABASE_URL", "").rstrip("/")
-SUPABASE_KEY    = os.getenv("SUPABASE_KEY", "")
+SUPABASE_URL    = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+SUPABASE_KEY    = os.getenv("SUPABASE_KEY", "").strip()
 MCAP_MIN_CR     = float(os.getenv("MCAP_MIN_CR", "1000"))   # default 1000 Cr
 BATCH_SIZE      = int(os.getenv("BATCH_SIZE", "50"))        # yfinance batch size
 MAX_STOCKS      = int(os.getenv("MAX_STOCKS", "0"))         # 0 = no limit (testing)

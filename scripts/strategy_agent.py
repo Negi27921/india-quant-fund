@@ -27,10 +27,10 @@ from zoneinfo import ZoneInfo
 IST = ZoneInfo("Asia/Kolkata")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-SUPABASE_URL   = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY   = os.getenv("SUPABASE_KEY", "")
+SUPABASE_URL   = os.getenv("SUPABASE_URL", "").strip()
+SUPABASE_KEY   = os.getenv("SUPABASE_KEY", "").strip()
 GROQ_API_KEY   = os.getenv("GROQ_API_KEY", "")
-OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
 
 STRATEGY_PARAMS = {
     "vcp":          {"target_pct": 8.0,  "sl_pct": 4.0},

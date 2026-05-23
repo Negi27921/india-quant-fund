@@ -18,8 +18,8 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 IST = ZoneInfo("Asia/Kolkata")
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
 
 STRATEGIES = ["vcp", "ipo_base", "rocket_base", "breakout", "rsi_reversal", "golden_cross", "multibagger"]
 UNIVERSE   = "nifty500"

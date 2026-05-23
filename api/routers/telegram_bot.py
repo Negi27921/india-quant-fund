@@ -21,11 +21,11 @@ from fastapi import APIRouter, Request, Response
 
 router = APIRouter()
 
-BOT_TOKEN       = os.getenv("TELEGRAM_BOT_TOKEN", "")
-CHAT_ID         = os.getenv("TELEGRAM_CHAT_ID", "")
+BOT_TOKEN       = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+CHAT_ID         = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 WEBHOOK_SECRET  = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
-SUPABASE_URL    = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY    = os.getenv("SUPABASE_KEY", "")
+SUPABASE_URL    = os.getenv("SUPABASE_URL", "").strip()
+SUPABASE_KEY    = os.getenv("SUPABASE_KEY", "").strip()
 API_BASE        = os.getenv("SCREENER_API_URL", "https://onepiece-labs.vercel.app")
 
 _TG_BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"

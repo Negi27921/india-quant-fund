@@ -18,10 +18,10 @@ from typing import Any
 
 import yfinance as yf
 
-SUPABASE_URL   = os.getenv("SUPABASE_URL", "").rstrip("/")
-SUPABASE_KEY   = os.getenv("SUPABASE_KEY", "")
-BOT_TOKEN      = os.getenv("TELEGRAM_BOT_TOKEN", "")
-CHAT_ID        = os.getenv("TELEGRAM_CHAT_ID", "")
+SUPABASE_URL   = os.getenv("SUPABASE_URL", "").strip().strip().rstrip("/")
+SUPABASE_KEY   = os.getenv("SUPABASE_KEY", "").strip()
+BOT_TOKEN      = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+CHAT_ID        = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
 _TG_BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"
 _BREAKOUT_WINDOW_DAYS = 14     # calendar days to keep watching after result

@@ -28,8 +28,8 @@ if env_file.exists():
             k, _, v = line.partition("=")
             os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
 
 
 def _sb(method: str, path: str, body=None):

@@ -41,8 +41,8 @@ RISK_PCT_PER_TRADE = float(os.getenv("RISK_PCT_PER_TRADE", "2.0"))   # 2% of por
 MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "5"))
 MIN_CONFIDENCE     = int(os.getenv("MIN_CONFIDENCE", "95"))
 STRATEGIES         = os.getenv("STRATEGIES", "multibagger").split(",")
-TELEGRAM_TOKEN     = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_TOKEN     = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
 # NSE holidays 2025 (add more as needed)
 NSE_HOLIDAYS_2025 = {

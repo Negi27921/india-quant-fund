@@ -46,12 +46,12 @@ from datetime import datetime, timezone
 from io import BytesIO
 
 # ── Config ──────────────────────────────────────────────────────────────────
-SUPABASE_URL    = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY    = os.getenv("SUPABASE_KEY", "")
-NVIDIA_API_KEY  = os.getenv("NVIDIA_API_KEY", "")        # primary
-OPENROUTER_KEY  = os.getenv("OPENROUTER_API_KEY", "")    # fallback
-TG_TOKEN        = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TG_CHAT_ID      = os.getenv("TELEGRAM_CHAT_ID", "")
+SUPABASE_URL    = os.getenv("SUPABASE_URL", "").strip()
+SUPABASE_KEY    = os.getenv("SUPABASE_KEY", "").strip()
+NVIDIA_API_KEY  = os.getenv("NVIDIA_API_KEY", "").strip()        # primary
+OPENROUTER_KEY  = os.getenv("OPENROUTER_API_KEY", "").strip()    # fallback
+TG_TOKEN        = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TG_CHAT_ID      = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
 # NVIDIA NIM — DeepSeek R1 (reasoning, best for structured financial extraction)
 NIM_MODEL       = "deepseek-ai/deepseek-r1"

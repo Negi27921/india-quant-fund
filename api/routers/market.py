@@ -1776,8 +1776,8 @@ async def get_quarterly_results():
     try:
         import urllib.request as _ur
         import os as _os
-        sb_url = _os.getenv("SUPABASE_URL", "")
-        sb_key = _os.getenv("SUPABASE_KEY", "")
+        sb_url = _os.getenv("SUPABASE_URL", "").strip()
+        sb_key = _os.getenv("SUPABASE_KEY", "").strip()
         if sb_url and sb_key:
             _headers = {
                 "apikey": sb_key,

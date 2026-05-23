@@ -27,10 +27,10 @@ from zoneinfo import ZoneInfo
 IST = ZoneInfo("Asia/Kolkata")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-SUPABASE_URL     = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY     = os.getenv("SUPABASE_KEY", "")
-TELEGRAM_TOKEN   = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+SUPABASE_URL     = os.getenv("SUPABASE_URL", "").strip()
+SUPABASE_KEY     = os.getenv("SUPABASE_KEY", "").strip()
+TELEGRAM_TOKEN   = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 RESEND_API_KEY   = os.getenv("RESEND_API_KEY", "")
 REPORT_EMAIL     = os.getenv("REPORT_EMAIL", "negi2950@gmail.com")
 

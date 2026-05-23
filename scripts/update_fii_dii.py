@@ -20,8 +20,8 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 IST = ZoneInfo("Asia/Kolkata")
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
 
 _REPO_ROOT = Path(__file__).parent.parent
 _LATEST_JSON = _REPO_ROOT / "api" / "fii_dii_data" / "latest.json"

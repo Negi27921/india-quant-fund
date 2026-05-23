@@ -31,10 +31,10 @@ IST = ZoneInfo("Asia/Kolkata")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-SUPABASE_URL     = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY     = os.getenv("SUPABASE_KEY", "")
-TELEGRAM_TOKEN   = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+SUPABASE_URL     = os.getenv("SUPABASE_URL", "").strip()
+SUPABASE_KEY     = os.getenv("SUPABASE_KEY", "").strip()
+TELEGRAM_TOKEN   = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 MIN_CONFIDENCE   = int(os.getenv("MIN_CONFIDENCE", "95"))
 TRADE_AMOUNT     = float(os.getenv("TRADE_AMOUNT", "25000"))  # INR per trade
 MAX_OPEN_TRADES  = int(os.getenv("MAX_OPEN_TRADES", "30"))    # across all strategies

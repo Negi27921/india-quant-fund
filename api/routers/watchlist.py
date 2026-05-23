@@ -15,8 +15,8 @@ from pydantic import BaseModel, Field
 router = APIRouter()
 _executor = ThreadPoolExecutor(max_workers=4)
 
-_SB_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
-_SB_KEY = os.getenv("SUPABASE_KEY", "")
+_SB_URL = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+_SB_KEY = os.getenv("SUPABASE_KEY", "").strip()
 _SAFE_SYMBOL_RE = re.compile(r'^[A-Z0-9&\-\.]{1,20}$')
 
 
