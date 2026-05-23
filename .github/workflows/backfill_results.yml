@@ -29,6 +29,10 @@ on:
         description: "Days per BSE API chunk (7 = weekly, 3 = finer)"
         required: false
         default: "7"
+      use_yfinance:
+        description: "Skip NSE/BSE PDF parsing — pull numbers directly from yfinance (true/false). No LLM needed."
+        required: false
+        default: "false"
 
 jobs:
   backfill:
@@ -77,4 +81,5 @@ jobs:
           TO_DATE:            ${{ github.event.inputs.to_date || '' }}
           MAX_PROCESS:        ${{ github.event.inputs.max_process || '' }}
           WEEK_CHUNK_DAYS:    ${{ github.event.inputs.week_chunk_days || '' }}
+          USE_YFINANCE:       ${{ github.event.inputs.use_yfinance || '' }}
         run: python scripts/backfill_results.py
