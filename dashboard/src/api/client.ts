@@ -74,7 +74,7 @@ export const api = {
     request<T>(
       path,
       { method: "POST", body: body != null ? JSON.stringify(body) : undefined },
-      path.includes("/chat/") ? TIMEOUT_CHAT_MS : TIMEOUT_MS,
+      path.includes("/chat/") || path.includes("/scan/chunk") ? TIMEOUT_CHAT_MS : TIMEOUT_MS,
     ),
   put: <T>(path: string, body?: unknown) =>
     request<T>(path, {

@@ -58,6 +58,35 @@ def _l2_write(strategy: str, universe: str, results: list[dict]) -> None:
     except Exception:
         pass
 
+
+def _l2_write_progress(strategy: str, universe: str, progress: dict) -> None:
+    """Write scan progress to L2 — shared state across Vercel Lambda instances."""
+    try:
+        from core.providers.registry import get_cache
+        get_cache().set(f"screener:progress:{strategy}:{universe}", progress, ttl_seconds=3600)
+    except Exception:
+        pass
+
+
+def _l2_read_progress(strategy: str, universe: str) -> dict | None:
+    """Read scan progress from L2 cache."""
+    try:
+        from core.providers.registry import get_cache
+        val = get_cache().get(f"screener:progress:{strategy}:{universe}")
+        if isinstance(val, dict):
+            return val
+    except Exception:
+        pass
+    return None
+
+
+def _period_for_strategy(strategy: str) -> str:
+    if strategy in ("breakout", "golden_cross", "multibagger"):
+        return "260d"
+    if strategy == "rocket_base":
+        return "120d"
+    return "60d"  # vcp, ipo_base, rsi_reversal
+
 # ── Universe: Full Nifty 500 (503 stocks from NSE EQUITY_L.csv + sharewatch) ────
 SCAN_UNIVERSE = [
     "360ONE.NS", "3MINDIA.NS", "ABB.NS", "ACC.NS", "ACMESOLAR.NS", "AIAENG.NS", "APLAPOLLO.NS", "AUBANK.NS",
@@ -591,28 +620,32 @@ def _fetch_batch(batch: list[str], period: str) -> dict[str, pd.DataFrame]:
         return {}
 
 
+def _scan_slice(ticker_slice: list[str], strategy: str) -> list[dict]:
+    """Download and evaluate a slice of tickers synchronously. Used by both
+    background scans and the chunked scan endpoint."""
+    period = _period_for_strategy(strategy)
+    stock_data = _fetch_batch(ticker_slice, period)
+    results = []
+    for ticker, df in stock_data.items():
+        r = _evaluate_stock(ticker, df, strategy)
+        if r:
+            results.append(r)
+    return results
+
+
 def _run_scan(strategy: str, universe_name: str = "nifty500", cache_key: str = "") -> list[dict]:
-    """Download all batches in parallel then evaluate each stock."""
+    """Download all batches in parallel then evaluate each stock.
+    Writes partial results to L2 every 3 batches so progress survives Lambda restarts."""
     universe = FULL_UNIVERSE if universe_name == "full" else SCAN_UNIVERSE
-
-    # Strategies that need SMA200 (200 bars) require 260d.
-    # VCP, IPO Base, RSI Reversal only need ~60 bars — 60d halves download time.
-    if strategy in ("breakout", "golden_cross", "multibagger"):
-        period = "260d"
-    elif strategy in ("rocket_base",):
-        period = "120d"   # needs 90d rocket move lookback
-    else:
-        period = "60d"    # vcp, ipo_base, rsi_reversal — enough for all lookbacks
-
-    # Larger batches → fewer yf.download() calls → faster overall
+    period = _period_for_strategy(strategy)
     batch_size = 100
     batches = [universe[i:i + batch_size] for i in range(0, len(universe), batch_size)]
     all_results: list[dict] = []
     scanned = 0
 
-    # Init progress tracking
     key = cache_key or f"{strategy}_{universe_name}"
     _scan_progress[key] = {"scanned": 0, "total": len(universe), "partial": []}
+    _l2_write_progress(strategy, universe_name, {"scanned": 0, "total": len(universe), "completed": False})
 
     with ThreadPoolExecutor(max_workers=min(20, len(batches))) as pool:
         futures = {pool.submit(_fetch_batch, batch, period): batch for batch in batches}
@@ -620,25 +653,35 @@ def _run_scan(strategy: str, universe_name: str = "nifty500", cache_key: str = "
             batch = futures[future]
             try:
                 stock_data = future.result(timeout=90)
-                batch_hits = []
                 for ticker, df in stock_data.items():
-                    result = _evaluate_stock(ticker, df, strategy)
-                    if result:
-                        all_results.append(result)
-                        batch_hits.append(result)
+                    r = _evaluate_stock(ticker, df, strategy)
+                    if r:
+                        all_results.append(r)
                 scanned += len(batch)
-                if key in _scan_progress:
-                    _scan_progress[key]["scanned"] = scanned
-                    _scan_progress[key]["partial"] = sorted(
-                        all_results, key=lambda x: -x["confidence"]
-                    )
             except Exception:
                 scanned += len(batch)
-                if key in _scan_progress:
-                    _scan_progress[key]["scanned"] = scanned
+
+            sorted_so_far = sorted(all_results, key=lambda x: -x["confidence"])
+
+            # Update in-process progress
+            if key in _scan_progress:
+                _scan_progress[key]["scanned"] = scanned
+                _scan_progress[key]["partial"] = sorted_so_far
+
+            # Write to L2 every 3 batches (300 stocks) so cross-instance polls see progress
+            if scanned % 300 < batch_size:
+                _l2_write_progress(strategy, universe_name, {
+                    "scanned": scanned, "total": len(universe), "completed": False,
+                })
+                if sorted_so_far:
+                    _l2_write(strategy, universe_name, sorted_so_far)
 
     _scan_progress.pop(key, None)
-    return sorted(all_results, key=lambda x: -x["confidence"])
+    final = sorted(all_results, key=lambda x: -x["confidence"])
+    _l2_write_progress(strategy, universe_name, {
+        "scanned": len(universe), "total": len(universe), "completed": True,
+    })
+    return final
 
 
 def _launch_bg_scan(cache_key: str, strategy: str, universe_name: str) -> None:
@@ -660,40 +703,62 @@ def _launch_bg_scan(cache_key: str, strategy: str, universe_name: str) -> None:
     _executor.submit(_bg)
 
 
-def _get_or_scan_nonblocking(strategy: str, universe_name: str = "nifty500") -> tuple[list[dict], bool]:
+def _get_or_scan_nonblocking(strategy: str, universe_name: str = "nifty500") -> tuple[list[dict], bool, dict]:
     """
-    Returns (results, is_scanning) immediately — never blocks on a live scan.
+    Returns (results, is_scanning, progress) immediately — never blocks on a live scan.
 
     Priority:
-      1. Fresh in-process cache  → return now, no scan needed
-      2. Supabase cache          → warm in-process cache, return now
-         (if stale but present, serve it and kick off a background refresh)
-      3. Nothing at all          → trigger background scan, return []
+      1. Fresh in-process cache  → return now
+      2. L2 cache                → warm in-process cache, return now
+      3. Nothing                 → trigger background scan, return []
+
+    Progress is cross-instance: reads in-process dict first, then L2 fallback.
     """
     cache_key = f"{strategy}_{universe_name}"
     now = time.monotonic()
+
+    def _is_scanning() -> bool:
+        return cache_key in _scan_running
+
+    def _progress() -> dict:
+        # In-process first (current Lambda, most up-to-date)
+        p = _scan_progress.get(cache_key)
+        if p:
+            return p
+        # L2 fallback — shared across Lambda instances on Vercel
+        return _l2_read_progress(strategy, universe_name) or {}
 
     # 1. Fresh in-process cache
     if cache_key in _cache:
         ts, data = _cache[cache_key]
         if now - ts < CACHE_TTL:
-            return data, cache_key in _scan_running
+            return data, _is_scanning(), _progress()
 
-    # 2. L2 cache (supabase / redis / memory — per CACHE_PROVIDER)
+    # 2. L2 cache
     l2_data = _l2_read(strategy, universe_name)
     if l2_data is not None:
         _cache[cache_key] = (now, l2_data)
-        return l2_data, cache_key in _scan_running
+        return l2_data, _is_scanning(), _progress()
 
-    # 3. No cache anywhere — trigger background scan, return stale or empty
+    # 3. No cache — trigger background scan
     stale = _cache.get(cache_key, (0, []))[1]
     _launch_bg_scan(cache_key, strategy, universe_name)
-    return stale, True
+    return stale, True, _progress()
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────
 
 _STRATEGY_RE = "^(vcp|ipo_base|rocket_base|breakout|rsi_reversal|golden_cross|multibagger|custom)$"
+
+def _apply_filters(results: list[dict], min_confidence: int, min_price: float, max_price: float, symbol: str) -> list[dict]:
+    return [
+        r for r in results
+        if r["confidence"] >= min_confidence
+        and (not symbol or symbol.upper() in r["symbol"].upper())
+        and (min_price == 0 or r["ltp"] >= min_price)
+        and (max_price == 0 or r["ltp"] <= max_price)
+    ]
+
 
 @router.get("/results")
 async def get_screener_results(
@@ -705,23 +770,25 @@ async def get_screener_results(
     universe: str = Query("nifty500", pattern="^(nifty500|full)$"),
 ):
     """Return cached screener results instantly. Triggers background scan when cache is cold."""
-    # "custom" is a user-facing alias for the multibagger strategy
     if strategy == "custom":
         strategy = "multibagger"
 
     loop = asyncio.get_event_loop()
-    results, is_scanning = await loop.run_in_executor(
+    results, is_scanning, progress = await loop.run_in_executor(
         _executor, _get_or_scan_nonblocking, strategy, universe
     )
 
     cache_key = f"{strategy}_{universe}"
-    filtered = [
-        r for r in results
-        if r["confidence"] >= min_confidence
-        and (not symbol or symbol.upper() in r["symbol"].upper())
-        and (min_price == 0 or r["ltp"] >= min_price)
-        and (max_price == 0 or r["ltp"] <= max_price)
-    ]
+    active_universe = FULL_UNIVERSE if universe == "full" else SCAN_UNIVERSE
+
+    # While scanning, merge in-progress partial results with stale cache
+    if is_scanning and progress.get("partial"):
+        merged = {r["symbol"]: r for r in (results or [])}
+        for r in progress["partial"]:
+            merged[r["symbol"]] = r
+        results = sorted(merged.values(), key=lambda x: -x["confidence"])
+
+    filtered = _apply_filters(results, min_confidence, min_price, max_price, symbol)
 
     last_scan = None
     if cache_key in _cache:
@@ -730,25 +797,8 @@ async def get_screener_results(
             time.time() - (time.monotonic() - ts)
         ).strftime("%H:%M:%S")
 
-    active_universe = FULL_UNIVERSE if universe == "full" else SCAN_UNIVERSE
-
-    # While scan is running, merge completed-batch partial results with cached results
-    progress = _scan_progress.get(cache_key, {})
-    if is_scanning and progress:
-        partial = progress.get("partial", [])
-        if partial:
-            # Prefer partial (fresher) over stale cache
-            merged_map = {r["symbol"]: r for r in (results or [])}
-            for r in partial:
-                merged_map[r["symbol"]] = r
-            results = sorted(merged_map.values(), key=lambda x: -x["confidence"])
-            filtered = [
-                r for r in results
-                if r["confidence"] >= min_confidence
-                and (not symbol or symbol.upper() in r["symbol"].upper())
-                and (min_price == 0 or r["ltp"] >= min_price)
-                and (max_price == 0 or r["ltp"] <= max_price)
-            ]
+    total_size = len(active_universe)
+    scanned = progress.get("scanned", total_size if not is_scanning else 0)
 
     return {
         "results": filtered,
@@ -757,8 +807,75 @@ async def get_screener_results(
         "universe": universe,
         "is_scanning": is_scanning,
         "last_scan": last_scan,
-        "universe_size": len(active_universe),
-        "scanned": progress.get("scanned", len(active_universe) if not is_scanning else 0),
+        "universe_size": total_size,
+        "scanned": scanned,
+    }
+
+
+@router.post("/scan/chunk")
+async def scan_chunk(
+    strategy: str = Query("vcp", pattern=_STRATEGY_RE),
+    universe: str = Query("nifty500", pattern="^(nifty500|full)$"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    _: None = Depends(require_internal_key),
+):
+    """Synchronously scan universe[offset:offset+limit], merge into L2, return hits.
+    The frontend calls chunks sequentially to drive a full scan without background threads
+    that get killed by Vercel's serverless Lambda freeze-on-response behaviour."""
+    if strategy == "custom":
+        strategy = "multibagger"
+
+    active_universe = FULL_UNIVERSE if universe == "full" else SCAN_UNIVERSE
+    total = len(active_universe)
+    ticker_slice = active_universe[offset : offset + limit]
+
+    if not ticker_slice:
+        return {
+            "hits": [], "chunk_count": 0,
+            "offset": offset, "limit": limit, "total": total,
+            "scanned": min(offset, total), "done": True, "cumulative_results": 0,
+        }
+
+    # Scan synchronously — this Lambda stays alive for the whole request
+    loop = asyncio.get_event_loop()
+    chunk_hits: list[dict] = await loop.run_in_executor(
+        _executor, _scan_slice, ticker_slice, strategy
+    )
+
+    scanned_so_far = offset + len(ticker_slice)
+    is_done = scanned_so_far >= total
+
+    # Merge chunk hits with whatever is already in L2 (accumulate across chunks)
+    existing = _l2_read(strategy, universe) or []
+    merged: dict[str, dict] = {r["symbol"]: r for r in existing}
+    for r in chunk_hits:
+        merged[r["symbol"]] = r
+    combined = sorted(merged.values(), key=lambda x: -x["confidence"])
+
+    # Persist accumulated results + progress to L2
+    _l2_write(strategy, universe, combined)
+    _l2_write_progress(strategy, universe, {
+        "scanned": scanned_so_far,
+        "total": total,
+        "completed": is_done,
+        "partial": combined[:100],
+    })
+
+    # Warm in-process cache when all chunks are done
+    if is_done:
+        cache_key = f"{strategy}_{universe}"
+        _cache[cache_key] = (time.monotonic(), combined)
+
+    return {
+        "hits": chunk_hits,
+        "chunk_count": len(chunk_hits),
+        "offset": offset,
+        "limit": limit,
+        "total": total,
+        "scanned": scanned_so_far,
+        "done": is_done,
+        "cumulative_results": len(combined),
     }
 
 

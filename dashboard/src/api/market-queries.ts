@@ -292,6 +292,31 @@ export const useTriggerScan = () => {
   return triggerScan;
 };
 
+export interface ScanChunkResponse {
+  hits: ScreenerResult[];
+  chunk_count: number;
+  offset: number;
+  limit: number;
+  total: number;
+  scanned: number;
+  done: boolean;
+  cumulative_results: number;
+}
+
+export const useScanChunk = () => {
+  const scanChunk = async (
+    strategy: ScreenerStrategy,
+    universe: "nifty500" | "full",
+    offset: number,
+    limit = 100,
+  ): Promise<ScanChunkResponse> => {
+    return api.post<ScanChunkResponse>(
+      `/screener/scan/chunk?strategy=${strategy}&universe=${universe}&offset=${offset}&limit=${limit}`,
+    );
+  };
+  return scanChunk;
+};
+
 // ── Quarterly Results ─────────────────────────────────────────────────────────
 export type Rating = "Excellent" | "Great" | "Good" | "Ok" | "Weak";
 

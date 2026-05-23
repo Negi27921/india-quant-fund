@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ScanSearch, RefreshCw, CheckCircle2, XCircle, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Filter, Loader2, Rocket, Layers, Zap, ArrowUpRight, GitMerge, BarChart3, Globe, ExternalLink, Star, BookOpen, TrendingUp as PnlIcon, Calendar } from "lucide-react";
 import { Header } from "@/components/layout/Header";
-import { useScreener, useTriggerScan, type ScreenerResult } from "@/api/market-queries";
+import { useScreener, useScanChunk, type ScreenerResult } from "@/api/market-queries";
 import { useQueryClient } from "@tanstack/react-query";
 
 // ── Paper Trade Types ─────────────────────────────────────────────────────────
@@ -541,6 +541,8 @@ export function ScreenerPage() {
   const [maxPrice, setMaxPrice] = useState(0);
   const [symbolFilter, setSymbolFilter] = useState("");
   const [scanning, setScanning] = useState(false);
+  const [chunkProgress, setChunkProgress] = useState<{ scanned: number; total: number } | null>(null);
+  const scanAbortRef = useRef(false);
   const [stratPnlFilter, setStratPnlFilter] = useState<string | null>(null);
 
   // Paper trade state
@@ -549,7 +551,7 @@ export function ScreenerPage() {
   const [ptToDate, setPtToDate] = useState("");
   const [ptStatusFilter, setPtStatusFilter] = useState<"all" | "open" | "closed">("all");
 
-  const triggerScan = useTriggerScan();
+  const scanChunk = useScanChunk();
   const qc = useQueryClient();
 
   const query = useScreener(
@@ -568,38 +570,63 @@ export function ScreenerPage() {
   const strong = results.filter(r => r.confidence >= 70);
   const moderate = results.filter(r => r.confidence >= 45 && r.confidence < 70);
 
+  // Chunked scan: frontend drives sequential 100-stock requests so no Vercel Lambda
+  // background thread gets killed mid-scan. Results accumulate in Supabase L2 cache.
   const handleScan = async () => {
+    if (scanning) return;
     setScanning(true);
+    scanAbortRef.current = false;
+    const CHUNK = 100;
+    const universeSize = universe === "full" ? 2137 : 503;
+    setChunkProgress({ scanned: 0, total: universeSize });
+
     try {
-      await triggerScan(strategy, universe);
-      await new Promise(r => setTimeout(r, 2000));
-      await qc.invalidateQueries({ queryKey: ["screener"] });
+      let offset = 0;
+      while (offset < universeSize && !scanAbortRef.current) {
+        try {
+          const res = await scanChunk(strategy, universe, offset, CHUNK);
+          offset = res.scanned;
+          setChunkProgress({ scanned: offset, total: res.total });
+          qc.invalidateQueries({ queryKey: ["screener"] });
+          if (res.done) break;
+        } catch {
+          offset += CHUNK; // skip failed chunk and continue
+          setChunkProgress({ scanned: offset, total: universeSize });
+        }
+      }
     } finally {
       setScanning(false);
+      setChunkProgress(null);
+      qc.invalidateQueries({ queryKey: ["screener"] });
     }
   };
 
-  // Auto-trigger scan on mount if last_scan is null or >30 min old
+  // Abort any in-flight scan when strategy/universe changes
+  useEffect(() => {
+    scanAbortRef.current = true;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [strategy, universe]);
+
+  // Auto-trigger scan on mount only when there are no cached results at all
+  const hasAutoScannedRef = useRef(false);
   useEffect(() => {
     if (data === undefined) return;
-    const shouldScan = !data.last_scan || (() => {
-      const lastScanTime = new Date(data.last_scan).getTime();
-      return Date.now() - lastScanTime > 30 * 60 * 1000;
-    })();
-    if (shouldScan && !data.is_scanning && !scanning) {
+    if (hasAutoScannedRef.current) return;
+    if ((data.results?.length ?? 0) === 0 && !data.is_scanning && !scanning) {
+      hasAutoScannedRef.current = true;
       handleScan();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.last_scan, data?.is_scanning]);
+  }, [data?.results?.length]);
 
-  // Poll every 8s while a scan is running so results appear as soon as ready
+  // Slow fallback poll during active scan (explicit invalidation after each chunk handles the rest)
   useEffect(() => {
-    if (!data?.is_scanning) return;
+    if (!scanning) return;
     const id = setInterval(() => {
       qc.invalidateQueries({ queryKey: ["screener"] });
-    }, 8_000);
+    }, 20_000);
     return () => clearInterval(id);
-  }, [data?.is_scanning, qc]);
+  }, [scanning, qc]);
 
   // Auto-record high-confidence screener results as paper trades
   const autoRecord = useCallback(() => {
@@ -651,11 +678,29 @@ export function ScreenerPage() {
             </h1>
             <div style={{ fontSize: 11.5, color: "var(--text-3)", fontFamily: "var(--font-body)", marginTop: 4 }}>
               Universe: <span style={{ color: "var(--accent)", fontWeight: 700 }}>{data?.universe_size ?? (universe === "full" ? 2137 : 503)}</span> NSE stocks
-              {data?.is_scanning && data?.scanned != null && data.scanned > 0 ? (
-                <> · <span style={{ color: "var(--amber)", fontWeight: 600 }}>
-                  Scanning: {data.scanned}/{data.universe_size ?? (universe === "full" ? 2137 : 503)} stocks
-                </span>
-                {data.total > 0 && <> · <span style={{ color: "var(--green)", fontWeight: 600 }}>{data.total} found so far</span></>}
+              {scanning && chunkProgress ? (
+                <>
+                  {" · "}
+                  <span style={{ color: "var(--amber)", fontWeight: 600 }}>
+                    Scanning {chunkProgress.scanned}/{chunkProgress.total}
+                  </span>
+                  {" "}
+                  <span style={{
+                    display: "inline-block", width: 80, height: 6,
+                    background: "var(--surface-3)", borderRadius: 3,
+                    verticalAlign: "middle", overflow: "hidden",
+                    position: "relative",
+                  }}>
+                    <span style={{
+                      position: "absolute", inset: 0,
+                      width: `${Math.round(chunkProgress.scanned / chunkProgress.total * 100)}%`,
+                      background: "var(--amber)", borderRadius: 3,
+                      transition: "width 300ms ease",
+                    }} />
+                  </span>
+                  {data && data.total > 0 && (
+                    <> · <span style={{ color: "var(--green)", fontWeight: 600 }}>{data.total} found so far</span></>
+                  )}
                 </>
               ) : data?.total != null ? (
                 <> · {data.total} results
@@ -663,27 +708,30 @@ export function ScreenerPage() {
                   {" · "}<span style={{ color: "var(--amber)", fontWeight: 600 }}>{moderate.length} Moderate</span>
                 </>
               ) : null}
-              {!data?.is_scanning && (data?.last_scan ? <> · Last scan: {data.last_scan}</> : <> · <span style={{ color: "var(--amber)" }}>Scan in progress — results stream as each 100-stock batch completes</span></>)}
+              {!scanning && (data?.last_scan ? <> · Last scan: {data.last_scan}</> : null)}
             </div>
           </div>
 
           <button
             onClick={handleScan}
-            disabled={scanning || (data?.is_scanning ?? false)}
+            disabled={scanning}
             style={{
               display: "flex", alignItems: "center", gap: 7,
               padding: "9px 18px", borderRadius: 10,
               background: "var(--accent)", color: "#fff",
               border: "none", cursor: scanning ? "wait" : "pointer",
               fontFamily: "var(--font-body)", fontSize: 12.5, fontWeight: 700,
-              opacity: (scanning || data?.is_scanning) ? 0.7 : 1,
+              opacity: scanning ? 0.7 : 1,
               transition: "all 150ms",
             }}
           >
-            {scanning || data?.is_scanning
+            {scanning
               ? <Loader2 style={{ width: 14, height: 14, animation: "spin 1s linear infinite" }} />
               : <RefreshCw style={{ width: 14, height: 14 }} />}
-            {scanning ? "Scanning..." : data?.is_scanning ? "Scan Running..." : "Refresh Scan"}
+            {scanning && chunkProgress
+              ? `${chunkProgress.scanned}/${chunkProgress.total}`
+              : scanning ? "Scanning..."
+              : "Refresh Scan"}
           </button>
         </div>
 
@@ -923,7 +971,7 @@ export function ScreenerPage() {
         }}>
           {/* Scan-in-progress banner — shown above stale results */}
           <AnimatePresence>
-            {(scanning || data?.is_scanning) && (
+            {scanning && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
@@ -938,7 +986,9 @@ export function ScreenerPage() {
               >
                 <Loader2 style={{ width: 14, height: 14, color: "var(--accent)", animation: "spin 1s linear infinite", flexShrink: 0 }} />
                 <span style={{ fontSize: 12, fontWeight: 600, color: "var(--accent)", fontFamily: "var(--font-body)" }}>
-                  Scan in progress — showing last results
+                  {chunkProgress
+                    ? `Scanning ${chunkProgress.scanned}/${chunkProgress.total} stocks — results update after each 100-stock batch`
+                    : "Scan in progress — showing last results"}
                 </span>
               </motion.div>
             )}
@@ -964,14 +1014,14 @@ export function ScreenerPage() {
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 80, gap: 12 }}>
               <div style={{ fontSize: 40 }}>🔍</div>
               <div style={{ fontFamily: "var(--font-body)", fontSize: 14, fontWeight: 600, color: "var(--text-2)" }}>
-                {data?.is_scanning ? "First scan in progress..." : "No setups found"}
+                {scanning ? "Scan in progress..." : "No setups found"}
               </div>
               <div style={{ fontSize: 12, color: "var(--text-4)", textAlign: "center", maxWidth: 320 }}>
-                {data?.is_scanning
-                  ? "Results will appear here as soon as the scan completes (~20–60s)."
+                {scanning
+                  ? `Scanned ${chunkProgress?.scanned ?? 0}/${chunkProgress?.total ?? "?"} stocks — results appear after each batch.`
                   : "Try lowering the confidence filter or click Refresh Scan."}
               </div>
-              {!data?.is_scanning && (
+              {!scanning && (
                 <button
                   onClick={handleScan}
                   style={{
