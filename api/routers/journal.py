@@ -58,35 +58,9 @@ def _all_trades() -> list[dict]:
 
 
 def _fetch_prices_sync(symbols: list[str], timeout_s: float = 6.0) -> dict[str, float]:
-    """Fetch prices for all symbols in parallel; total wall-time capped at timeout_s."""
-    from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED
-    import yfinance as yf
-
-    def _one(sym: str) -> tuple[str, float | None]:
-        for suffix in (".NS", ".BO"):
-            try:
-                p = float(yf.Ticker(sym + suffix).fast_info.last_price)
-                if p > 0:
-                    return sym, p
-            except Exception:
-                pass
-        return sym, None
-
-    prices: dict[str, float] = {}
-    if not symbols:
-        return prices
-
-    with ThreadPoolExecutor(max_workers=min(len(symbols), 6)) as pool:
-        futures = [pool.submit(_one, s) for s in symbols]
-        done, _ = wait(futures, timeout=timeout_s, return_when=ALL_COMPLETED)
-        for f in done:
-            try:
-                sym, price = f.result()
-                if price is not None:
-                    prices[sym] = price
-            except Exception:
-                pass
-    return prices
+    """Fetch prices via the unified market data layer (replaces inline yfinance calls)."""
+    from core.market_data import get_prices_bulk
+    return get_prices_bulk(symbols, timeout_s=timeout_s)
 
 
 # ── Pydantic models ────────────────────────────────────────────────────────────

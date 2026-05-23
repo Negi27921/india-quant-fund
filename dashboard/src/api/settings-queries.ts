@@ -34,11 +34,35 @@ export interface AlertConfig {
 export interface EnvSummary {
   env: string;
   paper_trading: boolean;
+  live_trading: boolean;
   initial_capital: number;
   llm_provider: string;
+  market_provider: string;
+  cache_provider: string;
+  notify_provider: string;
+  deployment_mode: string;
   log_level: string;
-  redis_url: string;
-  db_path: string;
+  websocket: boolean;
+}
+
+export interface SystemInfo {
+  market: string;
+  ai: string;
+  ai_chain: string[];
+  cache: string;
+  notify: string;
+  has_kite: boolean;
+  has_dhan: boolean;
+  has_nvidia: boolean;
+  has_groq: boolean;
+  has_gemini: boolean;
+  has_redis: boolean;
+  live_trading: boolean;
+  paper_trading: boolean;
+  websocket: boolean;
+  deployment: string;
+  brokers: { dhan: boolean; kite: boolean; shoonya: boolean };
+  notifications: { telegram: boolean; email: boolean };
 }
 
 export interface ProbeResult {
@@ -111,3 +135,10 @@ export const useUpdateAgentConfig = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["settings", "agent-config"] }),
   });
 };
+
+export const useSystemInfo = () =>
+  useQuery({
+    queryKey: ["settings", "system-info"],
+    queryFn: () => api.get<SystemInfo>("/settings/system-info"),
+    staleTime: 60_000,
+  });

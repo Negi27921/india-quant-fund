@@ -5,7 +5,6 @@ Results are cached in-process AND in Supabase so tab-switching never re-triggers
 from __future__ import annotations
 
 import asyncio
-import json
 import math
 import os
 import threading as _threading
@@ -31,60 +30,33 @@ _executor = ThreadPoolExecutor(max_workers=20)
 _cache: dict[str, tuple[float, list[dict]]] = {}
 _scan_running: set[str] = set()
 _scan_progress: dict[str, dict] = {}   # {cache_key: {scanned, total, partial}}
-CACHE_TTL      = 6 * 3600   # 6 hours in-process
-SB_CACHE_TTL   = 24 * 3600  # 24 hours Supabase cache (seconds)
+CACHE_TTL    = 6 * 3600   # 6 hours in-process
+L2_CACHE_TTL = 24 * 3600  # 24 hours in L2 provider (supabase / redis / memory)
 
 
-# ── Supabase persistent cache ──────────────────────────────────────────────
+# ── L2 persistent cache (provider-swappable) ──────────────────────────────
+# Key format: "screener:{strategy}:{universe}"
+# Provider selected via CACHE_PROVIDER env var (memory | supabase | redis)
 
-def _sb_read(strategy: str, universe: str) -> list[dict] | None:
-    """Return cached results from Supabase if fresh, else None."""
+def _l2_read(strategy: str, universe: str) -> list[dict] | None:
+    """Return cached results from the configured L2 cache provider, or None."""
     try:
-        from data.storage import supabase_db as sdb
-        rows = sdb.select(
-            "screener_cache",
-            cols="results,scanned_at",
-            filters={"strategy": strategy, "universe": universe},
-            limit=1,
-        )
-        if not rows:
-            return None
-        row = rows[0]
-        scanned_at_str = row.get("scanned_at", "")
-        if scanned_at_str:
-            from datetime import timezone
-            scanned_at = datetime.fromisoformat(scanned_at_str.replace("Z", "+00:00"))
-            age = (datetime.now(timezone.utc) - scanned_at).total_seconds()
-            if age > SB_CACHE_TTL:
-                return None
-        results_raw = row.get("results")
-        if isinstance(results_raw, str):
-            return json.loads(results_raw)
-        if isinstance(results_raw, list):
-            return results_raw
-        return None
+        from core.providers.registry import get_cache
+        data = get_cache().get(f"screener:{strategy}:{universe}")
+        if isinstance(data, list):
+            return data
     except Exception:
-        return None
+        pass
+    return None
 
 
-def _sb_write(strategy: str, universe: str, results: list[dict]) -> None:
-    """Persist scan results to Supabase screener_cache table."""
+def _l2_write(strategy: str, universe: str, results: list[dict]) -> None:
+    """Persist scan results to the configured L2 cache provider (non-fatal)."""
     try:
-        from data.storage import supabase_db as sdb
-        from datetime import timezone
-        sdb.upsert(
-            "screener_cache",
-            {
-                "strategy":    strategy,
-                "universe":    universe,
-                "scanned_at":  datetime.now(timezone.utc).isoformat(),
-                "results":     json.dumps(results),
-                "is_scanning": False,
-            },
-            on_conflict="strategy,universe",
-        )
+        from core.providers.registry import get_cache
+        get_cache().set(f"screener:{strategy}:{universe}", results, ttl_seconds=L2_CACHE_TTL)
     except Exception:
-        pass  # Cache write failure is non-fatal
+        pass
 
 # ── Universe: Full Nifty 500 (503 stocks from NSE EQUITY_L.csv + sharewatch) ────
 SCAN_UNIVERSE = [
@@ -680,7 +652,7 @@ def _launch_bg_scan(cache_key: str, strategy: str, universe_name: str) -> None:
         try:
             results = _run_scan(strategy, universe_name, cache_key=cache_key)
             _cache[cache_key] = (time.monotonic(), results)
-            _sb_write(strategy, universe_name, results)
+            _l2_write(strategy, universe_name, results)
         finally:
             _scan_running.discard(cache_key)
             _scan_progress.pop(cache_key, None)
@@ -707,11 +679,11 @@ def _get_or_scan_nonblocking(strategy: str, universe_name: str = "nifty500") -> 
         if now - ts < CACHE_TTL:
             return data, cache_key in _scan_running
 
-    # 2. Supabase persistent cache
-    sb_data = _sb_read(strategy, universe_name)
-    if sb_data is not None:
-        _cache[cache_key] = (now, sb_data)
-        return sb_data, cache_key in _scan_running
+    # 2. L2 cache (supabase / redis / memory — per CACHE_PROVIDER)
+    l2_data = _l2_read(strategy, universe_name)
+    if l2_data is not None:
+        _cache[cache_key] = (now, l2_data)
+        return l2_data, cache_key in _scan_running
 
     # 3. No cache anywhere — trigger background scan, return stale or empty
     stale = _cache.get(cache_key, (0, []))[1]
@@ -852,17 +824,17 @@ def _sequential_prewarm(universe_name: str) -> None:
         # Already being scanned by another thread
         if cache_key in _scan_running:
             continue
-        # Try Supabase first — warm in-process cache and skip
-        sb_data = _sb_read(strategy, universe_name)
-        if sb_data is not None:
-            _cache[cache_key] = (time.monotonic(), sb_data)
+        # Try L2 cache first — warm in-process cache and skip
+        l2_data = _l2_read(strategy, universe_name)
+        if l2_data is not None:
+            _cache[cache_key] = (time.monotonic(), l2_data)
             continue
         # Run scan synchronously in this thread (no executor contention)
         _scan_running.add(cache_key)
         try:
             results = _run_scan(strategy, universe_name)
             _cache[cache_key] = (time.monotonic(), results)
-            _sb_write(strategy, universe_name, results)
+            _l2_write(strategy, universe_name, results)
         except Exception:
             pass
         finally:

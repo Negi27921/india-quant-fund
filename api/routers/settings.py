@@ -16,20 +16,26 @@ def _has_key(env_var: str) -> bool:
 async def get_providers():
     """Return configured LLM providers and their key status (no key material)."""
     return {
-        "active": os.getenv("LLM_PROVIDER", "groq"),
+        "active": os.getenv("LLM_PROVIDER", "nvidia"),
         "providers": [
             {
-                "id":      "openai",
-                "label":   "OpenAI (Agent Router)",
-                "tier":    "paid",
-                "model":   os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-                "has_key": _has_key("OPENAI_API_KEY"),
-                "url":     "https://platform.openai.com",
-                "models":  ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
+                "id":      "nvidia",
+                "label":   "NVIDIA NIM — DeepSeek R1",
+                "tier":    "free",
+                "model":   os.getenv("NVIDIA_MODEL", "deepseek-ai/deepseek-r1"),
+                "has_key": _has_key("NVIDIA_API_KEY"),
+                "url":     "https://build.nvidia.com",
+                "models":  [
+                    "deepseek-ai/deepseek-r1",
+                    "deepseek-ai/deepseek-r1-distill-llama-70b",
+                    "deepseek-ai/deepseek-r1-distill-qwen-32b",
+                    "deepseek-ai/deepseek-r1-distill-qwen-14b",
+                    "meta/llama-3.3-70b-instruct",
+                ],
             },
             {
                 "id":      "groq",
-                "label":   "Groq",
+                "label":   "Groq (Fallback 1)",
                 "tier":    "free",
                 "model":   os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
                 "has_key": _has_key("GROQ_API_KEY"),
@@ -37,46 +43,27 @@ async def get_providers():
                 "models":  ["llama-3.3-70b-versatile", "qwen-qwq-32b", "mixtral-8x7b-32768", "gemma2-9b-it"],
             },
             {
-                "id":      "deepseek",
-                "label":   "DeepSeek",
-                "tier":    "paid",
-                "model":   os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
-                "has_key": _has_key("DEEPSEEK_API_KEY"),
-                "url":     "https://platform.deepseek.com",
-                "models":  ["deepseek-chat", "deepseek-reasoner"],
-            },
-            {
                 "id":      "gemini",
-                "label":   "Gemini",
+                "label":   "Gemini (Fallback 2)",
                 "tier":    "free",
-                "model":   os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp"),
+                "model":   os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
                 "has_key": _has_key("GEMINI_API_KEY"),
                 "url":     "https://aistudio.google.com",
-                "models":  ["gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"],
+                "models":  ["gemini-2.0-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"],
             },
             {
                 "id":      "qwen",
-                "label":   "Qwen / OpenRouter",
+                "label":   "OpenRouter (Fallback 3)",
                 "tier":    "free",
                 "model":   os.getenv("OPENROUTER_MODEL", "qwen/qwen3-235b-a22b:free"),
                 "has_key": _has_key("OPENROUTER_API_KEY"),
                 "url":     "https://openrouter.ai",
                 "models":  [
                     "nvidia/nemotron-3-super-120b-a12b:free",
-                    "openai/gpt-oss-120b:free",
                     "meta-llama/llama-3.3-70b-instruct:free",
+                    "qwen/qwen3-235b-a22b:free",
                     "google/gemma-3-27b-it:free",
-                    "qwen/qwen3-next-80b-a3b-instruct:free",
                 ],
-            },
-            {
-                "id":      "ollama",
-                "label":   "Ollama (Local)",
-                "tier":    "local",
-                "model":   os.getenv("OLLAMA_MODEL", "llama3.2"),
-                "has_key": True,
-                "url":     "https://ollama.com",
-                "models":  ["llama3.2", "qwen2.5", "mistral", "phi4"],
             },
         ],
     }
@@ -150,12 +137,38 @@ async def test_telegram(_: None = Depends(require_internal_key)):
 @router.get("/env")
 async def get_env_summary():
     """Non-sensitive summary of current environment settings."""
+    from core.config import settings as cfg
     return {
         "env":             os.getenv("ENV", "development"),
-        "paper_trading":   os.getenv("PAPER_TRADING", "true").lower() == "true",
+        "paper_trading":   cfg.ENABLE_PAPER_TRADING,
+        "live_trading":    cfg.ENABLE_LIVE_TRADING,
         "initial_capital": float(os.getenv("INITIAL_CAPITAL", "100000")),
-        "llm_provider":    os.getenv("LLM_PROVIDER", "groq"),
+        "llm_provider":    cfg.AI_PROVIDER,
+        "market_provider": cfg.MARKET_PROVIDER,
+        "cache_provider":  cfg.CACHE_PROVIDER,
+        "notify_provider": cfg.NOTIFY_PROVIDER,
+        "deployment_mode": cfg.DEPLOYMENT_MODE,
         "log_level":       os.getenv("LOG_LEVEL", "INFO"),
+        "websocket":       cfg.ENABLE_WEBSOCKET,
+    }
+
+
+@router.get("/system-info")
+async def get_system_info():
+    """Full provider configuration status — used by the dashboard Settings page."""
+    from core.providers.registry import provider_info
+    from core.config import settings as cfg
+    return {
+        **provider_info(),
+        "brokers": {
+            "dhan":    cfg.has_dhan,
+            "kite":    cfg.has_kite,
+            "shoonya": _has_key("SHOONYA_USER_ID"),
+        },
+        "notifications": {
+            "telegram": _has_key("TELEGRAM_BOT_TOKEN"),
+            "email":    _has_key("RESEND_API_KEY"),
+        },
     }
 
 

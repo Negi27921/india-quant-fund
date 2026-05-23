@@ -1,24 +1,25 @@
-# Slim requirements for API-only deployment (Render / Koyeb / Fly.io)
-# Does NOT include broker SDKs, ML libs, orchestration, or reporting tools
+# Vercel / cloud deployment requirements
+# This file is the single source of truth for the lambda bundle.
+# DO NOT add DuckDB, broker SDKs, ML libs, or orchestration tools here —
+# they exceed the 50MB Vercel lambda limit. Use requirements.txt for local dev.
 
-# API framework
+# ── API framework ─────────────────────────────────────────────────────────────
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
-websockets>=12.0
 httpx>=0.27.0
 requests>=2.32.0
 
-# Data
+# ── Data (slim subset — no pandas-ta, scipy, sklearn) ─────────────────────────
 yfinance>=0.2.38
 pandas>=2.2.0
 numpy>=1.26.0
 
-# Web scraping (FII/DII, NSE)
+# ── Web scraping (NSE/BSE index data, FII/DII) ────────────────────────────────
 beautifulsoup4>=4.12.0
 lxml>=5.2.0
 nsepython>=0.0.26
 
-# Config / utils
+# ── Config / utils ────────────────────────────────────────────────────────────
 pydantic>=2.7.0
 pydantic-settings>=2.3.0
 python-dotenv>=1.0.0
@@ -27,6 +28,12 @@ aiofiles>=23.2.0
 tenacity>=8.3.0
 pytz>=2024.1
 python-dateutil>=2.9.0
-duckdb>=0.10.0
 pyyaml>=6.0
+
+# ── Database ──────────────────────────────────────────────────────────────────
 supabase>=2.4.0
+# duckdb — local dev only, NOT included here (not available on Vercel lambda)
+
+# ── Optional: Redis for distributed rate-limiting + cross-instance cache ───────
+# Uncomment when CACHE_PROVIDER=redis or REDIS_URL is set:
+# redis>=5.0.0

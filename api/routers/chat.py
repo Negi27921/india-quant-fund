@@ -47,41 +47,10 @@ class ChatResponse(BaseModel):
 
 
 def _get_stock_context(symbol: str) -> str:
-    try:
-        import yfinance as yf
-        ticker = yf.Ticker(f"{symbol.upper()}.NS")
-        info = ticker.info
-        hist = ticker.history(period="5d")
-
-        price = info.get("currentPrice") or info.get("regularMarketPrice", 0)
-        pe = info.get("trailingPE", "N/A")
-        pb = info.get("priceToBook", "N/A")
-        mktcap = info.get("marketCap", 0)
-        mktcap_cr = round(mktcap / 1e7, 0) if mktcap else "N/A"
-        revenue = info.get("totalRevenue", 0)
-        rev_cr = round(revenue / 1e7, 0) if revenue else "N/A"
-        roe = info.get("returnOnEquity", "N/A")
-        div_yield = info.get("dividendYield", 0)
-        week_52_high = info.get("fiftyTwoWeekHigh", "N/A")
-        week_52_low = info.get("fiftyTwoWeekLow", "N/A")
-
-        change_pct = 0.0
-        if not hist.empty and len(hist) >= 2:
-            change_pct = ((hist["Close"].iloc[-1] - hist["Close"].iloc[-2]) / hist["Close"].iloc[-2]) * 100
-
-        return f"""
-Stock: {symbol.upper()} (NSE)
-Current Price: ₹{price:,.2f} ({change_pct:+.2f}% today)
-Market Cap: ₹{mktcap_cr:,} Cr
-52W High: ₹{week_52_high} | 52W Low: ₹{week_52_low}
-P/E Ratio: {pe} | P/B: {pb}
-ROE: {round(float(roe)*100, 1) if roe != 'N/A' else 'N/A'}%
-Revenue (TTM): ₹{rev_cr:,} Cr
-Dividend Yield: {round(float(div_yield)*100, 2) if div_yield else 'N/A'}%
-Sector: {info.get('sector', 'N/A')} | Industry: {info.get('industry', 'N/A')}
-""".strip()
-    except Exception:
-        return f"Stock: {symbol.upper()} (NSE) - Live data unavailable"
+    # Delegates to the unified market data layer (fast_info only, avoids the
+    # 3-10s yfinance .info call that caused 504s on Vercel's 10s timeout).
+    from core.market_data import get_stock_context
+    return get_stock_context(symbol, fast=True)
 
 
 SYSTEM_PROMPT = """You are the One Piece Market Intelligence Assistant — a world-class AI analyst specialising in Indian stock markets (NSE & BSE).
@@ -108,8 +77,42 @@ Rules:
 """
 
 
+def _nvidia_complete(system: str, user_msg: str, history: list[dict] | None = None) -> str:
+    """NVIDIA NIM — DeepSeek R1 via OpenAI-compatible endpoint."""
+    import requests as _req
+    key = os.getenv("NVIDIA_API_KEY", "").strip()
+    if not key:
+        raise ValueError("NVIDIA_API_KEY not set")
+    model = os.getenv("NVIDIA_MODEL", "deepseek-ai/deepseek-r1").strip()
+
+    messages: list[dict] = [{"role": "system", "content": system}]
+    if history:
+        for turn in history:
+            messages.append({"role": turn.get("role", "user"), "content": turn.get("content", "")})
+    messages.append({"role": "user", "content": user_msg})
+
+    r = _req.post(
+        "https://integrate.api.nvidia.com/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        json={"model": model, "messages": messages, "temperature": 0.3, "max_tokens": 800, "stream": False},
+        timeout=12,
+    )
+    r.raise_for_status()
+    content = r.json()["choices"][0]["message"]["content"]
+    # DeepSeek R1 wraps chain-of-thought in <think>…</think> — strip for clean reply
+    if "<think>" in content and "</think>" in content:
+        after = content.split("</think>", 1)[-1].strip()
+        if after:
+            content = after
+    return content
+
+
 def _groq_complete(system: str, user_msg: str, history: list[dict] | None = None) -> str:
-    """Direct HTTP call to Groq with conversation history support."""
+    """Groq — Llama 3.3 70B (fallback 1)."""
     import requests as _req
     key = os.getenv("GROQ_API_KEY", "").strip()
     if not key:
@@ -131,7 +134,7 @@ def _groq_complete(system: str, user_msg: str, history: list[dict] | None = None
 
 
 def _gemini_complete(system: str, user_msg: str, history: list[dict] | None = None) -> str:
-    """Direct HTTP call to Gemini with multi-turn conversation history support."""
+    """Gemini Flash (fallback 2)."""
     import requests as _req
     key = os.getenv("GEMINI_API_KEY", "").strip()
     if not key:
@@ -160,55 +163,28 @@ def _gemini_complete(system: str, user_msg: str, history: list[dict] | None = No
     return r.json()["candidates"][0]["content"]["parts"][0]["text"]
 
 
-def _openai_compat_complete(system: str, user_msg: str) -> str:
-    """OpenAI-compatible endpoint (custom router, OpenAI, DeepSeek)."""
-    import requests as _req
-    key = os.getenv("OPENAI_API_KEY", "").strip()
-    base = os.getenv("OPENAI_BASE_URL", "https://api.openai.com").strip().rstrip("/")
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip()
-    if not key:
-        raise ValueError("OPENAI_API_KEY not set")
-    r = _req.post(
-        f"{base}/chat/completions",
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        json={
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_msg},
-            ],
-            "temperature": 0.3,
-            "max_tokens": 1200,
-        },
-        timeout=25,
-    )
-    r.raise_for_status()
-    return r.json()["choices"][0]["message"]["content"]
-
-
 def _llm_complete(system: str, user_msg: str, history: list[dict] | None = None) -> tuple[str, str, int]:
-    """Try LLM providers in order. Returns (reply, provider, latency_ms)."""
-    preferred = os.getenv("LLM_PROVIDER", "gemini").lower()
+    """Try providers in order: NVIDIA/DeepSeek → Groq → Gemini. Returns (reply, provider, latency_ms)."""
+    preferred = os.getenv("LLM_PROVIDER", "nvidia").lower()
 
-    providers: list[tuple[str, callable]] = []
+    # Build cascade — always try all three, just change order by preference
+    _all = [
+        ("nvidia",  _nvidia_complete),
+        ("groq",    _groq_complete),
+        ("gemini",  _gemini_complete),
+    ]
     if preferred == "groq":
-        providers = [("groq", _groq_complete), ("gemini", _gemini_complete), ("openai", _openai_compat_complete)]
+        ordered = [("groq", _groq_complete), ("nvidia", _nvidia_complete), ("gemini", _gemini_complete)]
     elif preferred == "gemini":
-        providers = [("gemini", _gemini_complete), ("groq", _groq_complete), ("openai", _openai_compat_complete)]
+        ordered = [("gemini", _gemini_complete), ("nvidia", _nvidia_complete), ("groq", _groq_complete)]
     else:
-        providers = [("openai", _openai_compat_complete), ("groq", _groq_complete), ("gemini", _gemini_complete)]
+        ordered = _all  # nvidia first (default)
 
     last_error = ""
-    for name, fn in providers:
+    for name, fn in ordered:
         try:
             t0 = time.monotonic()
-            # Gemini supports history; other providers get history injected into user_msg
-            if name == "gemini":
-                result = fn(system, user_msg, history)
-            elif history and name in ("groq", "openai"):
-                result = fn(system, user_msg, history)
-            else:
-                result = fn(system, user_msg)
+            result = fn(system, user_msg, history)
             latency_ms = int((time.monotonic() - t0) * 1000)
             if result and result.strip():
                 return result.strip(), name, latency_ms

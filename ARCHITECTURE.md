@@ -1,8 +1,10 @@
 # One Piece — System Architecture
 
+> Last updated: 2026-05-23
+
 ## Overview
 
-One Piece is a full-stack automated quantitative hedge fund for Indian equities (NSE/BSE). It consists of a FastAPI backend, a React dashboard, and a set of Python strategy/execution modules. The system supports two runtime environments:
+One Piece is a full-stack automated quantitative hedge fund for Indian equities (NSE/BSE). Two runtime environments:
 
 | Mode | Entry point | Storage | WebSocket | Deployed on |
 |------|------------|---------|-----------|-------------|
@@ -15,183 +17,304 @@ One Piece is a full-stack automated quantitative hedge fund for Indian equities 
 
 ```
 one-piece/
-├── api/                    # FastAPI application
-│   ├── _config.py          # Shared CORS, versioning, router prefixes (single source of truth)
-│   ├── main.py             # Local dev entry point (DuckDB + WebSocket)
-│   ├── cloud_main.py       # Vercel entry point (Supabase stubs, no WebSocket)
+├── core/                       # Provider abstraction layer ← NEW
+│   ├── config.py               # Unified Settings class (all env vars, one import)
+│   ├── market_data.py          # Public price-fetch API (replaces 3 duplicate helpers)
+│   └── providers/
+│       ├── base.py             # Abstract interfaces: MarketDataProvider, AIProvider,
+│       │                       #   CacheProvider, NotificationProvider, BrokerProvider
+│       ├── registry.py         # Factory singletons with @lru_cache — get_market_provider(),
+│       │                       #   get_ai_provider(), get_cache(), get_notifier()
+│       ├── market/             # yfinance (default), nse (nsepython), mock
+│       ├── ai/                 # groq, gemini, openrouter, chain (cascade), mock
+│       ├── cache/              # memory (default), supabase (cache_entries), redis
+│       └── notifications/      # telegram, email (Resend), multi (both)
+│
+├── api/                        # FastAPI application
+│   ├── _config.py              # Shared CORS, versioning, router prefixes
+│   ├── main.py                 # Local dev entry point (DuckDB + WebSocket)
+│   ├── cloud_main.py           # Vercel entry point (Supabase stubs, no WebSocket)
 │   ├── middleware/
-│   │   └── security.py     # Security headers middleware
+│   │   └── security.py         # HSTS, X-Frame, CSP, Referrer-Policy headers
 │   └── routers/
-│       ├── chat.py         # Claude AI assistant (streaming)
-│       ├── journal.py      # Trading journal CRUD + NAV summary
-│       ├── market.py       # Live market data (yFinance)
-│       ├── portfolio.py    # Portfolio positions and equity curve
-│       ├── risk.py         # Risk metrics and drawdown analysis
-│       ├── screener.py     # NSE/BSE stock screener + auto-scanner
-│       ├── settings.py     # User preferences (stored in Supabase)
-│       ├── strategies.py   # Strategy definitions and backtests
-│       ├── system.py       # Kill switch, audit log (local DuckDB)
-│       ├── telegram_bot.py # Telegram alerts (cloud only)
-│       └── trades.py       # Screener auto-trade log
-├── dashboard/              # React + TypeScript frontend (Vite)
-│   ├── src/
-│   │   ├── api/client.ts   # Typed HTTP wrapper (timeout, retry, ApiError)
-│   │   ├── lib/
-│   │   │   ├── constants.ts    # API_BASE, env config
-│   │   │   ├── nse-stocks.ts   # Static NSE 500 symbol list (~large, lazy chunk)
-│   │   │   └── utils.ts        # formatCurrency, formatPct, etc.
-│   │   ├── pages/          # One file per route
-│   │   ├── components/     # Reusable UI (cards, charts, tables, layout)
-│   │   └── hooks/          # React Query hooks (data fetching)
-│   ├── vite.config.ts      # Build config — code-split vendor chunks
-│   └── vercel.json         # SPA rewrite rules for Vercel
-├── data/                   # Data pipeline and storage layer
-│   ├── storage/            # DuckDB abstraction
-│   └── pipeline/           # EOD data ingestion jobs
-├── execution/              # Order management system
-│   ├── brokers/            # Broker adapters (Zerodha Kite)
-│   ├── oms.py              # Order lifecycle management
-│   ├── router.py           # Smart order routing
-│   ├── slippage.py         # Slippage estimation
-│   └── reconciliation.py   # Position reconciliation
-├── risk/                   # Risk management layer
-│   ├── kill_switch.py      # Automated circuit breaker
-│   ├── manager.py          # Unified risk checks
-│   ├── limits.py           # Position / portfolio limits
-│   ├── drawdown.py         # Drawdown tracking
-│   ├── liquidity.py        # Liquidity checks
-│   └── position_sizer.py   # Kelly / fixed-fraction sizing
-├── backtest/               # Strategy backtesting engine
-├── orchestration/          # Scheduling and job coordination
-├── monitoring/             # Alerting and observability
-├── reporting/              # Report generation (daily/monthly)
-├── config/                 # Strategy and system configuration files
-└── .github/workflows/      # CI/CD pipelines
+│       ├── chat.py             # AI assistant — uses core.market_data (fast_info only)
+│       ├── journal.py          # Trading journal CRUD + NAV + parallel price fetch
+│       ├── market.py           # Indices, FII/DII, movers, filings, OHLCV
+│       ├── portfolio.py        # Paper/live positions, equity curve, P&L calendar
+│       ├── risk.py             # Drawdown, Sharpe, kill switch
+│       ├── screener.py         # 7-strategy screener, L1+L2 cache, background scan
+│       ├── settings.py         # LLM/broker/alert config, system-info endpoint
+│       ├── strategies.py       # Strategy performance, signals, allocation
+│       ├── system.py           # Kill switch, audit log (local DuckDB)
+│       ├── telegram_bot.py     # Telegram webhook (cloud only)
+│       └── trades.py           # Screener auto-trade log
+│
+├── execution/                  # Order management system
+│   ├── brokers/
+│   │   ├── base.py             # BrokerInterface ABC + dataclasses
+│   │   ├── kite.py             # Zerodha Kite Connect — real-time, primary ← NEW
+│   │   ├── dhan.py             # Dhan — fallback
+│   │   └── shoonya.py          # Shoonya/Finvasia — final fallback
+│   ├── router.py               # SmartOrderRouter: Kite → Dhan → Shoonya
+│   ├── oms.py                  # Order lifecycle management
+│   ├── slippage.py             # Slippage estimation
+│   └── reconciliation.py       # Position reconciliation
+│
+├── dashboard/                  # React 19 + TypeScript (Vite 5)
+│   └── src/
+│       ├── App.tsx             # Route-level lazy loading (React.lazy + Suspense) ← UPDATED
+│       ├── api/
+│       │   ├── client.ts       # Typed HTTP wrapper (timeout, retry, ApiError)
+│       │   ├── queries.ts      # Portfolio, risk, strategy, system hooks
+│       │   ├── market-queries.ts
+│       │   ├── pnl-queries.ts
+│       │   ├── settings-queries.ts  # + useSystemInfo hook ← UPDATED
+│       │   └── types.ts
+│       └── pages/
+│           ├── Settings.tsx    # + SystemInfoSection (provider health) ← UPDATED
+│           └── [6 other pages]
+│
+├── scripts/
+│   └── migrations/
+│       ├── 001_app_config.sql      # app_config table (kill switch seed + agent config)
+│       ├── 002_cache_entries.sql   # cache_entries table for CACHE_PROVIDER=supabase
+│       └── 003_signals_table.sql   # Normalized signals table (future migration path)
+│
+├── risk/                       # Kill switch, position sizer, drawdown, limits
+├── data/                       # Data pipeline, DuckDB + Supabase storage
+├── backtest/                   # India equity backtester
+└── .github/workflows/          # CI + scheduled jobs
 ```
+
+---
+
+## Provider Abstraction Layer
+
+The `core/` package decouples all external dependencies from business logic. Every router that needs market data, AI, or caching imports from `core/` — never directly from `yfinance`, `groq`, etc.
+
+### Pattern
+
+```python
+# Any router — one line to swap providers
+from core.providers.registry import get_cache, get_market_provider
+
+cache = get_cache()            # memory | supabase | redis — per CACHE_PROVIDER env var
+prices = get_market_provider() # yfinance | nse | kite — per MARKET_PROVIDER env var
+```
+
+### Singleton lifecycle
+
+Registry functions use `@lru_cache(maxsize=1)` — each process creates exactly one instance per provider type. First call reads the env var and constructs; subsequent calls return the same object. On Vercel serverless, each lambda worker has its own singleton (not shared across instances — that's why `CACHE_PROVIDER=supabase` matters for cross-instance state).
+
+### Adding a new provider
+
+1. Create `core/providers/<type>/<name>_provider.py` implementing the ABC from `base.py`
+2. Add a branch in `registry.py` matching the new env var value
+3. Set `MARKET_PROVIDER=yourname` — zero other code changes needed
+
+---
+
+## Screener Cache Architecture
+
+Two-level cache designed for Vercel serverless cold starts:
+
+```
+Request arrives
+      │
+      ▼
+L1: in-process dict          ← warm after first request in this lambda worker
+    TTL = 6h
+    (lost on cold start)
+      │ miss
+      ▼
+L2: CacheProvider            ← configured via CACHE_PROVIDER
+    TTL = 24h
+    ┌─────────────────────────────────────┐
+    │ memory   → same as L1 (no benefit)  │
+    │ supabase → cache_entries table      │ ← recommended on Vercel
+    │ redis    → Upstash/Redis            │ ← best for high traffic
+    └─────────────────────────────────────┘
+      │ miss
+      ▼
+Background scan              ← ThreadPoolExecutor, never blocks GET
+Returns stale or []          ← GET responds immediately with is_scanning=true
+```
+
+Cache keys: `"screener:{strategy}:{universe}"` (e.g. `"screener:vcp:nifty500"`)
+
+---
+
+## Smart Order Router
+
+```
+place_order(order)
+      │
+      ▼
+_default_primary()
+  ├─ settings.has_kite → KiteBroker()   (KITE_API_KEY + KITE_ACCESS_TOKEN set)
+  └─ fallback          → DhanBroker()   (DHAN_CLIENT_ID + DHAN_ACCESS_TOKEN set)
+      │
+      ▼
+primary.place_order(order)
+  │ success → return result
+  │ failure (≥3 consecutive) → ShoonyaBroker fallback
+      │
+      ▼
+fallback.place_order(order)
+```
+
+To upgrade to Kite execution: add `KITE_API_KEY` and `KITE_ACCESS_TOKEN` to env — no code changes.
 
 ---
 
 ## Frontend Architecture
 
 ### Routing
-`react-router-dom` v6 with a shared `<Layout>` wrapper. All pages are statically imported (no lazy loading at the route level — pages are small; the large chunks are vendor libraries).
+`react-router-dom` v6 with a shared `<Layout>` wrapper. All 8 pages are **lazy-loaded** via `React.lazy()` — each page JS chunk is downloaded only when the user first navigates to that route.
 
 ```
-/               → Market (live market overview)
-/screener       → Screener (stock scanner)
-/portfolio      → Portfolio (holdings, P&L, equity curve)
-/risk           → Risk (drawdown, kill switch status)
-/strategies     → Strategies (backtest results)
-/journal        → Trading Journal (manual trade log)
-/settings       → Settings
-/results        → Backtest results detail
+/               → MarketPage      (lazy)
+/screener       → ScreenerPage    (lazy)
+/portfolio      → PortfolioPage   (lazy)
+/risk           → RiskPage        (lazy)
+/strategies     → StrategiesPage  (lazy)
+/journal        → TradingJournalPage (lazy)
+/results        → ResultsPage     (lazy)
+/settings       → SettingsPage    (lazy)
 ```
+
+First paint downloads ~80 KB instead of ~235 KB.
 
 ### Data Fetching
-All server state uses `@tanstack/react-query`. The typed HTTP client at `api/client.ts` is the only place `fetch()` is called. Key behaviours:
-- Default timeout: 10 seconds
-- Chat endpoints: 35 seconds
-- GET requests: one automatic retry on network failure (not on 4xx/5xx)
+All server state uses `@tanstack/react-query`. Key behaviours:
+- Default timeout: 10s, chat endpoints: 35s
+- GET: one automatic retry on network failure (not 4xx/5xx)
 - Errors surface as `ApiError(message, status, path)`
 
 ### Bundle Chunks (Vite `manualChunks`)
-| Chunk | Contents |
-|-------|---------|
-| `vendor-charts` | recharts |
-| `vendor-motion` | framer-motion |
-| `vendor-icons` | lucide-react |
-| `vendor-query` | @tanstack/react-query |
-| `nse-data` | nse-stocks.ts (static symbol list) |
+| Chunk | Contents | Gzip |
+|-------|---------|------|
+| `vendor-charts` | recharts | ~112 KB |
+| `vendor-motion` | framer-motion | ~40 KB |
+| `vendor-icons` | lucide-react | ~6 KB |
+| `vendor-query` | @tanstack/react-query | ~15 KB |
+| `nse-data` | NSE 500 symbol list | ~38 KB |
+| Per-page chunks | Each page file | 5–30 KB each |
 
 ---
 
-## Backend Architecture
+## Settings Page — Provider Health
 
-### Shared Configuration (`api/_config.py`)
-Single source of truth for CORS origins, allowed methods/headers, and router prefix strings. Both `main.py` and `cloud_main.py` import from here.
+The Settings → Connections tab shows a live provider status grid via `GET /api/settings/system-info`:
 
-### Key Design Decisions
-
-**NAV computation (journal)**
-The `/api/journal/summary` endpoint computes NAV from `buy_price × quantity` (cost basis) rather than live prices. This avoids yFinance HTTP calls in the critical path, which exceeded Vercel's serverless timeout. Live prices are fetched separately via `/api/journal/prices` using parallel `ThreadPoolExecutor` with a 6-second total timeout.
-
-**WebSocket (local only)**
-Vercel's serverless functions do not support persistent connections. The `/ws` WebSocket endpoint (portfolio snapshots every 5s) is only available in `main.py` (local). The cloud frontend polls HTTP endpoints instead.
-
-**System router (dual implementation)**
-- `api/routers/system.py` — full DuckDB-backed implementation (local)
-- Inline stubs in `cloud_main.py` — lightweight responses (cloud); DuckDB not available on Vercel
-
-### Security Middleware (`api/middleware/security.py`)
-Adds HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, and CSP headers to all responses.
-
----
-
-## Data Flow: Live Portfolio
-
-```
-Trading Journal (manual entries)
-    │
-    ▼
-POST /api/journal/trades  →  Supabase (cloud) / DuckDB (local)
-    │
-GET /api/journal/summary  →  cost-basis NAV + realized P&L (no yFinance)
-GET /api/journal/prices   →  live prices via yFinance (parallel, 6s timeout)
-    │
-    ▼
-Portfolio page: LIVE tab merges summary + prices to show unrealized P&L
-```
-
-## Data Flow: Screener / Auto-Trades
-
-```
-GitHub Actions cron (screener_scan.yml, paper_trading.yml)
-    │
-    ▼
-Python strategy engine → signals
-    │
-    ▼
-POST /api/trades  →  Supabase paper_trades table
-    │
-GET /api/trades   →  Portfolio SCREENER AUTO-TRADES tab
+```json
+{
+  "market": "yfinance",
+  "ai": "groq",
+  "ai_chain": ["groq", "gemini", "openrouter"],
+  "cache": "memory",
+  "notify": "telegram",
+  "has_kite": false,
+  "has_dhan": false,
+  "has_groq": true,
+  "has_gemini": false,
+  "has_redis": false,
+  "live_trading": false,
+  "paper_trading": true,
+  "deployment": "cloud",
+  "brokers": { "dhan": false, "kite": false, "shoonya": false },
+  "notifications": { "telegram": true, "email": false }
+}
 ```
 
 ---
 
-## Deployment
+## Backend: Key Design Decisions
 
-### Frontend (Vercel)
-```bash
-cd dashboard
-npm run build        # tsc + vite build → dist/
-vercel --prod        # deploy dist/ with vercel.json rewrite rules
+### Timeout budget (Vercel 10s limit)
+| Operation | Old time | New time | Fix |
+|-----------|---------|----------|-----|
+| `ticker.info` in chat context | 3–10s | — | Replaced with `fast_info` (<1s) |
+| Bulk price fetch | Sequential | Parallel | `ThreadPoolExecutor`, 7s total timeout |
+| Screener scan | Blocks GET | Background | Never blocks; returns immediately with `is_scanning` |
+| AI cascade | No timeout | 5s + 6s + 6s | Hard per-provider timeout, 8.5s total budget |
+
+### NAV computation
+`/api/journal/summary` computes NAV from `buy_price × quantity` (cost basis) — no yFinance in the critical path. Live prices fetched separately via `/api/journal/prices` using parallel threads.
+
+### WebSocket (local only)
+Vercel serverless doesn't support persistent connections. `/ws` (portfolio snapshots every 5s) is only in `main.py`. Cloud frontend polls HTTP endpoints.
+
+### Dual system router
+- `api/routers/system.py` — full DuckDB-backed (local dev)
+- Inline stubs in `cloud_main.py` — lightweight (Vercel)
+
+---
+
+## Supabase Migrations
+
+Run once in Supabase SQL Editor in order:
+
+| File | Creates | Enables |
+|------|---------|---------|
+| `001_app_config.sql` | `app_config` | Persistent kill switch + agent config |
+| `002_cache_entries.sql` | `cache_entries` | `CACHE_PROVIDER=supabase` (cross-lambda cache) |
+| `003_signals_table.sql` | `signals` | Normalized signal history (future screener path) |
+
+---
+
+## Data Flows
+
+### Screener / Auto-Trades
 ```
-Environment variable required: `VITE_API_BASE` (URL of the deployed API).
+GitHub Actions (paper_trading.yml) — 9:30 AM
+  → scripts/paper_trader.py --open
+      → GET /api/screener/results?strategy=vcp&min_confidence=70
+          → L1/L2 cache hit (instant)
+      → POST /api/portfolio/paper-positions  → Supabase paper_trades
 
-### Backend (Vercel Serverless)
-Entry point: `api/cloud_main.py` (configured in `vercel.json`).
-No persistent state — all data in Supabase.
+GitHub Actions — 3:15 PM
+  → scripts/paper_trader.py --check
+      → fetch LTP via core.market_data.get_prices_bulk()
+      → PUT /api/portfolio/paper-positions/{ticker}/exit
+```
 
-### Local Development
-```bash
-# Backend
-uvicorn api.main:app --reload --port 8000
+### Daily Report
+```
+GitHub Actions (daily_report.yml) — 10:00 PM
+  → scripts/strategy_agent.py
+      → Groq function-calling → reads paper_trades (30d)
+      → saves insights → Supabase strategy_notes
+  → scripts/daily_report.py
+      → screener hits, P&L summary, top picks, agent insights
+      → Telegram + Email (Resend)
+```
 
-# Frontend
-cd dashboard && npm run dev   # http://localhost:3000
+### AI Chat Request
+```
+POST /api/chat/message { symbol: "RELIANCE", messages: [...] }
+  → core.market_data.get_stock_context("RELIANCE", fast=True)   # <1s, fast_info only
+  → core.providers.registry.get_ai_chain().complete(...)
+      → GroqProvider  (timeout: 5s)
+      → GeminiProvider (timeout: 6s, if Groq fails)
+      → OpenRouterProvider (timeout: 6s, if Gemini fails)
+  → response within 8.5s total budget
 ```
 
 ---
 
-## CI/CD (`.github/workflows/ci.yml`)
+## CI/CD
 
-Runs on every push/PR to `main`:
-1. **Frontend job**: `npm ci` → `eslint` → `tsc --noEmit` → `vite build`
-2. **Backend job**: `ruff check` → `ruff format --check` → `pyright` (informational)
+### `.github/workflows/ci.yml`
+1. **Frontend**: `npm ci` → `eslint` → `tsc --noEmit` → `vite build`
+2. **Backend**: `ruff check` → `ruff format --check` → `pyright`
 
-Scheduled automation workflows (independent of CI):
-- `screener_scan.yml` — daily NSE 500 scan
-- `paper_trading.yml` — paper trade execution
-- `daily_report.yml` / `monthly_report.yml` — performance reports
-- `multibagger_alert.yml` — high-momentum alerts
-- `keep-alive.yml` — prevents Vercel cold starts
+### Scheduled automation (independent of CI)
+| File | Schedule | Job |
+|------|---------|-----|
+| `screener_scan.yml` | Daily weekdays | NSE 500 full scan |
+| `paper_trading.yml` | 9:30 AM + 3:15 PM | Open/check paper trades |
+| `daily_report.yml` | 10:00 PM | Strategy agent + report |
+| `monthly_report.yml` | 1st of month | P&L summary |
+| `multibagger_alert.yml` | 10:30 AM + 2:00 PM | High-conviction alerts |
+| `keep-alive.yml` | Every 20h | Prevent Vercel cold start |

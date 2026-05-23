@@ -37,17 +37,9 @@ def _mock_pnl(days: int = 90) -> list[dict]:
 
 
 def _live_prices(tickers: list[str]) -> dict[str, float]:
-    """Fetch live prices from yfinance with per-ticker error isolation."""
-    prices = {}
-    for t in tickers:
-        try:
-            info = yf.Ticker(t).fast_info
-            p = float(info.last_price or 0)
-            if p > 0:
-                prices[t] = p
-        except Exception:
-            pass
-    return prices
+    """Fetch live prices via the unified market data layer (thread-safe, timeout-bounded)."""
+    from core.market_data import get_prices_bulk
+    return {t: p for t, p in get_prices_bulk(tickers, timeout_s=7.0).items() if p > 0}
 
 
 def _validate_price(current: float, avg: float) -> float:

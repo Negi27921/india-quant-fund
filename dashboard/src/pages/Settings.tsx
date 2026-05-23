@@ -32,6 +32,7 @@ import {
   useTestTelegram,
   useAgentConfig,
   useUpdateAgentConfig,
+  useSystemInfo,
   type ProbeResult,
   type AgentConfig,
 } from "@/api/settings-queries";
@@ -250,11 +251,10 @@ function LLMSection() {
                       {/* .env instruction */}
                       <div style={{ background: "var(--surface-3)", borderRadius: 6, padding: 8, fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-3)" }}>
                         <p style={{ color: "var(--text-2)", fontWeight: 600, marginBottom: 4 }}>.env</p>
+                        {p.id === "nvidia"   && <><p>NVIDIA_API_KEY=nvapi-…</p><p>NVIDIA_MODEL={p.model}</p><p>LLM_PROVIDER=nvidia</p><p># Get key at build.nvidia.com (free tier)</p></>}
                         {p.id === "groq"     && <><p>GROQ_API_KEY=gsk_…</p><p>GROQ_MODEL={p.model}</p><p>LLM_PROVIDER=groq</p></>}
-                        {p.id === "deepseek" && <><p>DEEPSEEK_API_KEY=sk-…</p><p>LLM_PROVIDER=deepseek</p></>}
                         {p.id === "gemini"   && <><p>GEMINI_API_KEY=AIza…</p><p>LLM_PROVIDER=gemini</p></>}
-                        {p.id === "qwen"     && <><p>OPENROUTER_API_KEY=sk-or-…</p><p># Free 120B models (pick one):</p><p>OPENROUTER_MODEL=nvidia/nemotron-3-super-120b-a12b:free</p><p># or: openai/gpt-oss-120b:free</p><p>LLM_PROVIDER=qwen</p></>}
-                        {p.id === "ollama"   && <><p>OLLAMA_BASE_URL=http://localhost:11434</p><p>OLLAMA_MODEL={p.model}</p><p>LLM_PROVIDER=ollama</p></>}
+                        {p.id === "qwen"     && <><p>OPENROUTER_API_KEY=sk-or-…</p><p>OPENROUTER_MODEL={p.model}</p><p>LLM_PROVIDER=qwen</p></>}
                       </div>
                     </motion.div>
                   )}
@@ -455,13 +455,15 @@ function EnvSection() {
 
   const rows = data
     ? [
-        { label: "Environment",    value: data.env,                              mono: false },
-        { label: "Paper Trading",  value: data.paper_trading ? "Yes (safe)" : "⚠ LIVE", mono: false },
-        { label: "Initial Capital",value: formatCurrency(data.initial_capital),  mono: true },
-        { label: "LLM Provider",   value: data.llm_provider,                    mono: true },
-        { label: "Log Level",      value: data.log_level,                        mono: true },
-        { label: "Redis",          value: data.redis_url,                        mono: true },
-        { label: "Database",       value: data.db_path,                          mono: true },
+        { label: "Environment",     value: data.env,                                        mono: false },
+        { label: "Trading Mode",    value: data.paper_trading ? "Paper (safe)" : "⚠ LIVE",  mono: false },
+        { label: "Initial Capital", value: formatCurrency(data.initial_capital),             mono: true },
+        { label: "LLM Provider",    value: data.llm_provider,                               mono: true },
+        { label: "Market Provider", value: data.market_provider,                            mono: true },
+        { label: "Cache Provider",  value: data.cache_provider,                             mono: true },
+        { label: "Notify Provider", value: data.notify_provider,                            mono: true },
+        { label: "Deployment",      value: data.deployment_mode,                            mono: true },
+        { label: "Log Level",       value: data.log_level,                                  mono: true },
       ]
     : [];
 
@@ -490,8 +492,8 @@ function EnvSection() {
                   <td style={{
                     padding: "10px 16px", fontSize: 12,
                     fontFamily: row.mono ? "var(--font-mono)" : "var(--font-body)",
-                    color: row.label === "Paper Trading" && !data?.paper_trading ? "var(--red)" : "var(--text-1)",
-                    fontWeight: row.label === "Paper Trading" && !data?.paper_trading ? 700 : 400,
+                    color: row.label === "Trading Mode" && !data?.paper_trading ? "var(--red)" : "var(--text-1)",
+                    fontWeight: row.label === "Trading Mode" && !data?.paper_trading ? 700 : 400,
                   }}>
                     {row.value}
                   </td>
@@ -504,6 +506,77 @@ function EnvSection() {
           </table>
         )}
       </div>
+    </section>
+  );
+}
+
+// ── System Info section (provider health) ────────────────────────────────────
+function SystemInfoSection() {
+  const { data, isLoading, refetch, isFetching } = useSystemInfo();
+
+  const providerRow = (label: string, value: string, active: boolean) => (
+    <div key={label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+      <span style={{ fontSize: 12, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>{label}</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--text-1)" }}>{value}</span>
+        <div style={{ width: 7, height: 7, borderRadius: "50%", background: active ? "var(--green)" : "var(--surface-3)", flexShrink: 0 }} />
+      </div>
+    </div>
+  );
+
+  const boolRow = (label: string, ok: boolean) => (
+    <div key={label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+      <span style={{ fontSize: 12, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>{label}</span>
+      {ok
+        ? <CheckCircle className="w-3.5 h-3.5 text-success" />
+        : <XCircle className="w-3.5 h-3.5 text-danger" />}
+    </div>
+  );
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Settings2 className="w-4 h-4 text-primary" />
+          <h2 className="text-sm font-semibold text-text-primary">System Providers</h2>
+        </div>
+        <button
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="flex items-center gap-1.5 text-xs btn-secondary"
+        >
+          <RefreshIcon className={cn("w-3 h-3", isFetching && "animate-spin")} />
+          Refresh
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="card p-4 space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-5 w-full" />)}
+        </div>
+      ) : data ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="card p-4">
+            <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-3">Active Providers</p>
+            {providerRow("Market Data", data.market, true)}
+            {providerRow("AI / LLM", data.ai, true)}
+            {providerRow("Cache", data.cache, true)}
+            {providerRow("Notifications", data.notify, true)}
+            {providerRow("Deployment", data.deployment, true)}
+          </div>
+          <div className="card p-4">
+            <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-3">Credentials</p>
+            {boolRow("NVIDIA / DeepSeek R1", data.has_nvidia)}
+            {boolRow("Groq (Fallback 1)", data.has_groq)}
+            {boolRow("Gemini (Fallback 2)", data.has_gemini)}
+            {boolRow("Redis", data.has_redis)}
+            {boolRow("Kite (Zerodha)", data.has_kite)}
+            {boolRow("Dhan", data.has_dhan)}
+            {boolRow("Telegram", data.notifications.telegram)}
+            {boolRow("Email (Resend)", data.notifications.email)}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -809,12 +882,15 @@ export function SettingsPage() {
           {tab === "connections" && (
             <div className="space-y-8">
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-                <BrokersSection />
+                <SystemInfoSection />
               </motion.div>
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }}>
-                <AlertsSection />
+                <BrokersSection />
               </motion.div>
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 }}>
+                <AlertsSection />
+              </motion.div>
+              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}>
                 <EnvSection />
               </motion.div>
             </div>

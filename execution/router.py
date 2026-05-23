@@ -1,4 +1,10 @@
-"""Smart order router — Dhan (primary) → Shoonya (failover)."""
+"""Smart order router — Kite/Dhan (primary) → Shoonya (failover).
+
+Broker priority (first configured wins as primary):
+  1. Kite (KITE_API_KEY + KITE_ACCESS_TOKEN)  — real-time, recommended
+  2. Dhan (DHAN_CLIENT_ID + DHAN_ACCESS_TOKEN) — existing integration
+  3. Shoonya                                   — final fallback
+"""
 from __future__ import annotations
 
 import time
@@ -11,14 +17,25 @@ from execution.brokers.base import (
     BrokerInterface, BrokerOrder, BrokerOrderResult, BrokerOrderStatus, OrderStatus,
 )
 from execution.brokers.dhan import DhanBroker
+from execution.brokers.kite import KiteBroker
 from execution.brokers.shoonya import ShoonyaBroker
+
+
+def _default_primary() -> BrokerInterface:
+    """Return the best available primary broker based on configured credentials."""
+    from core.config import settings
+    if settings.has_kite:
+        logger.info("SmartOrderRouter: using Kite as primary broker")
+        return KiteBroker()
+    logger.info("SmartOrderRouter: using Dhan as primary broker")
+    return DhanBroker()
 
 
 class SmartOrderRouter:
     """
     Routes orders to the best available broker.
-    Primary: Dhan. Failover: Shoonya.
-    Switches automatically on failure, sends alert.
+    Primary: Kite (if configured) or Dhan. Failover: Shoonya.
+    Switches automatically on 3 consecutive failures, with alert.
     """
 
     def __init__(
@@ -26,7 +43,7 @@ class SmartOrderRouter:
         primary: BrokerInterface | None = None,
         fallback: BrokerInterface | None = None,
     ):
-        self.primary = primary or DhanBroker()
+        self.primary = primary or _default_primary()
         self.fallback = fallback or ShoonyaBroker()
         self._active_broker: Optional[BrokerInterface] = None
         self._consecutive_failures: int = 0
