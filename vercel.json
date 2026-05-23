@@ -31,6 +31,8 @@
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/index.py" },
     { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/index.html" }
+    { "src": "/assets/(.*)", "dest": "/dashboard/assets/$1" },
+    { "src": "/favicon\\.svg", "dest": "/dashboard/favicon.svg" },
+    { "src": "/(.*)", "dest": "/dashboard/index.html" }
   ]
 }
