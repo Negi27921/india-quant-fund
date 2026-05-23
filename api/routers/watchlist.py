@@ -382,6 +382,35 @@ def _build_stock_context(symbol: str) -> str:
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+@router.get("/universe/search")
+async def universe_search(q: str = "", limit: int = 40) -> list[dict]:
+    """
+    Search the stock_universe table for the universe stock picker.
+    Returns symbol, company, sector, industry sorted by relevance.
+    q="" returns the top stocks by market cap.
+    """
+    if not (_SB_URL and _SB_KEY):
+        return []
+    try:
+        q_clean = q.strip().upper()
+        if q_clean:
+            # ilike search on symbol and company name
+            path = (
+                f"stock_universe?select=symbol,company,sector,industry"
+                f"&or=(symbol.ilike.{q_clean}*,company.ilike.*{q.strip()}*)"
+                f"&order=symbol.asc&limit={min(limit, 80)}"
+            )
+        else:
+            path = (
+                f"stock_universe?select=symbol,company,sector,industry"
+                f"&order=symbol.asc&limit={min(limit, 80)}"
+            )
+        rows = _sb_get(path)
+        return rows if isinstance(rows, list) else []
+    except Exception:
+        return []
+
+
 @router.get("/health")
 async def watchlist_health() -> dict:
     """Quick DB connectivity check — useful for diagnosing blank watchlist page."""

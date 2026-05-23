@@ -107,3 +107,19 @@ export function useAnalyseStock() {
       api.post<AnalyseResponse>("/watchlists/analyse", body),
   });
 }
+
+export interface UniverseStock {
+  symbol: string;
+  company: string;
+  sector: string;
+  industry: string;
+}
+
+export function useUniverseSearch(q: string) {
+  return useQuery<UniverseStock[]>({
+    queryKey: ["universe", "search", q],
+    queryFn: () => api.get<UniverseStock[]>(`/watchlists/universe/search?q=${encodeURIComponent(q)}&limit=50`),
+    staleTime: 5 * 60_000,
+    placeholderData: (prev) => prev,
+  });
+}

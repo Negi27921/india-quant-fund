@@ -1364,6 +1364,63 @@ async def get_live_price(symbol: str):
         raise HTTPException(status_code=404, detail=f"Price not found: {e}")
 
 
+@router.get("/prices")
+async def get_prices_batch(symbols: str = Query(..., description="Comma-separated NSE symbols")):
+    """
+    Batch CMP fetch for multiple symbols via yfinance download (fast, ~1-2s for 50 stocks).
+    Returns {SYMBOL: {cmp, change, pct_change, prev_close}} dict.
+    """
+    raw = [s.strip().upper().replace(".NS", "").replace(".BO", "") for s in symbols.split(",") if s.strip()]
+    if not raw or len(raw) > 100:
+        return {}
+
+    def _batch_fetch() -> dict:
+        import yfinance as yf
+        tickers = [f"{s}.NS" for s in raw]
+        try:
+            data = yf.download(
+                tickers, period="2d", interval="1d",
+                progress=False, auto_adjust=True,
+                threads=True, group_by="ticker",
+            )
+            result: dict[str, dict] = {}
+            for sym, tkr in zip(raw, tickers):
+                try:
+                    if len(tickers) == 1:
+                        closes = data["Close"]
+                    else:
+                        closes = data[tkr]["Close"] if tkr in data.columns.get_level_values(0) else None
+                    if closes is None or len(closes) < 1:
+                        continue
+                    closes = closes.dropna()
+                    if len(closes) == 0:
+                        continue
+                    cmp = float(closes.iloc[-1])
+                    prev = float(closes.iloc[-2]) if len(closes) >= 2 else cmp
+                    chg  = cmp - prev
+                    pct  = (chg / prev * 100) if prev else 0
+                    result[sym] = {
+                        "cmp":        round(cmp, 2),
+                        "change":     round(chg, 2),
+                        "pct_change": round(pct, 2),
+                        "prev_close": round(prev, 2),
+                    }
+                except Exception:
+                    continue
+            return result
+        except Exception:
+            return {}
+
+    loop = asyncio.get_running_loop()
+    try:
+        result = await asyncio.wait_for(
+            loop.run_in_executor(_executor, _batch_fetch), timeout=15.0
+        )
+        return result
+    except Exception:
+        return {}
+
+
 @router.get("/filings")
 @_cached("filings", ttl=120)
 async def get_filings(limit: int = Query(20, le=50)):

@@ -386,3 +386,21 @@ export const useLivePrice = (symbol: string) =>
     refetchInterval: 60 * 1000,
     enabled: !!symbol,
   });
+
+export interface PriceEntry {
+  cmp: number;
+  change: number;
+  pct_change: number;
+  prev_close: number;
+}
+
+export const useBatchPrices = (symbols: string[]) =>
+  useQuery<Record<string, PriceEntry>>({
+    queryKey: ["market", "prices", symbols.slice().sort().join(",")],
+    queryFn:  () => symbols.length === 0
+      ? Promise.resolve({})
+      : api.get<Record<string, PriceEntry>>(`/market/prices?symbols=${symbols.join(",")}`),
+    staleTime:      2 * 60_000,
+    refetchInterval: 5 * 60_000,
+    enabled: symbols.length > 0 && symbols.length <= 100,
+  });

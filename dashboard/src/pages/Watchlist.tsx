@@ -4,16 +4,17 @@ import {
   Plus, Trash2, Star, Zap, BarChart3,
   ChevronRight, Search, TrendingUp,
   Sparkles, Send, Loader2, X,
-  Trophy, ThumbsUp, Minus,
+  Trophy, ThumbsUp, Minus, Filter,
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import {
   useWatchlists, useWatchlistItems,
   useCreateWatchlist, useDeleteWatchlist,
   useAddWatchlistItem, useRemoveWatchlistItem,
-  useAnalyseStock,
+  useAnalyseStock, useUniverseSearch,
   type Watchlist, type WatchlistItem,
 } from "@/api/watchlist-queries";
+import { useBatchPrices } from "@/api/market-queries";
 
 // ── Rating badge ──────────────────────────────────────────────────────────────
 const RATING_CFG: Record<string, { color: string; bg: string; icon: React.ReactNode }> = {
@@ -57,7 +58,7 @@ function CreateModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div style={{
-      position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100,
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 100,
       display: "flex", alignItems: "center", justifyContent: "center",
     }} onClick={onClose}>
       <motion.div
@@ -65,8 +66,9 @@ function CreateModal({ onClose }: { onClose: () => void }) {
         exit={{ opacity: 0, scale: 0.96 }}
         onClick={e => e.stopPropagation()}
         style={{
-          background: "var(--surface-1)", border: "1px solid var(--border)",
-          borderRadius: 16, padding: 28, width: 400, boxShadow: "0 24px 80px rgba(0,0,0,0.5)",
+          background: "#0e1117", border: "1px solid rgba(167,139,250,0.3)",
+          borderRadius: 16, padding: 28, width: 400,
+          boxShadow: "0 32px 96px rgba(0,0,0,0.8), 0 0 0 1px rgba(167,139,250,0.08)",
         }}
       >
         <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-1)", marginBottom: 20 }}>
@@ -138,24 +140,37 @@ function CreateModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-// ── Add stock modal ───────────────────────────────────────────────────────────
+// ── Universe stock picker modal ───────────────────────────────────────────────
 function AddStockModal({ watchlistId, onClose }: { watchlistId: string; onClose: () => void }) {
-  const [symbol, setSymbol] = useState("");
-  const [company, setCompany] = useState("");
-  const [notes, setNotes] = useState("");
+  const [query, setQuery]       = useState("");
+  const [debouncedQ, setDQ]     = useState("");
+  const [selected, setSelected] = useState<{ symbol: string; company: string; sector: string; industry: string } | null>(null);
+  const [notes, setNotes]       = useState("");
   const add = useAddWatchlistItem(watchlistId);
+  const { data: results = [], isFetching } = useUniverseSearch(debouncedQ);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
 
-  const handleSubmit = () => {
-    const sym = symbol.trim().toUpperCase().replace(/\.NS$|\.BO$/i, "");
-    if (!sym) return;
-    add.mutate({ symbol: sym, ticker: `${sym}.NS`, company: company.trim(), notes: notes.trim() }, {
-      onSuccess: () => onClose(),
-    });
+  useEffect(() => {
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setDQ(query), 250);
+    return () => clearTimeout(timerRef.current);
+  }, [query]);
+
+  const handleAdd = () => {
+    if (!selected) return;
+    add.mutate({
+      symbol:   selected.symbol,
+      ticker:   `${selected.symbol}.NS`,
+      company:  selected.company,
+      sector:   selected.sector,
+      industry: selected.industry,
+      notes:    notes.trim(),
+    }, { onSuccess: () => onClose() });
   };
 
   return (
     <div style={{
-      position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100,
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 100,
       display: "flex", alignItems: "center", justifyContent: "center",
     }} onClick={onClose}>
       <motion.div
@@ -163,48 +178,144 @@ function AddStockModal({ watchlistId, onClose }: { watchlistId: string; onClose:
         exit={{ opacity: 0, scale: 0.96 }}
         onClick={e => e.stopPropagation()}
         style={{
-          background: "var(--surface-1)", border: "1px solid var(--border)",
-          borderRadius: 16, padding: 28, width: 380, boxShadow: "0 24px 80px rgba(0,0,0,0.5)",
+          background: "#0e1117", border: "1px solid rgba(0,255,135,0.25)",
+          borderRadius: 16, padding: 24, width: 460,
+          boxShadow: "0 32px 96px rgba(0,0,0,0.8), 0 0 0 1px rgba(0,255,135,0.08)",
+          display: "flex", flexDirection: "column", gap: 16,
         }}
       >
-        <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-1)", marginBottom: 20 }}>
-          Add Stock
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-1)" }}>
+            Add from Universe
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-4)", cursor: "pointer", display: "flex" }}>
+            <X style={{ width: 16, height: 16 }} />
+          </button>
         </div>
 
-        {[
-          { label: "Symbol (NSE)", value: symbol, set: setSymbol, placeholder: "e.g. RELIANCE", upper: true },
-          { label: "Company (optional)", value: company, set: setCompany, placeholder: "Reliance Industries" },
-          { label: "Notes (optional)", value: notes, set: setNotes, placeholder: "Why you're watching this…" },
-        ].map(({ label, value, set, placeholder, upper }) => (
-          <div key={label} style={{ marginBottom: 14 }}>
-            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-3)", display: "block", marginBottom: 6, letterSpacing: "0.06em", textTransform: "uppercase" }}>{label}</label>
-            <input
-              value={value}
-              onChange={e => set(upper ? e.target.value.toUpperCase() : e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleSubmit()}
-              placeholder={placeholder}
-              style={{
-                width: "100%", padding: "9px 12px", borderRadius: 8,
-                background: "var(--surface-2)", border: "1px solid var(--border)",
-                color: "var(--text-1)", fontSize: 13, outline: "none",
-                fontFamily: "var(--font-body)", boxSizing: "border-box",
-              }}
-            />
-          </div>
-        ))}
+        {/* Search input */}
+        <div style={{ position: "relative" }}>
+          <Search style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", width: 13, height: 13, color: "var(--text-4)" }} />
+          {isFetching && <Loader2 style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", width: 13, height: 13, color: "var(--accent)", animation: "spin 1s linear infinite" }} />}
+          <input
+            autoFocus
+            value={query}
+            onChange={e => { setQuery(e.target.value); setSelected(null); }}
+            placeholder="Search symbol or company name…"
+            style={{
+              width: "100%", padding: "10px 12px 10px 32px", borderRadius: 10,
+              background: "var(--surface-2)", border: "1px solid var(--border)",
+              color: "var(--text-1)", fontSize: 13, outline: "none",
+              fontFamily: "var(--font-body)", boxSizing: "border-box",
+            }}
+            onFocus={e => (e.currentTarget.style.borderColor = "var(--accent)")}
+            onBlur={e  => (e.currentTarget.style.borderColor = "var(--border)")}
+          />
+        </div>
 
-        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+        {/* Results list */}
+        <div style={{
+          maxHeight: 260, overflowY: "auto", borderRadius: 10,
+          border: "1px solid var(--border)", background: "var(--surface-2)",
+        }}>
+          {results.length === 0 && !isFetching && debouncedQ.length >= 1 ? (
+            <div style={{ padding: "20px 16px", textAlign: "center", color: "var(--text-4)", fontSize: 12 }}>
+              No stocks found for "{debouncedQ}"
+            </div>
+          ) : results.length === 0 && !debouncedQ ? (
+            <div style={{ padding: "20px 16px", textAlign: "center", color: "var(--text-4)", fontSize: 12 }}>
+              Type to search 2000+ NSE/BSE stocks
+            </div>
+          ) : (
+            results.map(stock => {
+              const isSel = selected?.symbol === stock.symbol;
+              return (
+                <div
+                  key={stock.symbol}
+                  onClick={() => setSelected(stock)}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "10px 14px", cursor: "pointer", transition: "all 120ms",
+                    background: isSel ? "rgba(0,255,135,0.08)" : "transparent",
+                    borderLeft: `3px solid ${isSel ? "var(--accent)" : "transparent"}`,
+                    borderBottom: "1px solid var(--surface-3)",
+                  }}
+                  onMouseEnter={e => { if (!isSel) (e.currentTarget as HTMLDivElement).style.background = "var(--surface-3)"; }}
+                  onMouseLeave={e => { if (!isSel) (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}
+                >
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-mono)" }}>
+                      {stock.symbol}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 1 }}>
+                      {stock.company}
+                    </div>
+                  </div>
+                  {stock.industry || stock.sector ? (
+                    <span style={{
+                      fontSize: 9, fontWeight: 600, padding: "2px 7px", borderRadius: 5,
+                      background: "var(--surface-1)", border: "1px solid var(--border)",
+                      color: "var(--text-3)", letterSpacing: "0.04em",
+                    }}>
+                      {stock.industry || stock.sector}
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Selected stock preview */}
+        {selected && (
+          <div style={{
+            padding: "10px 14px", borderRadius: 10,
+            background: "rgba(0,255,135,0.06)", border: "1px solid rgba(0,255,135,0.2)",
+          }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--accent)", marginBottom: 2 }}>
+              Selected: {selected.symbol}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text-2)" }}>{selected.company}</div>
+          </div>
+        )}
+
+        {/* Notes */}
+        <div>
+          <label style={{ fontSize: 10, fontWeight: 700, color: "var(--text-3)", display: "block", marginBottom: 5, letterSpacing: "0.07em", textTransform: "uppercase" }}>
+            Notes (optional)
+          </label>
+          <input
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            placeholder="Why you're watching this…"
+            style={{
+              width: "100%", padding: "9px 12px", borderRadius: 8, boxSizing: "border-box",
+              background: "var(--surface-2)", border: "1px solid var(--border)",
+              color: "var(--text-1)", fontSize: 12, outline: "none", fontFamily: "var(--font-body)",
+            }}
+          />
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
           <button onClick={onClose} style={{
             padding: "8px 18px", borderRadius: 8, border: "1px solid var(--border)",
             background: "transparent", color: "var(--text-2)", fontSize: 13, cursor: "pointer",
             fontFamily: "var(--font-body)",
           }}>Cancel</button>
-          <button onClick={handleSubmit} disabled={!symbol.trim() || add.isPending} style={{
-            padding: "8px 18px", borderRadius: 8, border: "none",
-            background: "var(--accent)", color: "#fff", fontSize: 13, fontWeight: 600,
-            cursor: "pointer", fontFamily: "var(--font-body)", opacity: !symbol.trim() ? 0.5 : 1,
-          }}>
-            {add.isPending ? "Adding…" : "Add Stock"}
+          <button
+            onClick={handleAdd}
+            disabled={!selected || add.isPending}
+            style={{
+              padding: "8px 20px", borderRadius: 8, border: "none",
+              background: selected ? "var(--accent)" : "var(--surface-3)",
+              color: selected ? "#000" : "var(--text-4)", fontSize: 13, fontWeight: 700,
+              cursor: selected ? "pointer" : "default", fontFamily: "var(--font-body)",
+              transition: "all 150ms",
+            }}
+          >
+            {add.isPending ? "Adding…" : "Add to Watchlist"}
           </button>
         </div>
       </motion.div>
@@ -780,12 +891,13 @@ function WatchlistSidebar({
 
 // ── Stock row ─────────────────────────────────────────────────────────────────
 function StockRow({
-  item, isSelected, onSelect, onRemove,
+  item, isSelected, onSelect, onRemove, cmp,
 }: {
   item: WatchlistItem;
   isSelected: boolean;
   onSelect: () => void;
   onRemove: () => void;
+  cmp?: { cmp: number; pct_change: number } | null;
 }) {
   const sectorLabel = item.industry || item.sector || null;
   return (
@@ -802,26 +914,26 @@ function StockRow({
       onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = "var(--surface-2)"; }}
       onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}
     >
-      <div style={{ minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-mono)" }}>
             {item.symbol}
           </span>
           {item.result_rating && <RatingBadge rating={item.result_rating} />}
           {item.breakout_date && (
-            <span style={{ fontSize: 9, color: "#10b981", fontWeight: 700, letterSpacing: "0.05em" }}>⚡ BREAKOUT</span>
+            <span style={{ fontSize: 9, color: "#10b981", fontWeight: 700, letterSpacing: "0.05em" }}>⚡</span>
           )}
         </div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
           {item.company && (
-            <span style={{ fontSize: 11, color: "var(--text-3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 130 }}>
+            <span style={{ fontSize: 10, color: "var(--text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 110 }}>
               {item.company}
             </span>
           )}
           {sectorLabel && (
             <span style={{
-              fontSize: 9, color: "var(--text-4)", background: "var(--surface-2)",
-              borderRadius: 4, padding: "1px 5px", whiteSpace: "nowrap",
+              fontSize: 8.5, color: "var(--text-4)", background: "var(--surface-2)",
+              borderRadius: 3, padding: "1px 4px", whiteSpace: "nowrap",
               border: "1px solid var(--border)", flexShrink: 0,
             }}>
               {sectorLabel}
@@ -829,10 +941,30 @@ function StockRow({
           )}
         </div>
       </div>
+
+      {/* CMP */}
+      <div style={{ textAlign: "right", marginRight: 8, flexShrink: 0 }}>
+        {cmp ? (
+          <>
+            <div style={{ fontSize: 12, fontWeight: 700, fontFamily: "var(--font-mono)", color: "var(--text-1)" }}>
+              ₹{cmp.cmp.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            </div>
+            <div style={{
+              fontSize: 9.5, fontWeight: 700, fontFamily: "var(--font-mono)",
+              color: cmp.pct_change >= 0 ? "#10b981" : "#f87171",
+            }}>
+              {cmp.pct_change >= 0 ? "▲" : "▼"}{Math.abs(cmp.pct_change).toFixed(1)}%
+            </div>
+          </>
+        ) : (
+          <div style={{ fontSize: 10, color: "var(--text-4)" }}>—</div>
+        )}
+      </div>
+
       <button
         onClick={e => { e.stopPropagation(); onRemove(); }}
         style={{
-          width: 24, height: 24, borderRadius: 4, border: "none",
+          width: 22, height: 22, borderRadius: 4, border: "none",
           background: "transparent", color: "var(--text-4)", cursor: "pointer",
           display: "flex", alignItems: "center", justifyContent: "center",
           flexShrink: 0, transition: "all 150ms",
@@ -840,13 +972,13 @@ function StockRow({
         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "#f87171"; }}
         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "var(--text-4)"; }}
       >
-        <X style={{ width: 12, height: 12 }} />
+        <X style={{ width: 11, height: 11 }} />
       </button>
     </div>
   );
 }
 
-// ── Middle pane: stock list ───────────────────────────────────────────────────
+// ── Industry filter dropdown ──────────────────────────────────────────────────
 function IndustryFilterBar({
   items,
   activeFilter,
@@ -856,53 +988,53 @@ function IndustryFilterBar({
   activeFilter: string | null;
   onFilter: (f: string | null) => void;
 }) {
-  // Collect unique industries/sectors
   const industries = useMemo(() => {
-    const set = new Set<string>();
+    const counts = new Map<string, number>();
     for (const item of items) {
-      if (item.industry) set.add(item.industry);
-      else if (item.sector) set.add(item.sector);
+      const label = item.industry || item.sector || "";
+      if (label) counts.set(label, (counts.get(label) ?? 0) + 1);
     }
-    return Array.from(set).sort();
+    return Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
   }, [items]);
 
   if (industries.length === 0) return null;
 
   return (
     <div style={{
-      display: "flex", gap: 5, flexWrap: "wrap",
-      padding: "8px 14px 6px",
+      padding: "7px 14px 6px",
       borderBottom: "1px solid var(--border)",
       background: "var(--surface-1)",
+      display: "flex", alignItems: "center", gap: 8,
     }}>
-      <button
-        onClick={() => onFilter(null)}
+      <Filter style={{ width: 11, height: 11, color: "var(--text-4)", flexShrink: 0 }} />
+      <select
+        value={activeFilter ?? ""}
+        onChange={e => onFilter(e.target.value || null)}
         style={{
-          padding: "3px 9px", borderRadius: 10, fontSize: 10, fontWeight: 700,
-          cursor: "pointer", border: "none", transition: "all 120ms",
-          background: activeFilter === null ? "var(--accent)" : "var(--surface-2)",
-          color: activeFilter === null ? "#fff" : "var(--text-3)",
-          fontFamily: "var(--font-body)",
+          flex: 1, padding: "5px 8px", borderRadius: 7, fontSize: 11, fontWeight: 600,
+          background: "var(--surface-2)", border: `1px solid ${activeFilter ? "var(--accent-border)" : "var(--border)"}`,
+          color: activeFilter ? "var(--accent)" : "var(--text-2)",
+          outline: "none", cursor: "pointer", fontFamily: "var(--font-body)",
+          appearance: "none", WebkitAppearance: "none",
         }}
       >
-        All
-      </button>
-      {industries.map(ind => (
+        <option value="">All Industries ({items.length})</option>
+        {industries.map(([ind, count]) => (
+          <option key={ind} value={ind}>{ind} ({count})</option>
+        ))}
+      </select>
+      {activeFilter && (
         <button
-          key={ind}
-          onClick={() => onFilter(activeFilter === ind ? null : ind)}
+          onClick={() => onFilter(null)}
           style={{
-            padding: "3px 9px", borderRadius: 10, fontSize: 10, fontWeight: 600,
-            cursor: "pointer", border: "1px solid var(--border)", transition: "all 120ms",
-            background: activeFilter === ind ? "rgba(167,139,250,0.15)" : "transparent",
-            color: activeFilter === ind ? "var(--accent)" : "var(--text-3)",
-            fontFamily: "var(--font-body)",
-            borderColor: activeFilter === ind ? "var(--accent-border)" : "var(--border)",
+            background: "none", border: "none", color: "var(--text-4)",
+            cursor: "pointer", display: "flex", padding: 2, flexShrink: 0,
           }}
+          title="Clear filter"
         >
-          {ind}
+          <X style={{ width: 12, height: 12 }} />
         </button>
-      ))}
+      )}
     </div>
   );
 }
@@ -930,6 +1062,13 @@ function StockListPane({
       i.industry === industryFilter || i.sector === industryFilter;
     return matchSearch && matchIndustry;
   }), [items, search, industryFilter]);
+
+  // Batch CMP — fetch for up to 100 visible stocks
+  const priceSymbols = useMemo(
+    () => filtered.slice(0, 100).map(i => i.symbol),
+    [filtered],
+  );
+  const { data: prices = {} } = useBatchPrices(priceSymbols);
 
   if (!watchlist) {
     return (
@@ -1033,6 +1172,7 @@ function StockListPane({
               isSelected={selectedSymbol === item.symbol}
               onSelect={() => onSelectItem(item)}
               onRemove={() => remove.mutate(item.symbol)}
+              cmp={prices[item.symbol] ?? null}
             />
           ))
         )}
