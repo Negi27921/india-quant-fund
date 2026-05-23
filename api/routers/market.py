@@ -1766,18 +1766,56 @@ def _qr_fallback() -> list[dict]:
 @router.get("/quarterly-results")
 async def get_quarterly_results():
     """
-    Quarterly earnings results for Nifty 25 stocks.
-    Returns from in-process / Supabase cache instantly.
-    Fires background yfinance refresh when cache is stale (6h TTL).
+    Quarterly earnings results — real-time from BSE filings (pipeline table),
+    falling back to yfinance cache, then static fallback.
     """
     global _QR_CACHE, _QR_CACHE_TS, _QR_FETCH_RUNNING
     now = time.monotonic()
 
-    # 1. In-process cache hit
+    # 1. PRIMARY: quarterly_results table (real-time BSE + DeepSeek pipeline)
+    try:
+        import urllib.request as _ur
+        import os as _os
+        sb_url = _os.getenv("SUPABASE_URL", "")
+        sb_key = _os.getenv("SUPABASE_KEY", "")
+        if sb_url and sb_key:
+            _headers = {
+                "apikey": sb_key,
+                "Authorization": f"Bearer {sb_key}",
+                "Content-Type": "application/json",
+            }
+            _qr_url = (
+                f"{sb_url}/rest/v1/quarterly_results"
+                "?select=*&order=report_date.desc,created_at.desc&limit=60"
+            )
+            _req = _ur.Request(_qr_url, headers=_headers)
+            with _ur.urlopen(_req, timeout=5) as _resp:
+                _rows = json.loads(_resp.read())
+            if _rows:
+                # normalise metrics from JSONB → Python dict
+                for _r in _rows:
+                    if isinstance(_r.get("metrics"), str):
+                        try:
+                            _r["metrics"] = json.loads(_r["metrics"])
+                        except Exception:
+                            pass
+                    for _k in ("revenue_trend", "pat_trend", "eps_trend", "quarter_labels"):
+                        if isinstance(_r.get(_k), str):
+                            try:
+                                _r[_k] = json.loads(_r[_k])
+                            except Exception:
+                                _r[_k] = []
+                _QR_CACHE = _rows
+                _QR_CACHE_TS = now
+                return _rows
+    except Exception:
+        pass
+
+    # 2. In-process cache hit (yfinance-based)
     if _QR_CACHE and (now - _QR_CACHE_TS) < _QR_CACHE_TTL:
         return _QR_CACHE
 
-    # 2. Supabase persistent cache
+    # 3. Supabase screener_cache (legacy yfinance blob)
     try:
         from data.storage import supabase_db as sdb
         from datetime import timezone
@@ -1801,7 +1839,7 @@ async def get_quarterly_results():
     except Exception:
         pass
 
-    # 3. Launch background yfinance fetch if not already running
+    # 4. Launch background yfinance fetch if not already running
     if not _QR_FETCH_RUNNING:
         _QR_FETCH_RUNNING = True
         t = _threading.Thread(
@@ -1812,7 +1850,7 @@ async def get_quarterly_results():
         )
         t.start()
 
-    # 4. Return pre-built fallback immediately (real data arrives in background)
+    # 5. Static fallback while background fetch runs
     return _qr_fallback()
 
 

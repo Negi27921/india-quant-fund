@@ -1,0 +1,39 @@
+name: Results Pipeline (Real-time BSE Earnings)
+
+on:
+  schedule:
+    # Every 20 min 8:30 AM – 6:00 PM IST (03:00–12:30 UTC) Mon–Fri
+    - cron: "0,20,40 3,4,5,6,7,8,9,10,11 * * 1-5"
+    - cron: "0,20 12 * * 1-5"
+  workflow_dispatch:   # manual trigger
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-results-v2-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: ${{ runner.os }}-pip-results-v2-
+
+      - name: Install dependencies
+        run: pip install yfinance pdfminer.six requests
+
+      - name: Run results pipeline
+        env:
+          SUPABASE_URL:        ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:        ${{ secrets.SUPABASE_KEY }}
+          OPENROUTER_API_KEY:  ${{ secrets.OPENROUTER_API_KEY }}
+          TELEGRAM_BOT_TOKEN:  ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:    ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scripts/results_pipeline.py

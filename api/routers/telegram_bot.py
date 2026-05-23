@@ -30,6 +30,51 @@ API_BASE        = os.getenv("SCREENER_API_URL", "https://onepiece-labs.vercel.ap
 
 _TG_BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
+# kept in sync with results_pipeline.py rating emoji map
+_RATING_EMOJI = {"Excellent": "🚀", "Great": "🟢", "Good": "🔵", "Ok": "🟡", "Weak": "🔴"}
+
+
+def send_results_alert(row: dict) -> None:
+    """Push a quarterly result card to Telegram. Called from pipeline or webhook."""
+    if not (BOT_TOKEN and CHAT_ID):
+        return
+    rating  = row.get("rating", "Good")
+    emoji   = _RATING_EMOJI.get(rating, "📊")
+    company = row.get("company", "?")
+    symbol  = row.get("symbol", "?")
+    quarter = row.get("quarter", "")
+    insight = row.get("insight", "")
+    note    = row.get("rating_note", "")
+    cmp     = row.get("cmp")
+    pdf_url = row.get("pdf_url", "")
+
+    def _pct(v):
+        if v is None: return "—"
+        return f"{'+'if v>0 else ''}{v:.1f}%"
+
+    m = row.get("metrics") or {}
+    rev = m.get("sales", {}); pat = m.get("pat", {}); eps = m.get("eps", {})
+    rv  = rev.get("q3") or rev.get("q1") or 0
+    pv  = pat.get("q3") or pat.get("q1") or 0
+    ev  = eps.get("q3") or eps.get("q1") or 0
+
+    lines = [
+        f"{emoji} *{company}* ({symbol}) — {quarter}",
+        f"Rating: *{rating}*  _{note}_", "",
+        f"Revenue : ₹{rv:,.0f} Cr  YoY {_pct(rev.get('yoy'))}  QoQ {_pct(rev.get('qoq'))}",
+        f"PAT     : ₹{pv:,.0f} Cr  YoY {_pct(pat.get('yoy'))}  QoQ {_pct(pat.get('qoq'))}",
+        f"EPS     : ₹{ev:.1f}  YoY {_pct(eps.get('yoy'))}",
+    ]
+    if cmp:
+        lines.append(f"CMP     : ₹{cmp:,.0f}")
+    lines += ["", f"💡 {insight}"]
+    if pdf_url:
+        lines.append(f"\n📄 [BSE Filing]({pdf_url})")
+    lines.append(f"🔗 [Results Dashboard](https://luffy-labs.vercel.app/results)")
+    lines.append("\n_Source: BSE India · DeepSeek AI_")
+
+    _send(CHAT_ID, "\n".join(lines))
+
 STRATEGIES = [
     ("vcp",          "📊 VCP",          "Volatility Contraction Pattern"),
     ("ipo_base",     "🆕 IPO Base",     "Post-listing consolidation"),
