@@ -148,12 +148,12 @@ function AddStockModal({ watchlistId, onClose }: { watchlistId: string; onClose:
   const [notes, setNotes]       = useState("");
   const add = useAddWatchlistItem(watchlistId);
   const { data: results = [], isFetching } = useUniverseSearch(debouncedQ);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<number>(0);
 
   useEffect(() => {
-    clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setDQ(query), 250);
-    return () => clearTimeout(timerRef.current);
+    window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(() => setDQ(query), 250);
+    return () => window.clearTimeout(timerRef.current);
   }, [query]);
 
   const handleAdd = () => {
