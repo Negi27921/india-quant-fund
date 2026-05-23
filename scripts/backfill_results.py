@@ -39,34 +39,39 @@ MAX_PROCESS      = int(os.getenv("MAX_PROCESS",      "100"))
 WEEK_CHUNK_DAYS  = int(os.getenv("WEEK_CHUNK_DAYS",  "7"))
 
 
-# ── Chunked date-range BSE fetch ──────────────────────────────────────────────
+# ── BSE results fetch with automatic fallback ────────────────────────────────
+
+def _date_in_range(dt_str: str, from_date: str, to_date: str) -> bool:
+    """Return True if a BSE DT_TM string falls within [from_date, to_date]."""
+    if not dt_str:
+        return True   # can't parse → include
+    try:
+        clean = dt_str.replace("-", "").replace(" ", "").replace(":", "")[:8]
+        filing_dt = datetime.strptime(clean, "%Y%m%d").date()
+        return date.fromisoformat(from_date) <= filing_dt <= date.fromisoformat(to_date)
+    except Exception:
+        return True
+
 
 def _fetch_all_results_in_range(from_date: str, to_date: str) -> list[dict]:
     """
-    Chunk the date range into WEEK_CHUNK_DAYS windows and call BSE's
-    date-range API for each window.  This guarantees full coverage because
-    BSE page-based search only returns the last ~2 days regardless of page#.
+    Fetch every BSE results filing in [from_date, to_date].
+
+    Strategy A (preferred): BSE date-range API (strSearch=D, DD/MM/YYYY).
+    Strategy B (fallback):  Page-based API (strSearch=P) with PAGES pages
+                            — covers enough history when Strategy A fails.
+
+    BSE's date-range API sometimes returns empty from automated runners
+    due to bot-protection; Strategy B is always reliable.
     """
-    f = date.fromisoformat(from_date)
-    t = date.fromisoformat(to_date)
-    all_items: list[dict] = []
+    from_d  = date.fromisoformat(from_date)
+    to_d    = date.fromisoformat(to_date)
+    days    = (to_d - from_d).days + 1
+
     seen: set[str] = set()
 
-    chunk_start = f
-    chunk_num   = 0
-    while chunk_start <= t:
-        chunk_end = min(chunk_start + timedelta(days=WEEK_CHUNK_DAYS - 1), t)
-        chunk_num += 1
-        print(f"\n  Chunk {chunk_num}: {chunk_start}  →  {chunk_end}")
-
-        raw = rp._fetch_bse_filings_daterange(
-            chunk_start.isoformat(),
-            chunk_end.isoformat(),
-            max_pages=40,   # 40 pages × ~20 items = 800 per week; enough for any week
-        )
-        print(f"  Chunk {chunk_num}: {len(raw)} raw announcements")
-
-        # Filter to results filings and deduplicate globally
+    def _dedup_results(raw: list[dict]) -> list[dict]:
+        out = []
         for item in raw:
             if not rp._is_results_filing(item):
                 continue
@@ -74,12 +79,44 @@ def _fetch_all_results_in_range(from_date: str, to_date: str) -> list[dict]:
                    f"{item.get('SCRIP_CD','')}_{item.get('DT_TM','')}")
             if key and key not in seen:
                 seen.add(key)
-                all_items.append(item)
+                out.append(item)
+        return out
 
+    # ── Strategy A: date-range API ──────────────────────────────────────────
+    print("\n  [A] Trying BSE date-range API (strSearch=D)…")
+    dr_items: list[dict] = []
+    chunk_start = from_d
+    chunk_num   = 0
+    while chunk_start <= to_d:
+        chunk_end  = min(chunk_start + timedelta(days=WEEK_CHUNK_DAYS - 1), to_d)
+        chunk_num += 1
+        print(f"    Chunk {chunk_num}: {chunk_start} → {chunk_end}")
+        raw = rp._fetch_bse_filings_daterange(
+            chunk_start.isoformat(), chunk_end.isoformat(), max_pages=30
+        )
+        dr_items.extend(_dedup_results(raw))
         chunk_start = chunk_end + timedelta(days=1)
-        time.sleep(1.5)   # respectful pause between chunks
+        time.sleep(1.0)
 
-    return all_items
+    if dr_items:
+        print(f"  [A] Date-range API: {len(dr_items)} results filings found")
+        return dr_items
+
+    # ── Strategy B: page-based fallback ─────────────────────────────────────
+    # ~150 announcements/day; add 20 % headroom
+    pages_needed = max(50, int(days * 150 / 20 * 1.2))
+    pages_needed = min(pages_needed, 600)   # hard cap
+    print(f"\n  [B] Date-range API empty — falling back to page-based fetch")
+    print(f"      {days} days × ~150 ann/day ÷ 20/page × 1.2 = {pages_needed} pages")
+
+    raw_all = rp._fetch_bse_filings(pages=pages_needed)
+    pb_items = []
+    for item in _dedup_results(raw_all):
+        if _date_in_range(item.get("DT_TM", ""), from_date, to_date):
+            pb_items.append(item)
+
+    print(f"  [B] Page-based: {len(raw_all)} total ann → {len(pb_items)} results in range")
+    return pb_items
 
 
 def main() -> None:
