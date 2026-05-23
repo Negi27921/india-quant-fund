@@ -33,7 +33,8 @@ jobs:
         env:
           SUPABASE_URL:        ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY:        ${{ secrets.SUPABASE_KEY }}
-          OPENROUTER_API_KEY:  ${{ secrets.OPENROUTER_API_KEY }}
+          NVIDIA_API_KEY:      ${{ secrets.NVIDIA_API_KEY }}       # primary: NIM DeepSeek R1
+          OPENROUTER_API_KEY:  ${{ secrets.OPENROUTER_API_KEY }}   # fallback: DeepSeek-V3
           TELEGRAM_BOT_TOKEN:  ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:    ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python scripts/results_pipeline.py

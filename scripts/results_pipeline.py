@@ -8,11 +8,30 @@ Flow:
   2. Deduplicate against quarterly_results Supabase table via filing_id
   3. For each new filing:
        a. Try to download & extract PDF text (pdfminer)
-       b. Call DeepSeek via OpenRouter for structured JSON extraction
-       c. Fetch live CMP + market cap via yfinance fast_info
-       d. Upsert to quarterly_results table
-       e. Push Telegram alert
+       b. Call DeepSeek R1 via NVIDIA NIM for structured JSON extraction
+       c. Deterministic rating computed from extracted numbers (not AI opinion)
+       d. Fetch live CMP + market cap via yfinance fast_info
+       e. Upsert to quarterly_results table
+       f. Push Telegram alert
   4. Exit cleanly — designed to run from GitHub Actions every 20 min
+
+AI Model: NVIDIA NIM — deepseek-ai/deepseek-r1
+  Why NIM over OpenRouter:
+    • Direct NVIDIA inference — lower latency, dedicated capacity
+    • DeepSeek R1 (reasoning model) produces more accurate number extraction
+      from dense financial PDF text than V3 chat model
+    • No routing overhead, no model-switch risk
+  Fallback: OpenRouter deepseek/deepseek-chat if NIM key absent
+
+Rating logic (deterministic Python, not AI opinion):
+  Score = PAT_YoY_pts (0-4) + Rev_YoY_pts (0-1) + QoQ_momentum (-0.5 to +0.5)
+    PAT YoY ≥ 30%  → 4 pts → Excellent 🚀
+    PAT YoY 15-30% → 3 pts → Great     🟢
+    PAT YoY  5-15% → 2 pts → Good      🔵
+    PAT YoY -5–5%  → 1 pt  → Ok        🟡
+    PAT YoY < -5%  → 0 pts → Weak      🔴
+  Revenue YoY adds ±0.5 pts, QoQ momentum adds ±0.5 pts.
+  When no numbers available: AI's rating field used as fallback.
 """
 from __future__ import annotations
 
@@ -29,11 +48,18 @@ from io import BytesIO
 # ── Config ──────────────────────────────────────────────────────────────────
 SUPABASE_URL    = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY    = os.getenv("SUPABASE_KEY", "")
-OPENROUTER_KEY  = os.getenv("OPENROUTER_API_KEY", "")
+NVIDIA_API_KEY  = os.getenv("NVIDIA_API_KEY", "")        # primary
+OPENROUTER_KEY  = os.getenv("OPENROUTER_API_KEY", "")    # fallback
 TG_TOKEN        = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TG_CHAT_ID      = os.getenv("TELEGRAM_CHAT_ID", "")
 
-DEEPSEEK_MODEL  = "deepseek/deepseek-chat"          # DeepSeek-V3 on OpenRouter
+# NVIDIA NIM — DeepSeek R1 (reasoning, best for structured financial extraction)
+NIM_MODEL       = "deepseek-ai/deepseek-r1"
+NIM_ENDPOINT    = "https://integrate.api.nvidia.com/v1/chat/completions"
+# Fallback via OpenRouter
+OR_MODEL        = "deepseek/deepseek-chat"
+OR_ENDPOINT     = "https://openrouter.ai/api/v1/chat/completions"
+
 DASHBOARD_URL   = "https://luffy-labs.vercel.app"
 
 # BSE categories that signal a results announcement
@@ -118,104 +144,238 @@ def _extract_pdf_text(pdf_url: str, max_chars: int = 4000) -> str:
         return ""
 
 
-# ── DeepSeek Structured Extraction ───────────────────────────────────────────
+# ── DeepSeek R1 via NVIDIA NIM (+ OpenRouter fallback) ───────────────────────
 
 _SYSTEM = (
     "You are a senior Indian equity analyst. Extract financial results from BSE filing data. "
-    "Return ONLY a valid JSON object — no markdown, no explanation, no code fences."
+    "Return ONLY a valid JSON object — no markdown, no explanation, no code fences. "
+    "For numbers in the PDF, use Crores (Cr) as the unit. "
+    "If the PDF uses Lakhs, divide by 100 to convert to Crores."
 )
 
-_PROMPT_TMPL = """BSE Filing Details:
-Company: {company}  |  BSE Scrip: {scrip_code}
-Date: {dt}  |  Category: {category}
-Headline: {headline}
+_PROMPT_TMPL = """BSE Corporate Filing — Extract Quarterly Financial Results
+
+Company  : {company}
+BSE Scrip: {scrip_code}
+Filed    : {dt}
+Category : {category}
+Headline : {headline}
 {pdf_section}
 ---
-Extract the quarterly financial results. Use exact numbers from the text when available;
-estimate based on company knowledge when not.
+TASK: Extract the financial results from the above data.
+- Use EXACT numbers from the PDF/headline where present.
+- For prior-quarter comparisons use numbers stated in the filing.
+- Do NOT guess or hallucinate numbers — use null when genuinely unavailable.
+- Identify which quarter (Q1/Q2/Q3/Q4 FY20XX) this result covers.
 
-Return this exact JSON (all fields required, use null for truly unknown numbers):
+Return ONLY this JSON (no extra text, no markdown fences):
 {{
-  "quarter": "Q4 FY2026",
-  "revenue_cr": 0,
-  "other_income_cr": null,
-  "op_cr": null,
-  "opm_pct": null,
-  "pat_cr": 0,
-  "eps": null,
-  "revenue_qoq": null,
-  "revenue_yoy": null,
-  "op_qoq": null,
-  "op_yoy": null,
-  "pat_qoq": null,
-  "pat_yoy": null,
-  "eps_qoq": null,
-  "eps_yoy": null,
-  "revenue_prev_q": null,
-  "revenue_prev_y": null,
-  "pat_prev_q": null,
-  "pat_prev_y": null,
-  "eps_prev_q": null,
-  "eps_prev_y": null,
-  "sector": "Technology",
-  "industry": "IT Services",
-  "rating": "Good",
-  "rating_note": "One short phrase (max 8 words)",
-  "insight": "Two concise sentences analysing this result and its market implications.",
-  "report_time": "After Market Hours",
-  "currency_unit": "Cr"
+  "quarter"         : "Q4 FY2026",
+  "revenue_cr"      : 0,
+  "other_income_cr" : null,
+  "op_cr"           : null,
+  "opm_pct"         : null,
+  "pat_cr"          : 0,
+  "eps"             : null,
+  "revenue_qoq"     : null,
+  "revenue_yoy"     : null,
+  "op_qoq"          : null,
+  "op_yoy"          : null,
+  "pat_qoq"         : null,
+  "pat_yoy"         : null,
+  "eps_qoq"         : null,
+  "eps_yoy"         : null,
+  "revenue_prev_q"  : null,
+  "revenue_prev_y"  : null,
+  "pat_prev_q"      : null,
+  "pat_prev_y"      : null,
+  "eps_prev_q"      : null,
+  "eps_prev_y"      : null,
+  "sector"          : "Technology",
+  "industry"        : "IT Services",
+  "ai_rating"       : "Good",
+  "insight"         : "Two concise sentences analysing this result and its market implications.",
+  "report_time"     : "After Market Hours",
+  "currency_unit"   : "Cr"
 }}
-
-Rating guide: Excellent(PAT >30% YoY), Great(15-30%), Good(5-15%), Ok(-5 to 5%), Weak(<-5%)
 """
 
 
-def _call_deepseek(company: str, scrip_code: str, dt: str,
-                   category: str, headline: str, pdf_text: str) -> dict | None:
-    if not OPENROUTER_KEY:
-        print("  [DeepSeek] OPENROUTER_API_KEY not set — skipping AI extraction")
-        return None
-
-    pdf_section = ""
-    if pdf_text:
-        pdf_section = f"\nPDF Extract (first {len(pdf_text)} chars):\n{pdf_text}\n"
-
+def _call_nim_deepseek(company: str, scrip_code: str, dt: str,
+                        category: str, headline: str, pdf_text: str) -> dict | None:
+    """Call NVIDIA NIM DeepSeek R1 (primary), fall back to OpenRouter DeepSeek-V3."""
+    pdf_section = (
+        f"\nPDF Extract ({len(pdf_text)} chars):\n{pdf_text}\n"
+        if pdf_text else ""
+    )
     prompt = _PROMPT_TMPL.format(
         company=company, scrip_code=scrip_code, dt=dt,
         category=category, headline=headline, pdf_section=pdf_section,
     )
+    messages = [
+        {"role": "system", "content": _SYSTEM},
+        {"role": "user",   "content": prompt},
+    ]
 
-    payload = {
-        "model": DEEPSEEK_MODEL,
-        "messages": [
-            {"role": "system", "content": _SYSTEM},
-            {"role": "user",   "content": prompt},
-        ],
-        "max_tokens": 900,
-        "temperature": 0.1,
-    }
-    req = urllib.request.Request(
-        "https://openrouter.ai/api/v1/chat/completions",
-        data=json.dumps(payload).encode(),
-        headers={
-            "Authorization": f"Bearer {OPENROUTER_KEY}",
-            "Content-Type":  "application/json",
-            "HTTP-Referer":  DASHBOARD_URL,
-            "X-Title":       "One Piece Quant — Results Pipeline",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read())
-        raw = data["choices"][0]["message"]["content"].strip()
-        # strip any accidental markdown fences
-        raw = re.sub(r"^```[a-z]*\n?", "", raw)
-        raw = re.sub(r"\n?```$", "", raw).strip()
-        return json.loads(raw)
-    except Exception as exc:
-        print(f"  [DeepSeek] call failed: {exc}")
-        return None
+    # ── Try NVIDIA NIM first ──────────────────────────────────────────────────
+    if NVIDIA_API_KEY:
+        print("    Using NVIDIA NIM — DeepSeek R1")
+        payload = {
+            "model": NIM_MODEL,
+            "messages": messages,
+            "max_tokens": 1024,
+            "temperature": 0.1,
+            "stream": False,
+        }
+        req = urllib.request.Request(
+            NIM_ENDPOINT,
+            data=json.dumps(payload).encode(),
+            headers={
+                "Authorization": f"Bearer {NVIDIA_API_KEY}",
+                "Content-Type":  "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                data = json.loads(resp.read())
+            raw = data["choices"][0]["message"]["content"].strip()
+            # DeepSeek R1 wraps reasoning in <think>…</think> — strip it
+            raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+            raw = re.sub(r"^```[a-z]*\n?", "", raw)
+            raw = re.sub(r"\n?```$", "", raw).strip()
+            return json.loads(raw)
+        except Exception as exc:
+            print(f"    [NIM] failed: {exc} — falling back to OpenRouter")
+
+    # ── Fallback: OpenRouter DeepSeek-V3 ─────────────────────────────────────
+    if OPENROUTER_KEY:
+        print("    Using OpenRouter — DeepSeek-V3")
+        payload = {
+            "model": OR_MODEL,
+            "messages": messages,
+            "max_tokens": 900,
+            "temperature": 0.1,
+        }
+        req = urllib.request.Request(
+            OR_ENDPOINT,
+            data=json.dumps(payload).encode(),
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_KEY}",
+                "Content-Type":  "application/json",
+                "HTTP-Referer":  DASHBOARD_URL,
+                "X-Title":       "One Piece Quant — Results Pipeline",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read())
+            raw = data["choices"][0]["message"]["content"].strip()
+            raw = re.sub(r"^```[a-z]*\n?", "", raw)
+            raw = re.sub(r"\n?```$", "", raw).strip()
+            return json.loads(raw)
+        except Exception as exc:
+            print(f"    [OpenRouter] failed: {exc}")
+
+    print("    No AI key available — skipping extraction")
+    return None
+
+
+# ── Deterministic Rating Engine ───────────────────────────────────────────────
+# Rating is computed from extracted numbers, NOT from AI opinion.
+# AI's "ai_rating" field is only used when no numbers are available.
+#
+# Scoring table:
+#   PAT YoY growth    Points   Base rating
+#   ≥ 30%               4      Excellent
+#   15 – 30%            3      Great
+#    5 – 15%            2      Good
+#   -5 –  5%            1      Ok
+#    < -5%              0      Weak
+#
+# Modifiers (each ± 0.5):
+#   Revenue YoY ≥ 15%  → +0.5
+#   Revenue YoY  5-15% → +0.25
+#   Revenue YoY < -5%  → -0.5
+#   PAT QoQ ≥ 10%      → +0.5  (momentum)
+#   PAT QoQ < -10%     → -0.5
+#   OPM > 20%          → +0.25 (margin quality)
+#   OPM < 5%           → -0.25
+#
+# Final score  ≥ 4.25 → Excellent | 3.25-4.25 → Great | 2-3.25 → Good
+#              1-2    → Ok        | <1        → Weak
+
+_SCORE_TO_RATING = [
+    (4.25, "Excellent", "🚀"),
+    (3.25, "Great",     "🟢"),
+    (2.00, "Good",      "🔵"),
+    (1.00, "Ok",        "🟡"),
+    (0.00, "Weak",      "🔴"),
+]
+
+_RATING_NOTES = {
+    "Excellent": "Strong broad-based growth — significant earnings beat",
+    "Great":     "Solid YoY expansion, positive operating leverage",
+    "Good":      "In-line to modest beat, stable fundamentals",
+    "Ok":        "Mixed quarter — muted growth, watch guidance",
+    "Weak":      "Earnings miss / profit decline — review triggers",
+}
+
+
+def _compute_rating(ai: dict) -> tuple[str, str]:
+    """
+    Returns (rating, rating_note). Uses deterministic scoring when numbers
+    are available; falls back to AI's ai_rating field otherwise.
+    """
+    pat_yoy = ai.get("pat_yoy")
+    rev_yoy = ai.get("revenue_yoy")
+    pat_qoq = ai.get("pat_qoq")
+    opm     = ai.get("opm_pct")
+
+    # no numbers at all → use AI opinion
+    if pat_yoy is None and rev_yoy is None:
+        ai_r = ai.get("ai_rating", "Good")
+        valid = {"Excellent", "Great", "Good", "Ok", "Weak"}
+        r = ai_r if ai_r in valid else "Good"
+        return r, _RATING_NOTES[r]
+
+    # PAT YoY base score
+    if pat_yoy is not None:
+        if pat_yoy >= 30:   score = 4.0
+        elif pat_yoy >= 15: score = 3.0
+        elif pat_yoy >= 5:  score = 2.0
+        elif pat_yoy >= -5: score = 1.0
+        else:               score = 0.0
+    elif rev_yoy is not None:
+        # no PAT number — use revenue as proxy with compressed range
+        if rev_yoy >= 20:   score = 3.0
+        elif rev_yoy >= 10: score = 2.0
+        elif rev_yoy >= 0:  score = 1.5
+        else:               score = 0.5
+    else:
+        score = 1.0
+
+    # Revenue YoY modifier
+    if rev_yoy is not None:
+        if rev_yoy >= 15:   score += 0.5
+        elif rev_yoy >= 5:  score += 0.25
+        elif rev_yoy < -5:  score -= 0.5
+
+    # QoQ momentum modifier
+    if pat_qoq is not None:
+        if pat_qoq >= 10:   score += 0.5
+        elif pat_qoq < -10: score -= 0.5
+
+    # Margin quality modifier
+    if opm is not None:
+        if opm > 20:  score += 0.25
+        elif opm < 5: score -= 0.25
+
+    for threshold, label, _ in _SCORE_TO_RATING:
+        if score >= threshold:
+            return label, _RATING_NOTES[label]
+    return "Weak", _RATING_NOTES["Weak"]
 
 
 # ── yfinance Price Fetch ──────────────────────────────────────────────────────
@@ -484,15 +644,20 @@ def main() -> None:
             pdf_text = _extract_pdf_text(pdf_url)
             print(f"    Got {len(pdf_text)} chars from PDF")
 
-        # 5b. Call DeepSeek
-        print("    Calling DeepSeek for structured extraction...")
-        ai = _call_deepseek(company, scrip_code, dt, category, headline, pdf_text)
+        # 5b. Call DeepSeek R1 (NIM → OpenRouter fallback)
+        print("    Calling DeepSeek R1 for structured extraction...")
+        ai = _call_nim_deepseek(company, scrip_code, dt, category, headline, pdf_text)
         if not ai:
-            print("    DeepSeek failed — skipping")
+            print("    AI extraction failed — skipping")
             continue
 
+        # 5c. Deterministic rating (overrides AI opinion)
+        rating, rating_note = _compute_rating(ai)
+        ai["rating"]      = rating
+        ai["rating_note"] = rating_note
+
         quarter = ai.get("quarter", "")
-        print(f"    Extracted: {quarter} | rating={ai.get('rating')} | PAT={ai.get('pat_cr')}")
+        print(f"    Extracted: {quarter} | rating={rating} | PAT YoY={ai.get('pat_yoy')} | PAT={ai.get('pat_cr')}")
 
         # 5c. Fetch live price
         print("    Fetching live price...")
@@ -521,8 +686,8 @@ def main() -> None:
             "quarter":        quarter,
             "report_date":    report_date,
             "report_time":    ai.get("report_time", "After Market Hours"),
-            "rating":         ai.get("rating", "Good"),
-            "rating_note":    ai.get("rating_note", ""),
+            "rating":         rating,
+            "rating_note":    rating_note,
             "insight":        ai.get("insight", ""),
             "metrics":        metrics,
             "revenue_trend":  [rev["q1"], rev["q2"], rev["q3"]],
