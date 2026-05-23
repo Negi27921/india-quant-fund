@@ -2,7 +2,7 @@ import { NavLink } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Terminal, ScanSearch, LayoutDashboard,
-  BarChart3, Settings2, ChevronLeft, LogOut,
+  Settings2, ChevronLeft, LogOut,
   Sun, Moon, BookOpen, TrendingUp, Star,
 } from "lucide-react";
 import { AUTH_KEY, LOCK_KEY, FAIL_KEY } from "@/pages/Login";
@@ -16,7 +16,6 @@ const NAV = [
   { to: "/portfolio",  icon: LayoutDashboard, label: "Portfolio",  end: false },
   { to: "/results",    icon: TrendingUp,      label: "Results",    end: false },
   { to: "/watchlist",  icon: Star,            label: "Watchlist",  end: false },
-  { to: "/strategies", icon: BarChart3,       label: "Strategies", end: false },
   { to: "/journal",    icon: BookOpen,        label: "Journal",    end: false },
   { to: "/settings",   icon: Settings2,       label: "Settings",   end: false },
 ];

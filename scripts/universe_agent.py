@@ -371,9 +371,93 @@ def main() -> None:
             except Exception:
                 pass
 
+    # 8. Sync UNIVERSE watchlist — upsert all active stocks as watchlist items
+    _sync_universe_watchlist(rows_to_upsert, now)
+
     print(f"\n{'='*64}")
     print(f"Done — {total_saved} upserted, {deactivated} deactivated")
     print(f"Active universe size: {len(rows_to_upsert)}")
+
+
+# ── Universe Watchlist Sync ───────────────────────────────────────────────────
+
+UNIVERSE_WL_ID = "bbbbbbbb-0000-0000-0000-000000000001"  # matches migration 009 seed
+
+
+def _sync_universe_watchlist(stocks: list[dict], now: str) -> None:
+    """
+    Keep the 'Universe' watchlist in sync with the active stock_universe.
+    Upserts all active stocks as watchlist items (batch of 100).
+    Removes items no longer in the active universe.
+    """
+    if not (SUPABASE_URL and SUPABASE_KEY):
+        return
+
+    print(f"\n[WL] Syncing Universe watchlist ({len(stocks)} stocks)…")
+
+    headers = _sb_headers()
+    headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
+    synced = 0
+
+    for i in range(0, len(stocks), 100):
+        batch = stocks[i:i + 100]
+        wl_items = [
+            {
+                "watchlist_id":  UNIVERSE_WL_ID,
+                "symbol":        s["symbol"],
+                "ticker":        s["ticker"],
+                "company":       s["company"],
+                "sector":        s.get("sector", ""),
+                "industry":      s.get("industry", ""),
+                "added_reason":  "universe",
+                "notes":         f"Market cap ₹{s['market_cap_cr']:,.0f} Cr | {s.get('exchange','NSE')}",
+            }
+            for s in batch
+        ]
+        data = json.dumps(wl_items, default=str).encode()
+        req = urllib.request.Request(
+            f"{SUPABASE_URL}/rest/v1/watchlist_items",
+            data=data, headers=headers, method="POST"
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                r.read()
+            synced += len(batch)
+        except Exception as e:
+            print(f"  [WL] batch {i} failed: {e}")
+
+    print(f"  ✓ Synced {synced} stocks to Universe watchlist")
+
+    # Remove items whose symbols are no longer in active universe
+    active_symbols = {s["symbol"] for s in stocks}
+    try:
+        req = urllib.request.Request(
+            f"{SUPABASE_URL}/rest/v1/watchlist_items"
+            f"?watchlist_id=eq.{UNIVERSE_WL_ID}&select=symbol&limit=10000",
+            headers=_sb_headers()
+        )
+        with urllib.request.urlopen(req, timeout=15) as r:
+            existing_items = json.loads(r.read())
+        stale = [row["symbol"] for row in existing_items if row["symbol"] not in active_symbols]
+        removed = 0
+        for sym in stale:
+            try:
+                del_headers = _sb_headers()
+                del_headers["Prefer"] = "return=minimal"
+                req2 = urllib.request.Request(
+                    f"{SUPABASE_URL}/rest/v1/watchlist_items"
+                    f"?watchlist_id=eq.{UNIVERSE_WL_ID}&symbol=eq.{sym}",
+                    headers=del_headers, method="DELETE"
+                )
+                with urllib.request.urlopen(req2, timeout=8):
+                    pass
+                removed += 1
+            except Exception:
+                pass
+        if removed:
+            print(f"  ✓ Removed {removed} stale stocks from Universe watchlist")
+    except Exception as e:
+        print(f"  [WL] cleanup failed: {e}")
 
 
 if __name__ == "__main__":

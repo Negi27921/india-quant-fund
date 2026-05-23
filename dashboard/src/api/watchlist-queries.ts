@@ -7,7 +7,7 @@ export interface Watchlist {
   id: string;
   name: string;
   description: string;
-  type: "manual" | "auto_results";
+  type: "manual" | "auto_results" | "quarterly_results" | "universe";
   color: string;
   created_at: string;
   updated_at: string;

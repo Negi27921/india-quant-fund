@@ -11,7 +11,6 @@ const MarketPage         = lazy(() => import("@/pages/Market").then(m => ({ defa
 const ScreenerPage       = lazy(() => import("@/pages/Screener").then(m => ({ default: m.ScreenerPage })));
 const PortfolioPage      = lazy(() => import("@/pages/Portfolio").then(m => ({ default: m.PortfolioPage })));
 const RiskPage           = lazy(() => import("@/pages/Risk").then(m => ({ default: m.RiskPage })));
-const StrategiesPage     = lazy(() => import("@/pages/Strategies").then(m => ({ default: m.StrategiesPage })));
 const SettingsPage       = lazy(() => import("@/pages/Settings").then(m => ({ default: m.SettingsPage })));
 const TradingJournalPage = lazy(() => import("@/pages/TradingJournal").then(m => ({ default: m.TradingJournalPage })));
 const ResultsPage        = lazy(() => import("@/pages/Results").then(m => ({ default: m.ResultsPage })));
@@ -106,7 +105,6 @@ export default function App() {
                 <Route path="screener"   element={<ScreenerPage />} />
                 <Route path="portfolio"  element={<PortfolioPage />} />
                 <Route path="risk"       element={<RiskPage />} />
-                <Route path="strategies" element={<StrategiesPage />} />
                 <Route path="settings"   element={<SettingsPage />} />
                 <Route path="journal"    element={<TradingJournalPage />} />
                 <Route path="results"    element={<ResultsPage />} />

@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Plus, Trash2, Star, Zap, BarChart3, MessageSquare,
-  ChevronRight, Search, TrendingUp, TrendingDown,
-  Sparkles, Send, Loader2, X, Edit3, Check,
+  Plus, Trash2, Star, Zap, BarChart3,
+  ChevronRight, Search, TrendingUp,
+  Sparkles, Send, Loader2, X,
   Trophy, ThumbsUp, Minus,
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
@@ -577,8 +577,6 @@ function WatchlistSidebar({
   onNew: () => void;
   onDelete: (id: string) => void;
 }) {
-  const AUTO_ID = "aaaaaaaa-0000-0000-0000-000000000001";
-
   return (
     <div style={{
       width: 220, flexShrink: 0, borderRight: "1px solid var(--border)",
@@ -610,7 +608,6 @@ function WatchlistSidebar({
 
       <div style={{ flex: 1, overflowY: "auto", padding: "8px 8px" }}>
         {lists.map(wl => {
-          const isAuto = wl.id === AUTO_ID;
           const isSelected = wl.id === selectedId;
           return (
             <div
@@ -641,18 +638,17 @@ function WatchlistSidebar({
                     {wl.name}
                   </div>
                   {wl.type === "auto_results" && (
-                    <div style={{ fontSize: 9, color: wl.color, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                      Auto
-                    </div>
+                    <div style={{ fontSize: 9, color: wl.color, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Auto</div>
                   )}
                   {wl.type === "quarterly_results" && (
-                    <div style={{ fontSize: 9, color: wl.color, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                      Quarterly
-                    </div>
+                    <div style={{ fontSize: 9, color: wl.color, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Qtrly</div>
+                  )}
+                  {wl.type === "universe" && (
+                    <div style={{ fontSize: 9, color: wl.color, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>Live</div>
                   )}
                 </div>
               </div>
-              {wl.type === "manual" && (
+              {wl.type === "manual" && !["aaaaaaaa-0000-0000-0000-000000000001","bbbbbbbb-0000-0000-0000-000000000001"].includes(wl.id) && (
                 <button
                   onClick={e => { e.stopPropagation(); onDelete(wl.id); }}
                   style={{
@@ -839,7 +835,7 @@ function StockListPane({
     );
   }
 
-  const canAdd = watchlist.type === "manual";
+  const canAdd = watchlist.type === "manual" && !["aaaaaaaa-0000-0000-0000-000000000001","bbbbbbbb-0000-0000-0000-000000000001"].includes(watchlist.id);
 
   return (
     <div style={{
@@ -913,11 +909,13 @@ function StockListPane({
             color: "var(--text-4)", fontSize: 12,
           }}>
             {items.length === 0
-              ? watchlist.type === "auto_results"
-                ? "Auto-populated from BSE results.\nGood / Great / Excellent rated stocks\nwill appear here after pipeline runs."
-                : watchlist.type === "quarterly_results"
-                  ? "Auto-created for this quarter's results.\nStocks will appear as BSE filings are processed."
-                  : "No stocks yet.\nClick + Add to start watching."
+              ? watchlist.type === "universe"
+                ? "Universe Agent runs daily at 6:30 AM IST.\nAll BSE/NSE stocks > ₹1000 Cr market cap\nwill populate here automatically."
+                : watchlist.type === "auto_results"
+                  ? "Auto-populated from BSE results.\nGood / Great / Excellent rated stocks\nwill appear here after pipeline runs."
+                  : watchlist.type === "quarterly_results"
+                    ? "Auto-created for this quarter's results.\nStocks will appear as BSE filings are processed."
+                    : "No stocks yet.\nClick + Add to start watching."
               : "No matching stocks"}
           </div>
         ) : (
@@ -945,7 +943,7 @@ export function WatchlistPage() {
   const [showAddStock, setShowAddStock] = useState(false);
   const deleteWl = useDeleteWatchlist();
 
-  const { data: items = [], isLoading: itemsLoading } = useWatchlistItems(selectedWlId);
+  const { data: items = [] } = useWatchlistItems(selectedWlId);
 
   const selectedWl = lists.find(w => w.id === selectedWlId) ?? null;
 
