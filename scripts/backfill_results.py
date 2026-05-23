@@ -1,20 +1,30 @@
 """
 Backfill Results Pipeline
 ─────────────────────────
-Fetches ALL BSE quarterly result filings from FROM_DATE to today using
-BSE's date-range API (strSearch=D) — the only mode that reaches historical
-filings beyond the last 2-3 days.
+Three-strategy fetch for BSE quarterly results in [FROM_DATE, TO_DATE]:
 
-Processes: PDF → NIM DeepSeek R1 → deterministic rating → Supabase
-→ Results Radar + quarterly watchlists for Good/Great/Excellent.
+  Strategy A — BSE date-range API (strSearch=D, session cookies)
+               Best when GitHub Actions IPs are not blocked.
 
-Run via GitHub Actions → Backfill Results workflow (workflow_dispatch).
+  Strategy B — BSE page-based API (strSearch=P, many pages)
+               Works during IST market hours when the feed is active.
+               Workflow scheduled at 10:30 AM + 2:00 PM IST Mon-Fri.
+
+  Strategy C — yfinance quarterly financials (fallback, no BSE needed)
+               Iterates NSE universe, compares reported quarters,
+               fills the table with real numbers even when BSE API is
+               fully unreachable (nights, weekends, IP blocks).
+
+Run via GitHub Actions → Backfill Results workflow.
+  • Scheduled: Mon-Fri 10:30 AM + 2:00 PM IST automatically
+  • Manual: workflow_dispatch with from_date / max_process inputs
 
 Environment:
   FROM_DATE          start date YYYY-MM-DD  (default: 2026-05-01)
   TO_DATE            end date   YYYY-MM-DD  (default: today)
   MAX_PROCESS        max filings to process this run (default: 100)
   WEEK_CHUNK_DAYS    days per BSE API chunk  (default: 7)
+  USE_YFINANCE       set to "true" to force Strategy C even if A/B succeed
   SUPABASE_URL       required
   SUPABASE_KEY       required
   NVIDIA_API_KEY     primary LLM
@@ -33,10 +43,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import scripts.results_pipeline as rp
 
 # ── Config ────────────────────────────────────────────────────────────────────
-FROM_DATE        = os.getenv("FROM_DATE", "").strip() or "2026-05-01"
-TO_DATE          = os.getenv("TO_DATE",   "").strip() or date.today().isoformat()
+FROM_DATE        = os.getenv("FROM_DATE",     "").strip() or "2026-05-01"
+TO_DATE          = os.getenv("TO_DATE",       "").strip() or date.today().isoformat()
 MAX_PROCESS      = int(os.getenv("MAX_PROCESS",      "100"))
 WEEK_CHUNK_DAYS  = int(os.getenv("WEEK_CHUNK_DAYS",  "7"))
+USE_YFINANCE     = os.getenv("USE_YFINANCE",  "").strip().lower() == "true"
 
 
 # ── BSE results fetch with automatic fallback ────────────────────────────────
@@ -119,57 +130,259 @@ def _fetch_all_results_in_range(from_date: str, to_date: str) -> list[dict]:
     return pb_items
 
 
-def main() -> None:
-    print("=" * 68)
-    print(f"Backfill Results Pipeline  {datetime.now(timezone.utc).isoformat()}")
-    print(f"Date range  : {FROM_DATE}  →  {TO_DATE}")
-    print(f"Max process : {MAX_PROCESS}  |  Chunk days: {WEEK_CHUNK_DAYS}")
-    print("=" * 68)
+# ── Strategy C: yfinance quarterly financials ─────────────────────────────────
 
-    # Pre-flight checks
-    ok = True
-    if not rp.SUPABASE_URL or not rp.SUPABASE_KEY:
-        print("FATAL: SUPABASE_URL / SUPABASE_KEY not set")
-        ok = False
-    if not rp.NVIDIA_API_KEY and not rp.OPENROUTER_KEY:
-        print("FATAL: Neither NVIDIA_API_KEY nor OPENROUTER_API_KEY is set.")
-        print("       Add NVIDIA_API_KEY to GitHub Actions → Settings → Secrets.")
-        ok = False
-    if not ok:
-        sys.exit(1)
+def _quarter_label(period_end: "date") -> str:
+    """Convert a period-end date (yfinance) to 'Q1 FY2027' notation."""
+    y = period_end.year
+    m = period_end.month
+    # Indian FY: Apr-Jun = Q1, Jul-Sep = Q2, Oct-Dec = Q3, Jan-Mar = Q4
+    if m <= 3:
+        return f"Q4 FY{y}"
+    elif m <= 6:
+        return f"Q1 FY{y + 1}"
+    elif m <= 9:
+        return f"Q2 FY{y + 1}"
+    else:
+        return f"Q3 FY{y + 1}"
 
-    # 1. Fetch all results filings in range (chunked, date-range BSE API)
-    print("\n[1] Fetching BSE results filings in date range…")
-    results_items = _fetch_all_results_in_range(FROM_DATE, TO_DATE)
-    print(f"\n    Total results filings found: {len(results_items)}")
 
-    if not results_items:
-        print("    Nothing to backfill — BSE returned no results filings.")
-        return
+def _period_in_range(period_end: "date", from_date: str, to_date: str) -> bool:
+    from_d = date.fromisoformat(from_date)
+    to_d   = date.fromisoformat(to_date)
+    # Allow a 90-day window before from_date for result-day detection
+    return (from_d - timedelta(days=90)) <= period_end <= to_d
 
-    # 2. Load already-processed filing IDs
-    print("\n[2] Loading processed filing IDs from Supabase…")
-    processed = rp._get_processed_filing_ids()
-    print(f"    {len(processed)} already saved")
 
-    # 3. Filter to new ones
-    new_items = []
-    for it in results_items:
-        attachment = it.get("ATTACHMENTNAME", "").strip()
-        filing_id  = attachment or f"{it.get('SCRIP_CD','')}_{it.get('DT_TM','')}"
-        if filing_id and filing_id not in processed:
-            new_items.append((it, filing_id))
+def _fetch_yfinance_results(from_date: str, to_date: str,
+                              max_tickers: int = 500) -> list[dict]:
+    """
+    Strategy C: Pull quarterly financials from yfinance for the NSE universe.
+    Returns BSE-style filing dicts (synthetic) with real revenue/PAT/EPS data.
+    Only includes companies whose most-recent quarterly period ends within range.
+    """
+    try:
+        import yfinance as yf
+        from api.full_universe import FULL_NSE_TICKERS
+    except ImportError as e:
+        print(f"  [C] Import failed: {e}")
+        return []
 
-    print(f"    {len(new_items)} new filings to process")
-    if not new_items:
-        print("    All up-to-date — nothing new to backfill.")
-        return
+    print(f"\n  [C] yfinance strategy — scanning up to {max_tickers} NSE tickers")
+    results: list[dict] = []
+    errors  = 0
+    from_d  = date.fromisoformat(from_date)
+    to_d    = date.fromisoformat(to_date)
 
-    # 4. Process (oldest-first so quarterly watchlists are created in order)
-    new_items.sort(key=lambda x: x[0].get("DT_TM", ""))
+    # Work through the universe; limit to max_tickers per run so we don't time out
+    tickers = FULL_NSE_TICKERS[:max_tickers]
+    for i, ticker in enumerate(tickers, 1):
+        if i % 50 == 0:
+            print(f"    [C] {i}/{len(tickers)} scanned, {len(results)} found so far")
+        try:
+            tkr = yf.Ticker(ticker)
+            qf  = tkr.quarterly_financials  # DataFrame: cols=periods, rows=line items
+            if qf is None or qf.empty:
+                continue
 
+            # Most recent quarter
+            period_end = qf.columns[0]
+            if hasattr(period_end, "date"):
+                period_end = period_end.date()
+            elif not isinstance(period_end, date):
+                period_end = date.fromisoformat(str(period_end)[:10])
+
+            # Only keep if this quarter was recently reported (likely filed in range)
+            # We use a wide window: period ends within 120 days before to_date
+            earliest = to_d - timedelta(days=120)
+            if not (earliest <= period_end <= to_d):
+                continue
+
+            # Extract financials
+            def _val(label: str) -> float | None:
+                for row_label in qf.index:
+                    if label.lower() in str(row_label).lower():
+                        v = qf.loc[row_label, qf.columns[0]]
+                        if v is not None and str(v) not in ("nan", "None", ""):
+                            return float(v) / 1e7  # convert ₹ to Crores (1 Cr = 1e7)
+                return None
+
+            def _val_prev(label: str) -> float | None:
+                if len(qf.columns) < 2:
+                    return None
+                for row_label in qf.index:
+                    if label.lower() in str(row_label).lower():
+                        v = qf.loc[row_label, qf.columns[1]]
+                        if v is not None and str(v) not in ("nan", "None", ""):
+                            return float(v) / 1e7
+                return None
+
+            rev_cr      = _val("total revenue") or _val("revenue")
+            pat_cr      = _val("net income") or _val("net profit")
+            rev_prev_q  = _val_prev("total revenue") or _val_prev("revenue")
+            pat_prev_q  = _val_prev("net income") or _val_prev("net profit")
+
+            if pat_cr is None and rev_cr is None:
+                continue
+
+            # YoY: look 4 quarters back
+            rev_prev_y = pat_prev_y = None
+            if len(qf.columns) >= 5:
+                def _val_yoy(label: str) -> float | None:
+                    for row_label in qf.index:
+                        if label.lower() in str(row_label).lower():
+                            v = qf.loc[row_label, qf.columns[4]]
+                            if v is not None and str(v) not in ("nan", "None", ""):
+                                return float(v) / 1e7
+                    return None
+                rev_prev_y = _val_yoy("total revenue") or _val_yoy("revenue")
+                pat_prev_y = _val_yoy("net income") or _val_yoy("net profit")
+
+            def _pct(curr: float | None, prev: float | None) -> float | None:
+                if curr is None or prev is None or prev == 0:
+                    return None
+                return round((curr - prev) / abs(prev) * 100, 1)
+
+            symbol     = ticker.replace(".NS", "").replace(".BO", "")
+            quarter    = _quarter_label(period_end)
+            report_dt  = period_end.isoformat()  # approximate (actual filing may differ)
+            scrip_code = ""  # not available from yfinance
+
+            # Build a synthetic BSE-like item dict
+            synthetic = {
+                "_source":        "yfinance",
+                "SCRIP_CD":       scrip_code,
+                "SHORT_NAME":     symbol,
+                "NEWSSUB":        f"{quarter} Financial Results — yfinance",
+                "CATEGORYNAME":   "Financial Results",
+                "DT_TM":          report_dt,
+                "ATTACHMENTNAME": f"yf_{symbol}_{quarter.replace(' ','_')}",
+                "_symbol":        symbol,
+                "_ticker":        ticker,
+                "_quarter":       quarter,
+                "_report_date":   report_dt,
+                "_rev_cr":        rev_cr,
+                "_pat_cr":        pat_cr,
+                "_rev_prev_q":    rev_prev_q,
+                "_rev_prev_y":    rev_prev_y,
+                "_pat_prev_q":    pat_prev_q,
+                "_pat_prev_y":    pat_prev_y,
+                "_rev_yoy":       _pct(rev_cr, rev_prev_y),
+                "_rev_qoq":       _pct(rev_cr, rev_prev_q),
+                "_pat_yoy":       _pct(pat_cr, pat_prev_y),
+                "_pat_qoq":       _pct(pat_cr, pat_prev_q),
+            }
+            results.append(synthetic)
+
+        except Exception as exc:
+            errors += 1
+            if errors <= 5:
+                print(f"    [C] {ticker}: {exc}")
+        time.sleep(0.1)
+
+    print(f"  [C] yfinance: {len(results)} quarters found, {errors} errors")
+    return results
+
+
+def _process_yfinance_item(it: dict, filing_id: str) -> dict | None:
+    """
+    Build a quarterly_results row from a synthetic yfinance item.
+    Skips the PDF + LLM step — uses numbers directly.
+    """
+    symbol     = it["_symbol"]
+    ticker     = it["_ticker"]
+    quarter    = it["_quarter"]
+    report_dt  = it["_report_date"]
+    company    = symbol.title()
+
+    rev_cr      = it.get("_rev_cr") or 0
+    pat_cr      = it.get("_pat_cr") or 0
+    rev_prev_q  = it.get("_rev_prev_q")
+    rev_prev_y  = it.get("_rev_prev_y")
+    pat_prev_q  = it.get("_pat_prev_q")
+    pat_prev_y  = it.get("_pat_prev_y")
+    rev_yoy     = it.get("_rev_yoy")
+    rev_qoq     = it.get("_rev_qoq")
+    pat_yoy     = it.get("_pat_yoy")
+    pat_qoq     = it.get("_pat_qoq")
+
+    # EPS from yfinance
+    eps_cr = None
+    try:
+        import yfinance as yf
+        tkr   = yf.Ticker(ticker)
+        qi    = tkr.quarterly_earnings
+        if qi is not None and not qi.empty:
+            eps_cr = float(qi.iloc[0].get("EPS", 0) or 0)
+    except Exception:
+        pass
+
+    ai = {
+        "quarter":       quarter,
+        "revenue_cr":    rev_cr,
+        "pat_cr":        pat_cr,
+        "eps":           eps_cr,
+        "revenue_yoy":   rev_yoy,
+        "revenue_qoq":   rev_qoq,
+        "pat_yoy":       pat_yoy,
+        "pat_qoq":       pat_qoq,
+        "revenue_prev_q": rev_prev_q,
+        "revenue_prev_y": rev_prev_y,
+        "pat_prev_q":    pat_prev_q,
+        "pat_prev_y":    pat_prev_y,
+        "sector":        "",
+        "industry":      "",
+        "insight":       f"Data sourced from yfinance quarterly financials. AI analysis not available.",
+        "report_time":   "After Market Hours",
+        "currency_unit": "Cr",
+    }
+
+    rating, rating_note, score = rp._compute_rating(ai)
+    ai["rating"]      = rating
+    ai["rating_note"] = rating_note
+    ai["score"]       = score
+
+    price_data = rp._fetch_price(symbol)
+    metrics    = rp._build_metrics(ai)
+    rev = metrics["sales"]
+    pat = metrics["pat"]
+    eps = metrics["eps"]
+
+    row_id = f"yf_{symbol}_{quarter.replace(' ','_')}"
+    return {
+        "id":             row_id,
+        "symbol":         symbol,
+        "ticker":         price_data.get("ticker") or ticker,
+        "company":        company,
+        "exchange":       "NSE",
+        "sector":         "",
+        "industry":       "",
+        "quarter":        quarter,
+        "report_date":    report_dt,
+        "report_time":    "After Market Hours",
+        "rating":         rating,
+        "rating_note":    rating_note,
+        "score":          score,
+        "insight":        ai["insight"],
+        "metrics":        metrics,
+        "revenue_trend":  [rev["q1"], rev["q2"], rev["q3"]],
+        "pat_trend":      [pat["q1"], pat["q2"], pat["q3"]],
+        "eps_trend":      [eps["q1"], eps["q2"], eps["q3"]],
+        "quarter_labels": ["Q-2", "Q-1", quarter],
+        "cmp":            price_data.get("cmp"),
+        "market_cap":     price_data.get("market_cap") or 0,
+        "pe":             price_data.get("pe"),
+        "currency_unit":  "Cr",
+        "pdf_url":        "",
+        "filing_id":      filing_id,
+    }
+
+
+def _process_and_save_bse_items(new_items: list[tuple[dict, str]]) -> tuple[int, int]:
+    """Process BSE filing items through PDF → AI → rating → Supabase. Returns (saved, skipped)."""
     processed_count = 0
     skip_count      = 0
+    total           = min(len(new_items), MAX_PROCESS)
 
     for it, filing_id in new_items[:MAX_PROCESS]:
         company    = it.get("SHORT_NAME", "Unknown").title()
@@ -185,39 +398,32 @@ def main() -> None:
 
         symbol = rp._scrip_to_symbol(scrip_code, company)
         idx    = processed_count + skip_count + 1
-        total  = min(len(new_items), MAX_PROCESS)
         print(f"\n  [{idx}/{total}] {company} ({symbol}) | {dt[:10]}")
         print(f"    {headline[:90]}")
 
-        # PDF extraction
         pdf_text = rp._extract_pdf_text(pdf_url) if pdf_url else ""
         if pdf_text:
             print(f"    PDF: {len(pdf_text)} chars extracted")
 
-        # AI extraction (NIM DeepSeek R1 → OpenRouter fallback)
         ai = rp._call_nim_deepseek(company, scrip_code, dt, category, headline, pdf_text)
         if not ai:
             print("    AI extraction failed — skipping")
             skip_count += 1
             continue
 
-        # Rating
         rating, rating_note, score = rp._compute_rating(ai)
         ai["rating"]      = rating
         ai["rating_note"] = rating_note
         ai["score"]       = score
 
         quarter = ai.get("quarter", "")
-
-        # Normalise report_date from BSE DT_TM format ("20260523120000" or "2026-05-23 ...")
-        raw_dt      = dt[:10] if len(dt) >= 10 else date.today().isoformat()
+        raw_dt  = dt[:10] if len(dt) >= 10 else date.today().isoformat()
         report_date = raw_dt.replace(" ", "-")
         if len(report_date) == 8 and report_date.isdigit():
             report_date = f"{report_date[:4]}-{report_date[4:6]}-{report_date[6:]}"
 
         print(f"    {quarter} | {rating} (score {score:.0f}) | sector: {ai.get('sector','?')}")
 
-        # Live price
         price_data = rp._fetch_price(symbol)
         metrics    = rp._build_metrics(ai)
         rev = metrics["sales"]
@@ -260,7 +466,6 @@ def main() -> None:
         processed_count += 1
         print(f"    ✓ Saved")
 
-        # Auto-watchlist for Good/Great/Excellent
         if rating in ("Good", "Great", "Excellent"):
             used_ticker = price_data.get("ticker") or f"{symbol}.NS"
             qwl_id      = rp._ensure_quarterly_watchlist(quarter)
@@ -277,17 +482,134 @@ def main() -> None:
                 extra_watchlist_ids=[qwl_id] if qwl_id else [],
             )
 
-        # Telegram only for standout results (not every filing)
         if rating in ("Excellent", "Great"):
             rp._send_telegram(row)
 
-        time.sleep(1.5)  # NIM API rate limit
+        time.sleep(1.5)
+
+    return processed_count, skip_count
+
+
+def _process_and_save_yfinance_items(yf_items: list[dict], processed: set[str]) -> tuple[int, int]:
+    """Process yfinance synthetic items → rating → Supabase (no AI, no PDF)."""
+    saved = 0
+    skip  = 0
+    total = min(len(yf_items), MAX_PROCESS)
+
+    for it in yf_items[:MAX_PROCESS]:
+        filing_id = it.get("ATTACHMENTNAME", "")
+        if filing_id in processed:
+            continue
+
+        symbol  = it["_symbol"]
+        quarter = it["_quarter"]
+        idx     = saved + skip + 1
+        print(f"\n  [yf {idx}/{total}] {symbol} | {quarter}")
+
+        row = _process_yfinance_item(it, filing_id)
+        if not row:
+            skip += 1
+            continue
+
+        if not rp._upsert_result(row):
+            print("    ✗ Supabase save failed")
+            skip += 1
+            continue
+
+        saved += 1
+        print(f"    ✓ Saved  rating={row['rating']} (score {row.get('score', '?')})")
+
+        rating = row["rating"]
+        if rating in ("Good", "Great", "Excellent"):
+            used_ticker = row.get("ticker") or f"{symbol}.NS"
+            qwl_id      = rp._ensure_quarterly_watchlist(quarter)
+            rp._auto_watchlist_add(
+                symbol=symbol,
+                ticker=used_ticker,
+                company=row.get("company", symbol),
+                rating=rating,
+                result_date=row.get("report_date", ""),
+                result_high=rp._fetch_result_day_high(used_ticker, row.get("report_date", "")),
+                result_volume=rp._fetch_avg_volume(used_ticker),
+                sector=row.get("sector", ""),
+                industry=row.get("industry", ""),
+                extra_watchlist_ids=[qwl_id] if qwl_id else [],
+            )
+
+        if rating in ("Excellent", "Great"):
+            rp._send_telegram(row)
+
+        time.sleep(0.5)
+
+    return saved, skip
+
+
+def main() -> None:
+    print("=" * 68)
+    print(f"Backfill Results Pipeline  {datetime.now(timezone.utc).isoformat()}")
+    print(f"Date range  : {FROM_DATE}  →  {TO_DATE}")
+    print(f"Max process : {MAX_PROCESS}  |  Chunk days: {WEEK_CHUNK_DAYS}")
+    print(f"yfinance forced: {USE_YFINANCE}")
+    print("=" * 68)
+
+    # Pre-flight checks
+    if not rp.SUPABASE_URL or not rp.SUPABASE_KEY:
+        print("FATAL: SUPABASE_URL / SUPABASE_KEY not set")
+        sys.exit(1)
+
+    # Load processed IDs upfront (shared by all strategies)
+    print("\n[0] Loading processed filing IDs from Supabase…")
+    processed = rp._get_processed_filing_ids()
+    print(f"    {len(processed)} already saved")
+
+    total_saved   = 0
+    total_skipped = 0
+
+    # ── Strategies A + B: BSE API ─────────────────────────────────────────────
+    if not USE_YFINANCE:
+        if not rp.NVIDIA_API_KEY and not rp.OPENROUTER_KEY:
+            print("\nWARNING: No LLM key set — BSE strategies require AI for extraction.")
+            print("         Skipping A+B and going straight to Strategy C (yfinance).")
+        else:
+            print("\n[1] Fetching BSE results filings in date range…")
+            results_items = _fetch_all_results_in_range(FROM_DATE, TO_DATE)
+            print(f"\n    Total results filings found: {len(results_items)}")
+
+            if results_items:
+                new_items = []
+                for it in results_items:
+                    attachment = it.get("ATTACHMENTNAME", "").strip()
+                    filing_id  = attachment or f"{it.get('SCRIP_CD','')}_{it.get('DT_TM','')}"
+                    if filing_id and filing_id not in processed:
+                        new_items.append((it, filing_id))
+
+                new_items.sort(key=lambda x: x[0].get("DT_TM", ""))
+                print(f"    {len(new_items)} new filings to process")
+
+                if new_items:
+                    saved, skipped = _process_and_save_bse_items(new_items)
+                    total_saved   += saved
+                    total_skipped += skipped
+                    remaining = max(0, len(new_items) - MAX_PROCESS)
+                    if remaining:
+                        print(f"\n  {remaining} filings still pending — re-trigger workflow to continue")
+            else:
+                print("\n  BSE A+B returned 0 results — falling through to Strategy C (yfinance).")
+
+    # ── Strategy C: yfinance (runs when BSE fails OR USE_YFINANCE=true) ────────
+    if USE_YFINANCE or total_saved == 0:
+        print("\n[C] Strategy C: yfinance quarterly financials…")
+        yf_items = _fetch_yfinance_results(FROM_DATE, TO_DATE,
+                                            max_tickers=min(MAX_PROCESS * 5, 500))
+        if yf_items:
+            saved, skipped = _process_and_save_yfinance_items(yf_items, processed)
+            total_saved   += saved
+            total_skipped += skipped
+        else:
+            print("  [C] yfinance returned no matching quarters.")
 
     print(f"\n{'='*68}")
-    print(f"Backfill complete — {processed_count} saved, {skip_count} skipped")
-    remaining = max(0, len(new_items) - MAX_PROCESS)
-    if remaining:
-        print(f"  {remaining} filings still pending — trigger workflow again to continue")
+    print(f"Backfill complete — {total_saved} saved, {total_skipped} skipped")
 
 
 if __name__ == "__main__":

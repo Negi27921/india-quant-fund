@@ -80,27 +80,63 @@ RESULT_KEYWORDS = {
 
 # ── BSE Filing Fetch ─────────────────────────────────────────────────────────
 
+_BSE_BASE_URL = "https://api.bseindia.com/BseIndiaAPI/api/AnnSubCategoryGetData/w"
+
+# Full Chrome-like headers that pass BSE's bot checks
 _BSE_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Referer":    "https://www.bseindia.com/",
-    "Accept":     "application/json",
+    "User-Agent":      (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Referer":         "https://www.bseindia.com/corporates/ann.html",
+    "Origin":          "https://www.bseindia.com",
+    "Accept":          "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "sec-ch-ua":       '"Chromium";v="124", "Google Chrome";v="124"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+    "sec-fetch-dest":  "empty",
+    "sec-fetch-mode":  "cors",
+    "sec-fetch-site":  "same-origin",
+    "Connection":      "keep-alive",
 }
+
+
+def _get_bse_session_cookies() -> dict[str, str]:
+    """
+    Visit BSE homepage to obtain session cookies, which are required to bypass
+    Cloudflare/bot detection on the announcement API from GitHub Actions IPs.
+    Returns cookie dict (may be empty if request fails — callers handle gracefully).
+    """
+    try:
+        import requests as _rq
+        s = _rq.Session()
+        s.headers.update({
+            "User-Agent": _BSE_HEADERS["User-Agent"],
+            "Accept":     "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        })
+        s.get("https://www.bseindia.com/", timeout=15)
+        s.get("https://www.bseindia.com/corporates/ann.html", timeout=10)
+        return dict(s.cookies)
+    except Exception as exc:
+        print(f"  [BSE] session cookie fetch failed: {exc}")
+        return {}
 
 
 def _fetch_bse_filings(pages: int = 2) -> list[dict]:
     """
     Pull BSE announcements (N pages, ~20 items/page, newest-first).
-    Does NOT break on a single empty page — BSE sometimes returns empty
-    pages interleaved with data, especially during off-hours.
     Only stops after 5 consecutive empty pages (true end-of-archive signal).
     """
     items: list[dict] = []
     empty_streak = 0
     for page in range(1, pages + 1):
         url = (
-            "https://api.bseindia.com/BseIndiaAPI/api/AnnSubCategoryGetData/w"
-            f"?pageno={page}&strCat=-1&strPrevDate=&strScrip=&strSearch=P"
-            "&strToDate=&strType=C&subcategory=-1"
+            f"{_BSE_BASE_URL}?pageno={page}&strCat=-1&strPrevDate=&strScrip="
+            "&strSearch=P&strToDate=&strType=C&subcategory=-1"
         )
         try:
             req = urllib.request.Request(url, headers=_BSE_HEADERS)
@@ -109,7 +145,7 @@ def _fetch_bse_filings(pages: int = 2) -> list[dict]:
             batch = data.get("Table", [])
             if not batch:
                 empty_streak += 1
-                if empty_streak >= 5:   # 5 consecutive empty = real end of data
+                if empty_streak >= 5:
                     break
             else:
                 empty_streak = 0
@@ -131,47 +167,75 @@ def _fetch_bse_filings_daterange(from_date: str, to_date: str,
     """
     Fetch ALL BSE announcements between from_date and to_date (YYYY-MM-DD).
     Uses strSearch=D with DD/MM/YYYY dates — BSE's native date-range mode.
-    Paginates until BSE returns an empty Table or max_pages is hit.
+
+    Two-pass approach:
+      Pass 1: Use requests + session cookies (bypasses Cloudflare for most IPs)
+      Pass 2: Fall back to urllib with raw headers if requests unavailable
     """
-    from_bse = _fmt_bse_date(from_date)   # e.g. "01/05/2026"
-    to_bse   = _fmt_bse_date(to_date)     # e.g. "23/05/2026"
+    from_bse = _fmt_bse_date(from_date)
+    to_bse   = _fmt_bse_date(to_date)
     items: list[dict] = []
     seen: set[str] = set()
 
+    # Obtain session cookies from BSE to bypass bot protection
+    cookies = _get_bse_session_cookies()
+    if cookies:
+        print(f"    [BSE-D] Session cookies obtained: {list(cookies.keys())[:5]}")
+    else:
+        print("    [BSE-D] No session cookies — proceeding without (may be blocked)")
+
     for page in range(1, max_pages + 1):
         url = (
-            "https://api.bseindia.com/BseIndiaAPI/api/AnnSubCategoryGetData/w"
-            f"?pageno={page}&strCat=-1&strPrevDate={from_bse}&strScrip="
-            f"&strSearch=D&strToDate={to_bse}&strType=C&subcategory=-1"
+            f"{_BSE_BASE_URL}?pageno={page}&strCat=-1&strPrevDate={from_bse}"
+            f"&strScrip=&strSearch=D&strToDate={to_bse}&strType=C&subcategory=-1"
         )
+        data = None
+        # Try requests first (session cookies + better TLS fingerprint)
         try:
-            req = urllib.request.Request(url, headers=_BSE_HEADERS)
-            with urllib.request.urlopen(req, timeout=20) as resp:
-                data = json.loads(resp.read())
-            batch = data.get("Table", [])
-            if not batch:
-                print(f"    [BSE-D] p{page}: empty — done ({from_bse}→{to_bse})")
-                break
-            new = 0
-            for item in batch:
-                key = (item.get("ATTACHMENTNAME") or
-                       f"{item.get('SCRIP_CD')}_{item.get('DT_TM')}")
-                if key and key not in seen:
-                    seen.add(key)
-                    items.append(item)
-                    new += 1
-            print(f"    [BSE-D] p{page}: {len(batch)} returned, {new} new (total {len(items)})")
-            if new == 0:
-                break
-        except urllib.error.HTTPError as exc:
-            if exc.code == 429:
-                print(f"    [BSE-D] Rate-limited p{page} — waiting 8s")
-                time.sleep(8)
-                continue
-            print(f"    [BSE-D] HTTP {exc.code} on page {page}")
-            break
+            import requests as _rq
+            resp = _rq.get(url, headers=_BSE_HEADERS, cookies=cookies,
+                           timeout=20, verify=True)
+            if resp.status_code == 200:
+                data = resp.json()
+            else:
+                print(f"    [BSE-D] requests HTTP {resp.status_code} on p{page}")
         except Exception as exc:
-            print(f"    [BSE-D] Page {page} error: {exc}")
+            print(f"    [BSE-D] requests failed p{page}: {exc}")
+
+        # Fall back to urllib if requests failed
+        if data is None:
+            try:
+                req = urllib.request.Request(url, headers=_BSE_HEADERS)
+                with urllib.request.urlopen(req, timeout=20) as r:
+                    data = json.loads(r.read())
+            except urllib.error.HTTPError as exc:
+                if exc.code == 429:
+                    print(f"    [BSE-D] Rate-limited p{page} — waiting 10s")
+                    time.sleep(10)
+                    continue
+                print(f"    [BSE-D] urllib HTTP {exc.code} on page {page}")
+                break
+            except Exception as exc:
+                print(f"    [BSE-D] urllib failed p{page}: {exc}")
+                break
+
+        if data is None:
+            break
+
+        batch = data.get("Table", [])
+        if not batch:
+            print(f"    [BSE-D] p{page}: empty — done ({from_bse}→{to_bse})")
+            break
+        new = 0
+        for item in batch:
+            key = (item.get("ATTACHMENTNAME") or
+                   f"{item.get('SCRIP_CD')}_{item.get('DT_TM')}")
+            if key and key not in seen:
+                seen.add(key)
+                items.append(item)
+                new += 1
+        print(f"    [BSE-D] p{page}: {len(batch)} returned, {new} new (total {len(items)})")
+        if new == 0:
             break
         time.sleep(0.5)
 
