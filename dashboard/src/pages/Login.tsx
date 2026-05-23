@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "@/hooks/useTheme";
 import type { Theme } from "@/hooks/useTheme";
 
+/* passphrase is compared case-sensitively after stripping all whitespace */
 const ACCESS_PHRASE: string = import.meta.env.VITE_AUTH_PHRASE || "One piece is real";
 
 export const AUTH_KEY  = "op_matrix_auth";
@@ -134,7 +135,6 @@ function NeuralCanvas({ theme, hyperspeed }: NeuralCanvasProps) {
     if (!stateRef.current) stateRef.current = initState(canvas.width, canvas.height);
     window.addEventListener("resize", resize);
 
-    /* ── Colour palette ── */
     const nodeColor   = isDark ? (a: number) => `rgba(167,139,250,${a})`  : (a: number) => `rgba(106,98,86,${a})`;
     const activeColor = isDark ? (a: number) => `rgba(196,181,253,${a})`  : (a: number) => `rgba(80,70,55,${a})`;
     const lineColor   = isDark ? (a: number) => `rgba(130,100,220,${a})`  : (a: number) => `rgba(106,98,86,${a})`;
@@ -153,18 +153,15 @@ function NeuralCanvas({ theme, hyperspeed }: NeuralCanvasProps) {
       const w = canvas.width; const h = canvas.height;
       ctx.clearRect(0, 0, w, h);
 
-      /* Background */
       const bg = ctx.createLinearGradient(0, 0, w, h);
       bg.addColorStop(0, bgFrom); bg.addColorStop(1, bgTo);
       ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
 
-      /* Subtle grid */
       ctx.strokeStyle = isDark ? `rgba(167,139,250,0.025)` : `rgba(106,98,86,0.025)`;
       ctx.lineWidth = 0.5;
       for (let gx = 0; gx < w; gx += 20) { ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,h); ctx.stroke(); }
       for (let gy = 0; gy < h; gy += 20) { ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(w,gy); ctx.stroke(); }
 
-      /* Data streams */
       ctx.font = "9px 'JetBrains Mono', monospace";
       for (const stream of state.streams) {
         stream.offset += stream.speed;
@@ -177,7 +174,6 @@ function NeuralCanvas({ theme, hyperspeed }: NeuralCanvasProps) {
         }
       }
 
-      /* Candlestick ghosts */
       for (const series of state.series) {
         series.x -= series.scrollSpeed;
         if (series.x + series.width < -50) series.x = w + 50;
@@ -197,7 +193,6 @@ function NeuralCanvas({ theme, hyperspeed }: NeuralCanvasProps) {
         }
       }
 
-      /* Connections + travelling dots */
       const spd = hyperspeed ? 8 : 1;
       for (let i = 0; i < state.nodes.length; i++) {
         for (let j = i + 1; j < state.nodes.length; j++) {
@@ -215,7 +210,6 @@ function NeuralCanvas({ theme, hyperspeed }: NeuralCanvasProps) {
         }
       }
 
-      /* Nodes */
       for (const node of state.nodes) {
         node.x += node.vx * spd; node.y += node.vy * spd;
         if (node.x < 0 || node.x > w) node.vx *= -1;
@@ -251,7 +245,7 @@ function NeuralCanvas({ theme, hyperspeed }: NeuralCanvasProps) {
   return <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, display: "block" }} />;
 }
 
-/* ── AI Agent Status Panel ──────────────────────────────────────────────────── */
+/* ── Agent Status Panel ──────────────────────────────────────────────────────── */
 type AgentState = "ACTIVE" | "SCANNING" | "READY" | "LOADING" | "STANDBY";
 interface Agent { name: string; states: AgentState[]; currentState: AgentState; dotColor: string; }
 
@@ -340,17 +334,309 @@ function AgentStatusPanel({ theme }: { theme: Theme }) {
   );
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════
+   MATRIX ACCESS GRANTED SEQUENCE
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+const MTX_CHARS = "01アイウエオカキクケコタチツテト0110ヲンヴアABCDEF∑∆Ω≠∫√#$@!%&<>{}[]";
+
+/* synthesise Matrix-style sound entirely in-browser — no external files */
+function playMatrixSound() {
+  try {
+    type AudioCtxCtor = typeof AudioContext;
+    const Ctx = (window.AudioContext || (window as unknown as { webkitAudioContext: AudioCtxCtor }).webkitAudioContext);
+    const ctx = new Ctx();
+
+    /* ── low digital drone ── */
+    const drone = ctx.createOscillator();
+    const droneG = ctx.createGain();
+    drone.type = "sawtooth";
+    drone.frequency.setValueAtTime(40, ctx.currentTime);
+    drone.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 4);
+    droneG.gain.setValueAtTime(0, ctx.currentTime);
+    droneG.gain.linearRampToValueAtTime(0.05, ctx.currentTime + 0.4);
+    droneG.gain.linearRampToValueAtTime(0.03, ctx.currentTime + 3);
+    droneG.gain.linearRampToValueAtTime(0, ctx.currentTime + 4.5);
+    drone.connect(droneG); droneG.connect(ctx.destination);
+    drone.start(); drone.stop(ctx.currentTime + 4.6);
+
+    /* ── glitch ticks while rain falls ── */
+    [0.05, 0.18, 0.38, 0.62, 0.91, 1.25, 1.6, 2.0, 2.4].forEach(t => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "square";
+      o.frequency.value = 180 + Math.random() * 520;
+      g.gain.setValueAtTime(0, ctx.currentTime + t);
+      g.gain.linearRampToValueAtTime(0.055, ctx.currentTime + t + 0.015);
+      g.gain.linearRampToValueAtTime(0, ctx.currentTime + t + 0.07);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.09);
+    });
+
+    /* ── rising tone sweep during scramble ── */
+    const sweep = ctx.createOscillator();
+    const sweepG = ctx.createGain();
+    sweep.type = "sine";
+    sweep.frequency.setValueAtTime(220, ctx.currentTime + 0.9);
+    sweep.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 2.9);
+    sweepG.gain.setValueAtTime(0, ctx.currentTime + 0.9);
+    sweepG.gain.linearRampToValueAtTime(0.04, ctx.currentTime + 1.2);
+    sweepG.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 2.8);
+    sweepG.gain.linearRampToValueAtTime(0, ctx.currentTime + 3.1);
+    sweep.connect(sweepG); sweepG.connect(ctx.destination);
+    sweep.start(ctx.currentTime + 0.9); sweep.stop(ctx.currentTime + 3.2);
+
+    /* ── ACCESS GRANTED chord ── */
+    [261.63, 329.63, 392, 523.25].forEach((freq, i) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = freq;
+      const t0 = ctx.currentTime + 2.85 + i * 0.055;
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(0.09, t0 + 0.04);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + 1.8);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(t0); o.stop(t0 + 2);
+    });
+  } catch { /* AudioContext not available — silent fallback */ }
+}
+
+/* matrix rain canvas — pure green on black */
+function MatrixRainCanvas({ fadeOut }: { fadeOut: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fadeRef   = useRef(fadeOut);
+  fadeRef.current = fadeOut;
+
+  useEffect(() => {
+    const canvas = canvasRef.current!;
+    const ctx    = canvas.getContext("2d")!;
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const fontSize = 15;
+    const cols     = Math.floor(canvas.width / fontSize);
+    const drops    = Array.from({ length: cols }, () => Math.random() * -(canvas.height / fontSize));
+    const speeds   = Array.from({ length: cols }, () => 0.25 + Math.random() * 0.75);
+
+    let raf: number;
+    let globalAlpha = 1;
+
+    const draw = () => {
+      if (fadeRef.current) {
+        globalAlpha = Math.max(0, globalAlpha - 0.035);
+      }
+
+      ctx.globalAlpha = globalAlpha;
+      ctx.fillStyle = "rgba(0,0,0,0.055)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      for (let i = 0; i < drops.length; i++) {
+        const y = drops[i] * fontSize;
+        if (y < 0) { drops[i] += speeds[i]; continue; }
+
+        /* bright head character */
+        const head = MTX_CHARS[Math.floor(Math.random() * MTX_CHARS.length)];
+        ctx.font = `${fontSize}px 'JetBrains Mono', monospace`;
+        ctx.fillStyle = `rgba(180,255,180,${0.88 + Math.random() * 0.12})`;
+        ctx.fillText(head, i * fontSize, y);
+
+        /* fading trail */
+        for (let t = 1; t <= 6; t++) {
+          const trailY = y - t * fontSize;
+          if (trailY < 0) continue;
+          const a = (1 - t / 7) * 0.55;
+          ctx.fillStyle = `rgba(0,${180 + Math.floor(Math.random() * 55)},0,${a})`;
+          ctx.fillText(MTX_CHARS[Math.floor(Math.random() * MTX_CHARS.length)], i * fontSize, trailY);
+        }
+
+        drops[i] += speeds[i];
+        if (drops[i] * fontSize > canvas.height && Math.random() > 0.97) {
+          drops[i] = -Math.random() * 10;
+        }
+      }
+      ctx.globalAlpha = 1;
+      raf = requestAnimationFrame(draw);
+    };
+
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{ position: "absolute", inset: 0, display: "block", background: "#000" }}
+    />
+  );
+}
+
+/* scramble text: random chars → resolves to target letter by letter */
+function useTextScramble(target: string, active: boolean, duration = 2000) {
+  const [display, setDisplay] = useState("");
+  const frameRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    let frame = 0;
+    const totalFrames = Math.round(duration / 35);
+
+    const tick = () => {
+      const progress  = frame / totalFrames;
+      const locked    = Math.floor(progress * target.length);
+      let out = "";
+      for (let i = 0; i < target.length; i++) {
+        if (target[i] === " ") { out += " "; continue; }
+        if (i < locked) {
+          out += target[i];
+        } else {
+          out += MTX_CHARS[Math.floor(Math.random() * MTX_CHARS.length)];
+        }
+      }
+      setDisplay(out);
+      frame++;
+      if (frame <= totalFrames) frameRef.current = setTimeout(tick, 35);
+    };
+
+    tick();
+    return () => { if (frameRef.current) clearTimeout(frameRef.current); };
+  }, [active, target, duration]);
+
+  return display;
+}
+
+type MatrixPhase = "rain" | "scramble" | "granted" | "fadeout";
+
+function MatrixAccessOverlay({ onDone }: { onDone: () => void }) {
+  const [phase, setPhase] = useState<MatrixPhase>("rain");
+
+  const scrambleActive = phase === "scramble" || phase === "granted";
+  const displayText    = useTextScramble("ACCESS  GRANTED", scrambleActive, 1900);
+
+  useEffect(() => {
+    playMatrixSound();
+
+    const t1 = setTimeout(() => setPhase("scramble"), 900);
+    const t2 = setTimeout(() => setPhase("granted"),  2950);
+    const t3 = setTimeout(() => setPhase("fadeout"),  3700);
+    const t4 = setTimeout(() => onDone(),             4500);
+
+    return () => [t1, t2, t3, t4].forEach(clearTimeout);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const isGranted = phase === "granted" || phase === "fadeout";
+  const fadeOut   = phase === "fadeout";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: fadeOut ? 0 : 1 }}
+      transition={{ duration: fadeOut ? 0.8 : 0.15, ease: "easeInOut" }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 50,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        flexDirection: "column",
+        pointerEvents: "all",
+      }}
+    >
+      {/* Matrix rain canvas */}
+      <MatrixRainCanvas fadeOut={fadeOut} />
+
+      {/* Centrepiece text */}
+      <div style={{
+        position: "relative", zIndex: 10,
+        textAlign: "center", userSelect: "none",
+      }}>
+        {/* scan-line overlay for authenticity */}
+        <div style={{
+          position: "absolute", inset: "-40px -60px",
+          backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px)",
+          pointerEvents: "none", zIndex: 1,
+        }} />
+
+        {phase !== "rain" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2 }}
+            style={{ position: "relative", zIndex: 2 }}
+          >
+            {/* main text */}
+            <div style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: "clamp(22px, 5vw, 52px)",
+              fontWeight: 700,
+              letterSpacing: "0.25em",
+              whiteSpace: "pre",
+              color: isGranted ? "#00ff41" : "rgba(0,255,65,0.72)",
+              textShadow: isGranted
+                ? "0 0 10px #00ff41, 0 0 30px #00ff4188, 0 0 70px #00ff4144, 0 0 120px #00ff4122"
+                : "0 0 8px rgba(0,255,65,0.5)",
+              transition: "color 0.35s ease, text-shadow 0.35s ease",
+            }}>
+              {displayText || "________________"}
+            </div>
+
+            {/* progress bar beneath while scrambling */}
+            {!isGranted && (
+              <div style={{
+                marginTop: 18, height: 2,
+                background: "rgba(0,255,65,0.12)",
+                borderRadius: 2, overflow: "hidden",
+                width: "clamp(200px, 40vw, 420px)",
+                margin: "18px auto 0",
+              }}>
+                <motion.div
+                  initial={{ width: "0%" }}
+                  animate={{ width: "100%" }}
+                  transition={{ duration: 2.05, ease: "linear" }}
+                  style={{ height: "100%", background: "rgba(0,255,65,0.65)", borderRadius: 2 }}
+                />
+              </div>
+            )}
+
+            {/* sub-line on granted */}
+            {isGranted && (
+              <motion.div
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.1 }}
+                style={{
+                  marginTop: 14,
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: "clamp(10px, 1.2vw, 13px)",
+                  letterSpacing: "0.3em",
+                  color: "rgba(0,255,65,0.48)",
+                  textTransform: "uppercase",
+                }}
+              >
+                Initialising terminal…
+              </motion.div>
+            )}
+          </motion.div>
+        )}
+      </div>
+
+      {/* vignette */}
+      <div style={{
+        position: "absolute", inset: 0, zIndex: 9, pointerEvents: "none",
+        background: "radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.72) 100%)",
+      }} />
+    </motion.div>
+  );
+}
+
 /* ── Login Page ─────────────────────────────────────────────────────────────── */
 export function LoginPage({ onAuth }: { onAuth: () => void }) {
   const { theme }  = useTheme();
   const isDark     = theme === "dark";
 
-  const [phrase,   setPhrase]   = useState("");
-  const [error,    setError]    = useState(false);
-  const [errorMsg, setErrorMsg] = useState("Incorrect passphrase. Try again.");
-  const [shake,    setShake]    = useState(false);
-  const [granted,  setGranted]  = useState(false);
-  const [locked,   setLocked]   = useState(isLockedOut);
+  const [phrase,    setPhrase]    = useState("");
+  const [error,     setError]     = useState(false);
+  const [errorMsg,  setErrorMsg]  = useState("Incorrect passphrase. Try again.");
+  const [shake,     setShake]     = useState(false);
+  const [granted,   setGranted]   = useState(false);
+  const [locked,    setLocked]    = useState(isLockedOut);
   const [hyperspeed, setHyperspeed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -363,9 +649,13 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
       setErrorMsg("Terminal locked — try again in 15 minutes.");
       setPhrase(""); return;
     }
-    if (phrase.trim().toLowerCase() === ACCESS_PHRASE.toLowerCase()) {
-      clearFailures(); setGranted(true); setHyperspeed(true);
-      setTimeout(() => { localStorage.setItem(AUTH_KEY, JSON.stringify({ ts: Date.now() })); onAuth(); }, 1600);
+    /* case-sensitive, whitespace-stripped comparison */
+    const attempt = phrase.replace(/\s+/g, "");
+    const secret  = ACCESS_PHRASE.replace(/\s+/g, "");
+    if (attempt === secret) {
+      clearFailures();
+      setGranted(true);
+      setHyperspeed(true);
     } else {
       const result = recordFailure();
       setError(true); setShake(true);
@@ -379,6 +669,11 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
     }
   };
 
+  const handleAuthDone = () => {
+    localStorage.setItem(AUTH_KEY, JSON.stringify({ ts: Date.now() }));
+    onAuth();
+  };
+
   const btnDisabled = locked || granted || !phrase.trim();
 
   return (
@@ -387,13 +682,8 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
       overflow: "hidden", background: isDark ? "#06060b" : "#EBE7E7",
       display: "flex", alignItems: "center", justifyContent: "center",
     }}>
-      {/* Layer 0 — neural canvas */}
       <NeuralCanvas theme={theme} hyperspeed={hyperspeed} />
-
-      {/* Layer 1 — grid dot overlay (dark only via CSS [data-theme]) */}
       <div className="grid-bg" />
-
-      {/* Layer 2 — violet top glow */}
       <div className="glow-top" />
 
       {/* ── Login card ── */}
@@ -403,7 +693,7 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
           ? { opacity: 0, y: -20, scale: 1.04 }
           : { opacity: 1, y: 0, scale: 1 }}
         transition={granted
-          ? { duration: 0.5, ease: [0.4,0,0.2,1] }
+          ? { duration: 0.4, ease: [0.4,0,0.2,1] }
           : { type: "spring", stiffness: 280, damping: 26, delay: 0.15 }}
         style={{ position: "relative", zIndex: 10, width: "min(420px, calc(100vw - 40px))" }}
       >
@@ -430,7 +720,6 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
             position: "relative", overflow: "hidden",
           }}
         >
-          {/* Card top accent line */}
           {isDark && (
             <div style={{
               position: "absolute", top: 0, left: 0, right: 0, height: 1,
@@ -439,25 +728,20 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
             }} />
           )}
 
-          {/* ── Header bar ── */}
+          {/* Header bar */}
           <div style={{
             display: "flex", alignItems: "center", justifyContent: "space-between",
             marginBottom: 24, paddingBottom: 16,
             borderBottom: isDark ? "1px solid rgba(255,255,255,0.06)" : "1px solid rgba(17,16,14,0.08)",
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-              <img
-                src="/favicon.svg"
-                alt="One Piece Quant"
-                style={{ width: 22, height: 22, borderRadius: 5, flexShrink: 0 }}
-              />
+              <img src="/favicon.svg" alt="One Piece Quant"
+                style={{ width: 22, height: 22, borderRadius: 5, flexShrink: 0 }} />
               <span style={{
                 fontFamily: "var(--font-heading)", fontStyle: "italic", fontSize: 13,
                 color: isDark ? "rgba(245,245,247,0.82)" : "rgba(17,16,14,0.78)",
                 letterSpacing: "0.01em",
-              }}>
-                One Piece Quant
-              </span>
+              }}>One Piece Quant</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
               <div style={{
@@ -469,15 +753,12 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
                 fontSize: 9, fontFamily: "var(--font-mono)", letterSpacing: "0.12em",
                 color: isDark ? "rgba(167,139,250,0.5)" : "rgba(106,98,86,0.58)",
                 fontWeight: 600,
-              }}>
-                ONLINE
-              </span>
+              }}>ONLINE</span>
             </div>
           </div>
 
-          {/* ── Brand ── */}
+          {/* Brand */}
           <div style={{ textAlign: "center", marginBottom: 22 }}>
-            {/* Logo icon */}
             <motion.div
               initial={{ scale: 0.75, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -499,7 +780,6 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
               <img src="/favicon.svg" alt="One Piece" style={{ width: 36, height: 36 }} />
             </motion.div>
 
-            {/* Title */}
             <div style={{
               fontFamily: "var(--font-heading)", fontStyle: "italic",
               fontSize: 27, letterSpacing: "-0.02em", lineHeight: 1.1, marginBottom: 5,
@@ -509,25 +789,19 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
               <span style={{
                 background: "linear-gradient(120deg, #a78bfa 0%, #60a5fa 55%, #34d399 100%)",
                 WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
-              }}>
-                Quant
-              </span>
+              }}>Quant</span>
             </div>
 
-            {/* Tagline */}
             <div style={{
               fontSize: 9.5, fontFamily: "var(--font-mono)", fontWeight: 500,
               letterSpacing: "0.16em", textTransform: "uppercase",
               color: isDark ? "rgba(167,139,250,0.45)" : "rgba(106,98,86,0.52)",
-            }}>
-              NSE · BSE · AI Terminal
-            </div>
+            }}>NSE · BSE · AI Terminal</div>
           </div>
 
-          {/* ── Agent Status ── */}
           <AgentStatusPanel theme={theme} />
 
-          {/* ── Form ── */}
+          {/* Form */}
           <form onSubmit={handleSubmit} autoComplete="off">
             <div style={{ marginBottom: 14 }}>
               <label style={{
@@ -604,7 +878,7 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
             </motion.button>
           </form>
 
-          {/* ── Footer ── */}
+          {/* Footer */}
           <div style={{
             marginTop: 18, paddingTop: 14,
             borderTop: isDark ? "1px solid rgba(255,255,255,0.05)" : "1px solid rgba(17,16,14,0.06)",
@@ -621,70 +895,9 @@ export function LoginPage({ onAuth }: { onAuth: () => void }) {
         </motion.div>
       </motion.div>
 
-      {/* ── Access granted overlay ── */}
+      {/* ── Matrix ACCESS GRANTED sequence ── */}
       <AnimatePresence>
-        {granted && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: [0, 0.45, 0] }}
-              transition={{ duration: 0.5, times: [0, 0.2, 1] }}
-              style={{ position:"absolute", inset:0, zIndex:15, background:"#a78bfa", pointerEvents:"none" }}
-            />
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              transition={{ delay: 0.3, duration: 0.4 }}
-              style={{
-                position:"absolute", inset:0, zIndex:20,
-                display:"flex", alignItems:"center", justifyContent:"center",
-                background: isDark ? "rgba(6,6,11,0.88)" : "rgba(235,231,231,0.88)",
-                backdropFilter:"blur(24px)", WebkitBackdropFilter:"blur(24px)",
-              }}
-            >
-              <motion.div
-                initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                transition={{ type:"spring", stiffness:350, damping:22, delay:0.35 }}
-                style={{ textAlign:"center" }}
-              >
-                <motion.div
-                  initial={{ scale: 0 }} animate={{ scale: [0, 1.2, 1] }}
-                  transition={{ delay: 0.4, duration: 0.5, ease: "easeOut" }}
-                  style={{
-                    width:72, height:72, borderRadius:"50%",
-                    background:"linear-gradient(135deg, #a78bfa 0%, #60a5fa 50%, #34d399 100%)",
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                    margin:"0 auto 20px",
-                    boxShadow:"0 8px 48px rgba(167,139,250,0.55)",
-                    fontSize:30, color:"#fff",
-                  }}
-                >
-                  ✓
-                </motion.div>
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.6 }}
-                  style={{
-                    fontSize:18, fontWeight:700,
-                    fontFamily:"var(--font-heading)", fontStyle:"italic",
-                    color: isDark ? "#f5f5f7" : "#11100E", letterSpacing:"-0.01em",
-                  }}
-                >
-                  Access granted
-                </motion.div>
-                <motion.div
-                  initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                  transition={{ delay: 0.75 }}
-                  style={{
-                    fontSize:11, fontFamily:"var(--font-mono)",
-                    color: isDark ? "rgba(167,139,250,0.65)" : "rgba(106,98,86,0.65)",
-                    marginTop:6, letterSpacing:"0.06em",
-                  }}
-                >
-                  Initialising terminal…
-                </motion.div>
-              </motion.div>
-            </motion.div>
-          </>
-        )}
+        {granted && <MatrixAccessOverlay onDone={handleAuthDone} />}
       </AnimatePresence>
     </div>
   );
