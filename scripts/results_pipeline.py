@@ -1105,9 +1105,9 @@ def main() -> None:
     print(f"Results Pipeline  {datetime.now(timezone.utc).isoformat()}")
     print("=" * 60)
 
-    if not NVIDIA_API_KEY and not OPENROUTER_KEY:
+    if not NVIDIA_API_KEY and not GROQ_API_KEY and not GEMINI_API_KEY:
         print("WARNING: No AI key set — AI extraction will fail for every filing.")
-        print("         Add NVIDIA_API_KEY or OPENROUTER_API_KEY to GitHub secrets.")
+        print("         Add NVIDIA_API_KEY, GROQ_API_KEY, or GEMINI_API_KEY to GitHub secrets.")
 
     # 1. Fetch BSE filings
     print("\n[1] Fetching BSE filings...")
@@ -1162,8 +1162,8 @@ def main() -> None:
             pdf_text = _extract_pdf_text(pdf_url)
             print(f"    Got {len(pdf_text)} chars from PDF")
 
-        # 5b. Call DeepSeek R1 (NIM → OpenRouter fallback)
-        print("    Calling DeepSeek R1 for structured extraction...")
+        # 5b. Call LLM (NIM → Groq → Gemini fallback chain)
+        print("    Calling LLM for structured extraction...")
         ai = _call_nim_deepseek(company, scrip_code, dt, category, headline, pdf_text)
         if not ai:
             print("    AI extraction failed — skipping")

@@ -338,7 +338,7 @@ function AIChatTab({ symbol }: { symbol: string }) {
         {analyse.isPending && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-3)", fontSize: 12, marginBottom: 12 }}>
             <Loader2 style={{ width: 14, height: 14, animation: "spin 1s linear infinite" }} />
-            DeepSeek R1 thinking…
+            Analysing…
           </div>
         )}
         <div ref={bottomRef} />

@@ -27,8 +27,9 @@ Environment:
   USE_YFINANCE       set to "true" to force Strategy C even if A/B succeed
   SUPABASE_URL       required
   SUPABASE_KEY       required
-  NVIDIA_API_KEY     primary LLM
-  OPENROUTER_API_KEY fallback LLM
+  NVIDIA_API_KEY     primary LLM (NIM)
+  GROQ_API_KEY       fallback 1 (Groq)
+  GEMINI_API_KEY     fallback 2 (Gemini)
   TELEGRAM_BOT_TOKEN optional
   TELEGRAM_CHAT_ID   optional
 """
