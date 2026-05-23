@@ -1,0 +1,38 @@
+name: Breakout Monitor (Watchlist Alerts)
+
+on:
+  schedule:
+    # Every 30 min 9:00 AM – 3:45 PM IST (03:30–10:15 UTC) Mon–Fri
+    - cron: "0,30 3,4,5,6,7,8,9 * * 1-5"
+    - cron: "0 10 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-breakout-v1-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: ${{ runner.os }}-pip-breakout-v1-
+
+      - name: Install dependencies
+        run: pip install yfinance requests
+
+      - name: Run breakout monitor
+        env:
+          SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:       ${{ secrets.SUPABASE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scripts/breakout_monitor.py

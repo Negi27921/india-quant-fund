@@ -1,0 +1,49 @@
+name: Universe Agent (BSE/NSE Stock Universe)
+
+on:
+  schedule:
+    # Daily at 6:30 AM IST (01:00 UTC) — before market open
+    - cron: "0 1 * * 1-5"
+    # Also run Saturday morning to catch any weekend data
+    - cron: "0 2 * * 6"
+  workflow_dispatch:
+    inputs:
+      max_stocks:
+        description: "Max stocks to process (0 = all, set small for testing)"
+        required: false
+        default: "0"
+      mcap_min_cr:
+        description: "Minimum market cap in Crores"
+        required: false
+        default: "1000"
+
+jobs:
+  expand-universe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45   # fetching 5000+ market caps takes time
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-universe-v1-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: ${{ runner.os }}-pip-universe-v1-
+
+      - name: Install dependencies
+        run: pip install yfinance requests
+
+      - name: Run Universe Agent
+        env:
+          SUPABASE_URL:  ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:  ${{ secrets.SUPABASE_KEY }}
+          MCAP_MIN_CR:   ${{ github.event.inputs.mcap_min_cr || '1000' }}
+          MAX_STOCKS:    ${{ github.event.inputs.max_stocks || '0' }}
+          BATCH_SIZE:    "50"
+        run: python scripts/universe_agent.py

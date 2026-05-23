@@ -15,6 +15,7 @@ const StrategiesPage     = lazy(() => import("@/pages/Strategies").then(m => ({ 
 const SettingsPage       = lazy(() => import("@/pages/Settings").then(m => ({ default: m.SettingsPage })));
 const TradingJournalPage = lazy(() => import("@/pages/TradingJournal").then(m => ({ default: m.TradingJournalPage })));
 const ResultsPage        = lazy(() => import("@/pages/Results").then(m => ({ default: m.ResultsPage })));
+const WatchlistPage      = lazy(() => import("@/pages/Watchlist").then(m => ({ default: m.WatchlistPage })));
 
 function PageLoader() {
   return (
@@ -109,6 +110,7 @@ export default function App() {
                 <Route path="settings"   element={<SettingsPage />} />
                 <Route path="journal"    element={<TradingJournalPage />} />
                 <Route path="results"    element={<ResultsPage />} />
+                <Route path="watchlist" element={<WatchlistPage />} />
               </Route>
             </Routes>
           </Suspense>

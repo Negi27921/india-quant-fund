@@ -16,7 +16,7 @@ from api._config import API_TITLE, API_VERSION, CORS_CONFIG, get_allowed_origins
 from api.middleware.security import SecurityHeadersMiddleware, require_internal_key
 from api.routers import (
     chat, journal, market, portfolio, risk,
-    screener, settings, strategies, telegram_bot, trades,
+    screener, settings, strategies, telegram_bot, trades, watchlist,
 )
 
 # ── System router (Supabase-compatible stubs) ─────────────────────────────────
@@ -115,6 +115,7 @@ app.include_router(telegram_bot.router, prefix="/api/telegram", tags=["Telegram"
 app.include_router(strategies.router, prefix="/api/strategies", tags=["Strategies"])
 app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
 app.include_router(journal.router, prefix="/api/journal", tags=["Journal"])
+app.include_router(watchlist.router, prefix="/api/watchlists", tags=["Watchlist"])
 app.include_router(_system, prefix="/api/system", tags=["System"])
 
 
