@@ -1203,7 +1203,7 @@ export function MarketPage() {
           display: "grid",
           gridTemplateColumns: "1.1fr 1fr 0.9fr",
           gap: 16,               /* Chakra space-4 */
-          flex: 1,
+          alignItems: "start",
         }}>
 
           {/* LEFT — Live Filings */}
@@ -1222,7 +1222,7 @@ export function MarketPage() {
               title="FII / DII Flows"
               icon={<Globe2 style={{ width: 12, height: 12 }} />}
               accent="var(--accent)"
-              style={{ flex: 1 }}
+              style={{ minHeight: 360 }}
             >
               <FiiDiiPanel />
             </Card>
@@ -1231,6 +1231,7 @@ export function MarketPage() {
               title="Market Breadth"
               icon={<Activity style={{ width: 12, height: 12 }} />}
               accent="var(--amber)"
+              style={{ minHeight: 140 }}
             >
               <BreadthPanel />
             </Card>

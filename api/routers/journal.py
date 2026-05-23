@@ -511,9 +511,33 @@ def _openrouter(system: str, user_msg: str, history: list[dict] | None = None) -
     return r.json()["choices"][0]["message"]["content"]
 
 
+def _nvidia(system: str, user_msg: str, history: list[dict] | None = None) -> str:
+    import requests as _req, re as _re
+    key = os.getenv("NVIDIA_API_KEY", "").strip()
+    if not key:
+        raise ValueError("NVIDIA_API_KEY not set")
+    model = os.getenv("NVIDIA_MODEL", "deepseek-ai/deepseek-r1").strip()
+    messages = [{"role": "system", "content": system}]
+    for t in (history or []):
+        messages.append({"role": t.get("role", "user"), "content": t.get("content", "")})
+    messages.append({"role": "user", "content": user_msg})
+    r = _req.post(
+        "https://integrate.api.nvidia.com/v1/chat/completions",
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 2000, "stream": False},
+        timeout=25,
+    )
+    r.raise_for_status()
+    content = r.json()["choices"][0]["message"]["content"]
+    # Strip DeepSeek R1 chain-of-thought tags
+    cleaned = _re.sub(r"<think>.*?</think>", "", content, flags=_re.DOTALL).strip()
+    return cleaned if cleaned else content
+
+
 def _llm(system: str, user_msg: str, history: list[dict] | None = None) -> tuple[str, str, int]:
-    # Groq is fastest (1-3s) → Gemini → OpenRouter as fallbacks
+    # NVIDIA/DeepSeek R1 → Groq → Gemini → OpenRouter
     chain = [
+        ("nvidia",     _nvidia),
         ("groq",       _groq),
         ("gemini",     _gemini),
         ("openrouter", _openrouter),
