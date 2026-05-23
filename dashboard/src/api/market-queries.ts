@@ -68,6 +68,7 @@ export interface IndicesData {
   sensex: IndexData;
   niftymid50: IndexData;
   niftyit: IndexData;
+  niftysmc?: IndexData;
   giftnifty?: IndexData;
   brentcrude?: IndexData;
   dowjones?: IndexData;

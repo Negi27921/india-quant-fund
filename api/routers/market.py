@@ -154,12 +154,30 @@ def _fetch_fast_info(ticker: str) -> dict:
         return {"ticker": ticker, "price": 0, "prev_close": 0, "change": 0, "change_pct": 0, "day_high": 0, "day_low": 0}
 
 
+def _l2_write_market(key: str, data) -> None:
+    """Persist market data to L2 cache so cold Lambdas can serve last-session data."""
+    try:
+        from core.providers.registry import get_cache
+        get_cache().set(f"market:{key}", data, ttl_seconds=86_400)
+    except Exception:
+        pass
+
+
+def _l2_read_market(key: str):
+    try:
+        from core.providers.registry import get_cache
+        return get_cache().get(f"market:{key}")
+    except Exception:
+        return None
+
+
 def _batch_download(tickers: list[str]) -> list[dict]:
-    """Single yf.download for all tickers — far faster than N individual fast_info calls."""
+    """Single yf.download for all tickers — far faster than N individual fast_info calls.
+    Uses period=5d so last-session data is always available regardless of weekends."""
     import math
     try:
         raw = yf.download(
-            tickers, period="2d", interval="1d",
+            tickers, period="5d", interval="1d",
             auto_adjust=True, progress=False, threads=True, group_by="ticker",
         )
         results = []
@@ -327,11 +345,12 @@ async def market_status():
 
 
 NSE_INDEX_SYMBOL_MAP = {
-    "nifty50":    ("NIFTY 50",       "^NSEI",      "Nifty 50"),
-    "banknifty":  ("NIFTY BANK",     "^NSEBANK",   "Bank Nifty"),
-    "sensex":     ("SENSEX",         "^BSESN",     "Sensex"),
-    "niftymid50": ("NIFTY MIDCAP 50","^NSEMDCP50", "Nifty Midcap 50"),
-    "niftyit":    ("NIFTY IT",       "^CNXIT",     "Nifty IT"),
+    "nifty50":    ("NIFTY 50",           "^NSEI",      "Nifty 50"),
+    "banknifty":  ("NIFTY BANK",         "^NSEBANK",   "Bank Nifty"),
+    "sensex":     ("SENSEX",             "^BSESN",     "Sensex"),
+    "niftymid50": ("NIFTY MIDCAP 50",    "^NSEMDCP50", "Nifty Midcap 50"),
+    "niftyit":    ("NIFTY IT",           "^CNXIT",     "Nifty IT"),
+    "niftysmc":   ("NIFTY SMALLCAP 100", "^CNXSC",     "Nifty SmallCap 100"),
 }
 
 
@@ -420,11 +439,21 @@ async def get_movers(limit: int = Query(8, le=20)):
     dec = sum(1 for q in quotes if q["change_pct"] < 0)
     unc = len(quotes) - adv - dec
 
-    return {
+    result = {
         "gainers": gainers,
         "losers":  losers,
         "breadth": {"advances": adv, "declines": dec, "unchanged": unc, "total": len(quotes)},
     }
+
+    if gainers or losers:
+        _l2_write_market("movers", result)
+    elif not gainers and not losers:
+        # Empty gainers/losers — return last-session data from L2
+        cached = _l2_read_market("movers")
+        if cached:
+            return cached
+
+    return result
 
 
 NSE_SECTOR_MAP = {
@@ -457,13 +486,14 @@ YF_SECTOR_FALLBACK = {
 
 
 def _batch_download_sectors() -> list[dict]:
-    """Single download for all sector indices."""
+    """Single download for all sector indices. Uses period=5d so weekend/holiday gaps don't
+    produce empty data — we always compare the two most recent trading sessions."""
     import math
     names   = list(YF_SECTOR_FALLBACK.keys())
     symbols = list(YF_SECTOR_FALLBACK.values())
     try:
         raw = yf.download(
-            symbols, period="2d", interval="1d",
+            symbols, period="5d", interval="1d",
             auto_adjust=True, progress=False, threads=True, group_by="ticker",
         )
         results = []
@@ -514,7 +544,9 @@ async def get_sectors():
                 if d and d.get("price", 0) > 0:
                     out.append({"sector": sector_name, **d})
             if out:
-                return sorted(out, key=lambda x: -abs(x["change_pct"]))
+                result = sorted(out, key=lambda x: -abs(x["change_pct"]))
+                _l2_write_market("sectors", result)
+                return result
         except Exception:
             pass
 
@@ -522,11 +554,19 @@ async def get_sectors():
     try:
         result = await asyncio.wait_for(
             loop.run_in_executor(_executor, _batch_download_sectors),
-            timeout=5.0,
+            timeout=8.0,
         )
-        return result
+        if result:
+            _l2_write_market("sectors", result)
+            return result
     except Exception:
-        return []
+        pass
+
+    # L2 fallback: return last known good data (survives cold Lambda + API outages)
+    cached = _l2_read_market("sectors")
+    if cached:
+        return cached
+    return []
 
 
 def _fetch_nse_quote(symbol: str) -> dict | None:

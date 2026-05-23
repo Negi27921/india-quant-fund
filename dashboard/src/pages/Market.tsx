@@ -2,21 +2,18 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   TrendingUp, Activity, BarChart2,
-  ArrowUpRight, ArrowDownRight, Calendar, Zap, Globe2,
+  ArrowUpRight, ArrowDownRight, Calendar, Zap,
   RefreshCw, FileText, Clock, Filter, ExternalLink,
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { useUIStore } from "@/store/ui";
 import {
   useMarketIndices, useMarketMovers, useMarketSectors,
-  useFiiDiiToday, useAdvancesDeclines, useCorporateActions,
-  useResultsCalendar, useFiiDii, useFilings, useGlobalIndices,
-  type CorporateAction, type ResultsMeeting, type FiiDiiRow,
+  useAdvancesDeclines, useCorporateActions,
+  useResultsCalendar, useFilings, useGlobalIndices,
+  type CorporateAction, type ResultsMeeting,
   type IndexData, type Filing, type GlobalIndexData,
 } from "@/api/market-queries";
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Cell,
-} from "recharts";
 
 // ── Symbol maps ────────────────────────────────────────────────────────────────
 const SECTOR_SYMBOL_MAP: Record<string, string> = {
@@ -29,12 +26,6 @@ const SECTOR_SYMBOL_MAP: Record<string, string> = {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const upDn = (v: number) => (v > 0 ? "▲" : v < 0 ? "▼" : "—");
 const numColor = (v: number) => v > 0 ? "var(--green)" : v < 0 ? "var(--red)" : "var(--text-3)";
-const fmtCr = (v: number) => {
-  const abs = Math.abs(v);
-  const sign = v >= 0 ? "+" : "-";
-  if (abs >= 1000) return `${sign}₹${(abs / 1000).toFixed(1)}K Cr`;
-  return `${sign}₹${abs.toFixed(0)} Cr`;
-};
 const fmtDate = (s: string) => {
   try { return new Date(s).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }); }
   catch { return s; }
@@ -210,7 +201,7 @@ function FilingsPanel() {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column" }}>
       {/* Sub-header */}
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -280,7 +271,7 @@ function FilingsPanel() {
       </div>
 
       {/* List */}
-      <div style={{ flex: 1, overflowY: "auto" }}>
+      <div>
         {isLoading ? (
           Array.from({ length: 7 }).map((_, i) => (
             <div key={i} style={{ padding: "12px 14px", borderBottom: "1px solid var(--border-2)" }}>
@@ -379,195 +370,6 @@ function FilingsPanel() {
   );
 }
 
-// ── FII / DII panel ────────────────────────────────────────────────────────────
-function FiiDiiPanel() {
-  const { data: today } = useFiiDiiToday();
-  const { data: history, isLoading } = useFiiDii();
-
-  const chartData = (history ?? []).slice(-20).map((r: FiiDiiRow) => ({
-    date: r.date?.slice(0, 5) || "",
-    fii: r.fii_net,
-    dii: r.dii_net,
-  }));
-
-  return (
-    /* Panel body padding: 14px */
-    <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
-      {/* Today snapshot: 2-col grid, gap 8px (Chakra space-2) */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-        {[
-          { label: "FII Net Today", val: today?.fii_net ?? 0, buy: today?.fii_buy ?? 0, sell: today?.fii_sell ?? 0 },
-          { label: "DII Net Today", val: today?.dii_net ?? 0, buy: today?.dii_buy ?? 0, sell: today?.dii_sell ?? 0 },
-        ].map(item => {
-          const pos = item.val >= 0;
-          const bg = pos ? "var(--green-dim)" : "var(--red-dim)";
-          const border = pos ? "var(--border-green)" : "var(--border-red)";
-          const col = pos ? "var(--green)" : "var(--red)";
-          return (
-            <div key={item.label} style={{
-              padding: "10px 12px", background: bg,
-              border: `1px solid ${border}`, borderRadius: 10,
-            }}>
-              {/* Label: uppercase 9px tracking */}
-              <div style={{
-                fontSize: 9, fontFamily: "var(--font-body)", fontWeight: 700,
-                color: "var(--text-3)", letterSpacing: "0.1em",
-                textTransform: "uppercase", marginBottom: 6,
-              }}>
-                {item.label}
-              </div>
-              {/* Value: 15px semibold mono (Chakra md) */}
-              <div style={{
-                fontFamily: "var(--font-mono)", fontWeight: 800,
-                fontSize: 15, color: col, lineHeight: 1, marginBottom: 4,
-              }}>
-                {fmtCr(item.val)}
-              </div>
-              {/* Buy/Sell: 9px mono */}
-              <div style={{ display: "flex", gap: 8 }}>
-                <span style={{ fontSize: 9, color: "var(--green)", fontFamily: "var(--font-mono)" }}>B: {fmtCr(item.buy)}</span>
-                <span style={{ fontSize: 9, color: "var(--red)", fontFamily: "var(--font-mono)" }}>S: {fmtCr(item.sell)}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* FAO Sentiment + PCR row */}
-      {today && (today.pcr !== undefined || today.sentiment) && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-          {today.pcr !== undefined && (
-            <div style={{
-              padding: "8px 10px", background: "var(--surface-2)",
-              border: "1px solid var(--border)", borderRadius: 8,
-            }}>
-              <div style={{ fontSize: 9, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>PCR</div>
-              <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 14, color: today.pcr > 1.2 ? "var(--green)" : today.pcr < 0.8 ? "var(--red)" : "var(--text-1)" }}>
-                {today.pcr.toFixed(2)}
-              </div>
-              <div style={{ fontSize: 9, color: "var(--text-3)", marginTop: 2 }}>{today.pcr > 1.2 ? "Bullish" : today.pcr < 0.8 ? "Bearish" : "Neutral"}</div>
-            </div>
-          )}
-          {today.fii_idx_fut_net !== undefined && (
-            <div style={{
-              padding: "8px 10px", background: "var(--surface-2)",
-              border: "1px solid var(--border)", borderRadius: 8,
-            }}>
-              <div style={{ fontSize: 9, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>FII Idx Fut</div>
-              <div style={{ fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 13, color: (today.fii_idx_fut_net ?? 0) >= 0 ? "var(--green)" : "var(--red)" }}>
-                {fmtCr(today.fii_idx_fut_net ?? 0)}
-              </div>
-            </div>
-          )}
-          {today.sentiment && (
-            <div style={{
-              padding: "8px 10px", background: today.sentiment === "Bullish" ? "var(--green-dim)" : today.sentiment === "Bearish" ? "var(--red-dim)" : "var(--surface-2)",
-              border: `1px solid ${today.sentiment === "Bullish" ? "rgba(34,197,94,0.3)" : today.sentiment === "Bearish" ? "rgba(239,68,68,0.3)" : "var(--border)"}`,
-              borderRadius: 8,
-            }}>
-              <div style={{ fontSize: 9, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>Sentiment</div>
-              <div style={{ fontFamily: "var(--font-body)", fontWeight: 700, fontSize: 12, color: today.sentiment === "Bullish" ? "var(--green)" : today.sentiment === "Bearish" ? "var(--red)" : "var(--text-2)" }}>
-                {today.sentiment}
-              </div>
-              {today.sentiment_score !== undefined && (
-                <div style={{ fontSize: 9, color: "var(--text-3)", fontFamily: "var(--font-mono)", marginTop: 2 }}>Score: {today.sentiment_score}</div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Chart legend + source link */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <span style={{
-          fontSize: 10, fontFamily: "var(--font-body)", fontWeight: 700,
-          color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.08em",
-        }}>
-          30-Day Flows
-        </span>
-        {[{ label: "FII", color: "var(--accent)" }, { label: "DII", color: "var(--green)" }].map(l => (
-          <div key={l.label} style={{
-            display: "flex", alignItems: "center", gap: 4,
-            fontSize: 10, color: "var(--text-3)", fontFamily: "var(--font-body)",
-          }}>
-            <span style={{ width: 12, height: 3, borderRadius: 9999, background: l.color, display: "inline-block" }} />
-            {l.label}
-          </div>
-        ))}
-        <a
-          href="https://www.nseindia.com/reports/fii-dii"
-          target="_blank" rel="noopener noreferrer"
-          style={{
-            marginLeft: "auto", display: "flex", alignItems: "center", gap: 3,
-            fontSize: 9, color: "var(--text-4)", textDecoration: "none", fontFamily: "var(--font-body)",
-            fontWeight: 600, letterSpacing: "0.06em",
-            transition: "color 150ms",
-          }}
-          onMouseEnter={e => (e.currentTarget.style.color = "var(--accent)")}
-          onMouseLeave={e => (e.currentTarget.style.color = "var(--text-4)")}
-        >
-          <ExternalLink style={{ width: 9, height: 9 }} /> NSE Source
-        </a>
-      </div>
-
-      {/* Bar chart */}
-      {isLoading ? (
-        <div className="skeleton" style={{ height: 130, borderRadius: 8 }} />
-      ) : chartData.length === 0 ? (
-        /* Empty state: icon 36px, text 13px weight 500 */
-        <div style={{ height: 130, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface-2)", borderRadius: 8 }}>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 36, marginBottom: 6 }}>📊</div>
-            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>No flow data yet</div>
-          </div>
-        </div>
-      ) : (
-        <ResponsiveContainer width="100%" height={130}>
-          <BarChart data={chartData} barGap={1} margin={{ top: 0, right: 4, left: -20, bottom: 0 }}>
-            <XAxis
-              dataKey="date"
-              tick={{ fontSize: 8, fill: "var(--text-4)", fontFamily: "var(--font-mono)" }}
-              axisLine={false} tickLine={false} interval={4}
-            />
-            <YAxis
-              tick={{ fontSize: 8, fill: "var(--text-4)", fontFamily: "var(--font-mono)" }}
-              axisLine={false} tickLine={false}
-              tickFormatter={v => `${(v / 1000).toFixed(0)}K`}
-            />
-            <Tooltip
-              contentStyle={{
-                background: "var(--surface)",
-                border: "1px solid var(--border-2)",
-                borderRadius: 6,
-                fontSize: 11.5,
-                fontFamily: "var(--font-mono)",
-                color: "var(--text-1)",
-                boxShadow: "var(--shadow-md)",
-                padding: "8px 12px",
-              }}
-              labelStyle={{ color: "var(--accent)", fontWeight: 700, fontSize: 11, letterSpacing: "0.06em", marginBottom: 4 }}
-              itemStyle={{ color: "var(--text-2)", padding: "2px 0" }}
-              cursor={{ fill: "var(--accent-dim)" }}
-              formatter={(v: number, name: string) => {
-                const label = name === "fii" ? "FII Net" : "DII Net";
-                const color = name === "fii" ? "var(--accent)" : "var(--green)";
-                return [<span style={{ color, fontWeight: 700 }}>{fmtCr(v)}</span>, label];
-              }}
-            />
-            <ReferenceLine y={0} stroke="var(--border-2)" strokeDasharray="3 3" />
-            <Bar dataKey="fii" radius={[2, 2, 0, 0]} maxBarSize={8}>
-              {chartData.map((d, i) => <Cell key={i} fill={d.fii >= 0 ? "var(--accent)" : "var(--red)"} fillOpacity={0.85} />)}
-            </Bar>
-            <Bar dataKey="dii" radius={[2, 2, 0, 0]} maxBarSize={8}>
-              {chartData.map((d, i) => <Cell key={i} fill={d.dii >= 0 ? "var(--green)" : "var(--red)"} fillOpacity={0.75} />)}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      )}
-    </div>
-  );
-}
-
 // ── Advances / Declines ────────────────────────────────────────────────────────
 function BreadthPanel() {
   const { data: ad, isLoading } = useAdvancesDeclines();
@@ -647,7 +449,7 @@ function SectorPanel({ data, isLoading }: { data: { sector: string; change_pct: 
   const max = Math.max(...(data ?? []).map(d => Math.abs(d.change_pct)), 1);
   const { openChart } = useUIStore();
   return (
-    <div style={{ overflowY: "auto", height: "100%", padding: "4px 0" }}>
+    <div style={{ padding: "4px 0" }}>
       {isLoading ? (
         Array.from({ length: 7 }).map((_, i) => (
           <div key={i} style={{ padding: "8px 14px", borderBottom: "1px solid var(--border-2)" }}>
@@ -714,7 +516,7 @@ function TopMoversPanel() {
   const rows = tab === "gainers" ? (movers?.gainers ?? []) : (movers?.losers ?? []);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column" }}>
       {/* Tab row */}
       <div style={{
         display: "flex", gap: 6, padding: "8px 14px",
@@ -736,7 +538,7 @@ function TopMoversPanel() {
         ))}
       </div>
       {/* List */}
-      <div style={{ flex: 1, overflowY: "auto" }}>
+      <div>
         {isLoading ? (
           Array.from({ length: 8 }).map((_, i) => (
             <div key={i} style={{ padding: "10px 14px", borderBottom: "1px solid var(--border-2)", display: "flex", gap: 10 }}>
@@ -816,7 +618,7 @@ function CorporateActionsPanel() {
   };
 
   return (
-    <div style={{ overflowY: "auto", height: "100%" }}>
+    <div>
       {isLoading ? (
         Array.from({ length: 5 }).map((_, i) => (
           <div key={i} style={{ padding: "10px 14px", borderBottom: "1px solid var(--border-2)" }}>
@@ -898,7 +700,7 @@ function ResultsCalendarPanel() {
   };
 
   return (
-    <div style={{ overflowY: "auto", height: "100%" }}>
+    <div>
       {isLoading ? (
         Array.from({ length: 5 }).map((_, i) => (
           <div key={i} style={{ padding: "10px 14px", borderBottom: "1px solid var(--border-2)" }}>
@@ -1015,6 +817,7 @@ const INDEX_KEYS: { key: string; label: string }[] = [
   { key: "sensex",     label: "SENSEX" },
   { key: "niftymid50", label: "MIDCAP 50" },
   { key: "niftyit",    label: "NIFTY IT" },
+  { key: "niftysmc",   label: "SMALLCAP 100" },
 ];
 
 const GLOBAL_INDEX_KEYS: { key: string; label: string; currency?: string }[] = [
@@ -1198,52 +1001,39 @@ export function MarketPage() {
           <IndexTable indices={indices} globalIndices={globalIndices ?? []} loading={idxLoading} />
         </motion.div>
 
-        {/* ── Main grid: 3 columns, gap 16px (Chakra space-4) ── */}
+        {/* ── Main grid: 3 columns — Filings | Breadth+Sectors | Movers ── */}
         <div style={{
           display: "grid",
-          gridTemplateColumns: "1.1fr 1fr 0.9fr",
-          gap: 16,               /* Chakra space-4 */
+          gridTemplateColumns: "1.15fr 1fr 0.85fr",
+          gap: 16,
           alignItems: "start",
         }}>
 
-          {/* LEFT — Live Filings */}
+          {/* LEFT — Live Filings: scrollable, sized to viewport */}
           <Card
             title="Live Filings"
             icon={<Zap style={{ width: 12, height: 12 }} />}
             accent="var(--green)"
-            style={{ minHeight: 500 }}
           >
-            <FilingsPanel />
+            <div style={{ maxHeight: 560, overflowY: "auto" }}>
+              <FilingsPanel />
+            </div>
           </Card>
 
-          {/* MIDDLE — FII/DII + Breadth, inner gap 16px */}
+          {/* MIDDLE — Market Breadth + Sector Performance */}
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <Card
-              title="FII / DII Flows"
-              icon={<Globe2 style={{ width: 12, height: 12 }} />}
-              accent="var(--accent)"
-              style={{ minHeight: 360 }}
-            >
-              <FiiDiiPanel />
-            </Card>
-
             <Card
               title="Market Breadth"
               icon={<Activity style={{ width: 12, height: 12 }} />}
               accent="var(--amber)"
-              style={{ minHeight: 140 }}
             >
               <BreadthPanel />
             </Card>
-          </div>
 
-          {/* RIGHT — Sectors + Movers, inner gap 16px */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <Card
               title="Sector Performance"
               icon={<Filter style={{ width: 12, height: 12 }} />}
               accent="var(--amber)"
-              style={{ flex: 1, minHeight: 260 }}
               headerRight={
                 <a
                   href="https://www.nseindia.com/market-data/sector-indices"
@@ -1261,42 +1051,44 @@ export function MarketPage() {
                 </a>
               }
             >
-              <SectorPanel data={sectors ?? []} isLoading={sectorsLoading} />
-            </Card>
-
-            <Card
-              title="Top Movers"
-              icon={<BarChart2 style={{ width: 12, height: 12 }} />}
-              accent="var(--accent)"
-              style={{ flex: 1, minHeight: 200 }}
-            >
-              <TopMoversPanel />
+              <div style={{ maxHeight: 320, overflowY: "auto" }}>
+                <SectorPanel data={sectors ?? []} isLoading={sectorsLoading} />
+              </div>
             </Card>
           </div>
+
+          {/* RIGHT — Top Movers */}
+          <Card
+            title="Top Movers"
+            icon={<BarChart2 style={{ width: 12, height: 12 }} />}
+            accent="var(--accent)"
+          >
+            <div style={{ maxHeight: 540, overflowY: "auto" }}>
+              <TopMoversPanel />
+            </div>
+          </Card>
         </div>
 
-        {/* ── Bottom row: Corporate Actions + Results Calendar, gap 16px ── */}
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 16,               /* Chakra space-4 */
-        }}>
+        {/* ── Bottom row: Corporate Actions + Results Calendar ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           <Card
             title="Corporate Actions"
             icon={<Calendar style={{ width: 12, height: 12 }} />}
             accent="var(--green)"
-            style={{ minHeight: 200 }}
           >
-            <CorporateActionsPanel />
+            <div style={{ maxHeight: 280, overflowY: "auto" }}>
+              <CorporateActionsPanel />
+            </div>
           </Card>
 
           <Card
             title="Results Calendar"
             icon={<TrendingUp style={{ width: 12, height: 12 }} />}
             accent="var(--amber)"
-            style={{ minHeight: 200 }}
           >
-            <ResultsCalendarPanel />
+            <div style={{ maxHeight: 280, overflowY: "auto" }}>
+              <ResultsCalendarPanel />
+            </div>
           </Card>
         </div>
       </div>
