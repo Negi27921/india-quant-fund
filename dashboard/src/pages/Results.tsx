@@ -141,7 +141,7 @@ function ResultCard({ r }: { r: QuarterlyResult }) {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ background: "var(--surface-2)" }}>
-              {["Metric", "YoY", "QoQ", ql[4] ?? "Cur", ql[3] ?? "Q-1", ql[2] ?? "Q-2"].map((h, i) => (
+              {["Metric", "YoY", "QoQ", ql[2] ?? "Cur", ql[1] ?? "Q-1", ql[0] ?? "Q-2"].map((h, i) => (
                 <th key={i} style={{
                   padding: "5px 10px", textAlign: i === 0 ? "left" : "right",
                   fontSize: 8.5, fontWeight: 700, color: "var(--text-4)",
@@ -181,13 +181,13 @@ function ResultCard({ r }: { r: QuarterlyResult }) {
                     <TrendPct v={d.qoq} isBps={row.isBps} />
                   </td>
                   <td style={{ padding: "6px 10px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--text-1)" }}>
-                    {fmt(d.q1)}
+                    {fmt(d.q3)}
                   </td>
                   <td style={{ padding: "6px 10px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-3)" }}>
-                    {fmt(d.q2)}
+                    {fmt(d.q1)}
                   </td>
                   <td style={{ padding: "6px 10px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-4)" }}>
-                    {fmt(d.q3)}
+                    {fmt(d.q2)}
                   </td>
                 </tr>
               );
@@ -276,7 +276,7 @@ function ResultListRow({ r, idx }: { r: QuarterlyResult; idx: number }) {
         {[
           { l: "Sales YoY", v: r.metrics.sales.yoy },
           { l: "PAT YoY",   v: r.metrics.pat.yoy },
-          { l: "EPS",       v: r.metrics.eps.q1 },
+          { l: "EPS",       v: r.metrics.eps.q3 },
         ].map(m => (
           <div key={m.l} style={{ textAlign: "right" }}>
             <div style={{ fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-body)" }}>{m.l}</div>

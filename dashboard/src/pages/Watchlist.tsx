@@ -14,7 +14,7 @@ import {
   useAnalyseStock, useUniverseSearch,
   type Watchlist, type WatchlistItem,
 } from "@/api/watchlist-queries";
-import { useBatchPrices } from "@/api/market-queries";
+import { useBatchPrices, useStockFundamentals } from "@/api/market-queries";
 
 // ── Rating badge ──────────────────────────────────────────────────────────────
 const RATING_CFG: Record<string, { color: string; bg: string; icon: React.ReactNode }> = {
@@ -560,56 +560,121 @@ function AIChatTab({ symbol }: { symbol: string }) {
 // ── Fundamentals tab ──────────────────────────────────────────────────────────
 function FundamentalsTab({ item }: { item: WatchlistItem }) {
   const symbol = item.symbol;
+  const { data: f, isLoading } = useStockFundamentals(symbol);
 
-  const rows = [
-    { label: "Symbol", value: symbol },
-    { label: "Ticker", value: item.ticker || `${symbol}.NS` },
-    { label: "Company", value: item.company || "—" },
-    ...(item.sector ? [{ label: "Sector", value: item.sector }] : []),
-    ...(item.industry ? [{ label: "Industry", value: item.industry }] : []),
-    { label: "Rating", value: item.result_rating ? <RatingBadge rating={item.result_rating} /> : "—" },
-    { label: "Result Date", value: item.result_date || "—" },
-    { label: "Result Day High", value: item.result_high ? `₹${item.result_high.toLocaleString("en-IN")}` : "—" },
-    { label: "Avg Volume (20d)", value: item.result_volume_avg ? item.result_volume_avg.toLocaleString("en-IN") : "—" },
-    { label: "Breakout", value: item.breakout_date ? `✅ ${item.breakout_date}` : "Not yet" },
-    { label: "Added", value: new Date(item.added_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) },
-    { label: "Added Reason", value: item.added_reason || "manual" },
-    { label: "Notes", value: item.notes || "—" },
-  ];
+  function FRow({ label, value, highlight }: { label: string; value: React.ReactNode; highlight?: boolean }) {
+    return (
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        padding: "8px 0", borderBottom: "1px solid var(--border-2)",
+      }}>
+        <span style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 500 }}>{label}</span>
+        <span style={{ fontSize: 12, color: highlight ? "var(--accent)" : "var(--text-1)", fontWeight: 700, fontFamily: "var(--font-mono)", textAlign: "right" }}>
+          {value}
+        </span>
+      </div>
+    );
+  }
+
+  function Section({ title }: { title: string }) {
+    return (
+      <div style={{ fontSize: 9.5, fontWeight: 700, color: "var(--text-4)", letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 18, marginBottom: 6 }}>
+        {title}
+      </div>
+    );
+  }
+
+  const na = "—";
+  const pct = (v: number | undefined) => (v != null && v !== 0) ? `${v > 0 ? "+" : ""}${v.toFixed(1)}%` : na;
+  const num = (v: number | undefined, dec = 1) => (v != null && v !== 0) ? v.toFixed(dec) : na;
+  const inr = (v: number | undefined) => (v != null && v !== 0) ? `₹${v.toLocaleString("en-IN")}` : na;
 
   return (
-    <div style={{ padding: "16px" }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 14 }}>
-        Stock Details
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-        {rows.map(({ label, value }) => (
-          <div key={label} style={{
-            display: "flex", justifyContent: "space-between", alignItems: "center",
-            padding: "9px 0", borderBottom: "1px solid var(--surface-2)",
-          }}>
-            <span style={{ fontSize: 12, color: "var(--text-3)", fontWeight: 500 }}>{label}</span>
-            <span style={{ fontSize: 12, color: "var(--text-1)", fontWeight: 600, textAlign: "right", maxWidth: "60%" }}>
-              {typeof value === "string" ? value : value}
-            </span>
-          </div>
-        ))}
+    <div style={{ padding: "14px 16px", overflowY: "auto", maxHeight: "calc(100vh - 240px)" }}>
+
+      {/* Header: result context from watchlist row */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, alignItems: "center", flexWrap: "wrap" }}>
+        {item.result_rating && <RatingBadge rating={item.result_rating} />}
+        {item.sector && (
+          <span style={{ fontSize: 9, fontWeight: 600, color: "var(--text-3)", background: "var(--surface-2)", border: "1px solid var(--border)", padding: "2px 7px", borderRadius: 4 }}>
+            {item.sector}
+          </span>
+        )}
+        {item.industry && item.industry !== item.sector && (
+          <span style={{ fontSize: 9, fontWeight: 600, color: "var(--text-4)", background: "var(--surface-2)", border: "1px solid var(--border)", padding: "2px 7px", borderRadius: 4 }}>
+            {item.industry}
+          </span>
+        )}
       </div>
 
-      {/* Quick link to NSE */}
+      {isLoading ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div key={i} className="skeleton" style={{ height: 24, borderRadius: 4 }} />
+          ))}
+        </div>
+      ) : f && !f.error ? (
+        <>
+          <Section title="Valuation" />
+          <FRow label="Market Cap" value={f.market_cap_cr >= 1000 ? `₹${(f.market_cap_cr / 1000).toFixed(1)}K Cr` : `₹${f.market_cap_cr.toFixed(0)} Cr`} />
+          <FRow label="P/E (TTM)" value={num(f.pe)} highlight />
+          <FRow label="Forward P/E" value={num(f.forward_pe)} />
+          <FRow label="P/B" value={num(f.pb)} />
+          <FRow label="EV/EBITDA" value={num(f.ev_ebitda)} />
+          <FRow label="Beta" value={num(f.beta, 2)} />
+
+          <Section title="Earnings & Growth" />
+          <FRow label="EPS (TTM)" value={inr(f.eps_ttm)} highlight />
+          <FRow label="EPS (Forward)" value={inr(f.eps_forward)} />
+          <FRow label="Revenue Growth (YoY)" value={pct(f.revenue_growth)} />
+          <FRow label="Earnings Growth (YoY)" value={pct(f.earnings_growth)} />
+
+          <Section title="Profitability" />
+          <FRow label="ROE" value={pct(f.roe)} highlight />
+          <FRow label="ROA" value={pct(f.roa)} />
+          <FRow label="Operating Margin" value={pct(f.op_margin)} />
+          <FRow label="Profit Margin" value={pct(f.profit_margin)} />
+
+          <Section title="Balance Sheet" />
+          <FRow label="Debt / Equity" value={num(f.debt_to_equity, 2)} />
+          <FRow label="Current Ratio" value={num(f.current_ratio, 2)} />
+          <FRow label="Book Value / Share" value={inr(f.book_value)} />
+
+          <Section title="Market Data" />
+          <FRow label="52W High" value={inr(f.week_high_52)} />
+          <FRow label="52W Low" value={inr(f.week_low_52)} />
+          <FRow label="Dividend Yield" value={pct(f.dividend_yield)} />
+          <FRow label="Shares Outstanding" value={f.shares_cr ? `${f.shares_cr.toFixed(1)} Cr` : na} />
+
+          <div style={{ marginTop: 6, fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-body)" }}>
+            Source: yfinance · {f.ticker_used}
+          </div>
+        </>
+      ) : (
+        <>
+          <Section title="From System" />
+          <FRow label="Symbol" value={symbol} />
+          <FRow label="Result Rating" value={item.result_rating ? <RatingBadge rating={item.result_rating} /> : na} />
+          <FRow label="Result Date" value={item.result_date || na} />
+          <FRow label="Result Day High" value={item.result_high ? inr(item.result_high) : na} />
+          <FRow label="Avg Volume (20d)" value={item.result_volume_avg?.toLocaleString("en-IN") ?? na} />
+          <FRow label="Added" value={new Date(item.added_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} />
+        </>
+      )}
+
       <a
-        href={`https://www.nseindia.com/get-quotes/equity?symbol=${symbol}`}
+        href={`https://www.screener.in/company/${symbol}/`}
         target="_blank" rel="noopener noreferrer"
         style={{
           display: "inline-flex", alignItems: "center", gap: 6,
-          marginTop: 16, padding: "8px 14px", borderRadius: 8,
+          marginTop: 14, padding: "8px 14px", borderRadius: 8,
           background: "var(--surface-2)", border: "1px solid var(--border)",
           color: "var(--accent)", fontSize: 12, fontWeight: 600,
-          textDecoration: "none", transition: "all 150ms",
+          textDecoration: "none",
         }}
       >
-        <TrendingUp style={{ width: 13, height: 13 }} />
-        View on NSE
+        <Search style={{ width: 12, height: 12 }} />
+        Full detail on Screener.in
       </a>
     </div>
   );

@@ -404,3 +404,61 @@ export const useBatchPrices = (symbols: string[]) =>
     refetchInterval: 5 * 60_000,
     enabled: symbols.length > 0 && symbols.length <= 100,
   });
+
+export interface StockFundamentals {
+  symbol:         string;
+  company:        string;
+  sector:         string;
+  industry:       string;
+  market_cap_cr:  number;
+  cmp:            number;
+  pe:             number;
+  forward_pe:     number;
+  pb:             number;
+  ev_ebitda:      number;
+  eps_ttm:        number;
+  eps_forward:    number;
+  roe:            number;
+  roa:            number;
+  profit_margin:  number;
+  op_margin:      number;
+  revenue_growth: number;
+  earnings_growth: number;
+  debt_to_equity: number;
+  current_ratio:  number;
+  book_value:     number;
+  dividend_yield: number;
+  beta:           number;
+  week_high_52:   number;
+  week_low_52:    number;
+  shares_cr:      number;
+  float_cr:       number;
+  error?:         string;
+}
+
+export const useStockFundamentals = (symbol: string) =>
+  useQuery<StockFundamentals>({
+    queryKey: ["market", "fundamentals", symbol],
+    queryFn:  () => api.get<StockFundamentals>(`/market/fundamentals/${symbol}`),
+    staleTime:      6 * 60 * 60_000,   // 6 hours
+    refetchInterval: 6 * 60 * 60_000,
+    enabled: !!symbol,
+  });
+
+export interface HighLowEntry {
+  symbol:      string;
+  company:     string;
+  sector:      string;
+  cmp:         number;
+  high_52w:    number;
+  change_pct:  number;
+  exchange:    string;
+}
+
+export const use52wHighs = () =>
+  useQuery<HighLowEntry[]>({
+    queryKey: ["market", "52w-highs"],
+    queryFn:  () => api.get<HighLowEntry[]>("/market/52w-highs?limit=25").catch(() => []),
+    staleTime:      15 * 60_000,
+    refetchInterval: 15 * 60_000,
+  });

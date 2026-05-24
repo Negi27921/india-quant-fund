@@ -1988,6 +1988,198 @@ async def get_quarterly_results(limit: int = Query(200, le=500)):
         return []
 
 
+# ── Stock Fundamentals (yfinance .info — 6h cache) ───────────────────────────
+
+_FUND_CACHE: dict[str, tuple[float, dict]] = {}
+
+@router.get("/fundamentals/{symbol}")
+async def get_fundamentals(symbol: str):
+    """
+    Comprehensive fundamentals for a stock.
+    Source: yfinance .info (P/E, P/B, ROE, Debt/Equity, EPS, margins, etc.)
+    Cache: 6 hours — fundamentals change slowly.
+    """
+    clean = symbol.upper().replace(".NS", "").replace(".BO", "").strip()
+    now   = time.monotonic()
+    if clean in _FUND_CACHE:
+        ts, val = _FUND_CACHE[clean]
+        if now - ts < 21600:  # 6 hours
+            return val
+
+    def _fetch() -> dict:
+        import yfinance as _yf
+        for suffix in (".NS", ".BO"):
+            try:
+                tkr  = clean + suffix
+                info = _yf.Ticker(tkr).info
+                if not info or info.get("regularMarketPrice", 0) == 0:
+                    continue
+
+                def _f(key, default=None):
+                    v = info.get(key)
+                    if v is None or (isinstance(v, float) and math.isnan(v)):
+                        return default
+                    return v
+
+                mc_raw = _f("marketCap", 0)
+                mc_cr  = round(mc_raw / 1e7, 2) if mc_raw else 0
+
+                return {
+                    "symbol":           clean,
+                    "company":          _f("longName") or _f("shortName") or clean,
+                    "sector":           _f("sector", ""),
+                    "industry":         _f("industry", ""),
+                    "market_cap_cr":    mc_cr,
+                    "cmp":              round(_f("regularMarketPrice", 0), 2),
+                    "pe":               round(_f("trailingPE", 0) or 0, 1),
+                    "forward_pe":       round(_f("forwardPE", 0) or 0, 1),
+                    "pb":               round(_f("priceToBook", 0) or 0, 2),
+                    "ev_ebitda":        round(_f("enterpriseToEbitda", 0) or 0, 1),
+                    "eps_ttm":          round(_f("trailingEps", 0) or 0, 2),
+                    "eps_forward":      round(_f("forwardEps", 0) or 0, 2),
+                    "roe":              round((_f("returnOnEquity", 0) or 0) * 100, 1),
+                    "roa":              round((_f("returnOnAssets", 0) or 0) * 100, 1),
+                    "profit_margin":    round((_f("profitMargins", 0) or 0) * 100, 1),
+                    "op_margin":        round((_f("operatingMargins", 0) or 0) * 100, 1),
+                    "revenue_growth":   round((_f("revenueGrowth", 0) or 0) * 100, 1),
+                    "earnings_growth":  round((_f("earningsGrowth", 0) or 0) * 100, 1),
+                    "debt_to_equity":   round(_f("debtToEquity", 0) or 0, 2),
+                    "current_ratio":    round(_f("currentRatio", 0) or 0, 2),
+                    "book_value":       round(_f("bookValue", 0) or 0, 2),
+                    "dividend_yield":   round((_f("dividendYield", 0) or 0) * 100, 2),
+                    "beta":             round(_f("beta", 0) or 0, 2),
+                    "week_high_52":     round(_f("fiftyTwoWeekHigh", 0) or 0, 2),
+                    "week_low_52":      round(_f("fiftyTwoWeekLow", 0) or 0, 2),
+                    "shares_cr":        round((_f("sharesOutstanding", 0) or 0) / 1e7, 2),
+                    "float_cr":         round((_f("floatShares", 0) or 0) / 1e7, 2),
+                    "source":           "yfinance",
+                    "ticker_used":      tkr,
+                }
+            except Exception:
+                continue
+        return {"symbol": clean, "error": "Data unavailable"}
+
+    loop   = asyncio.get_running_loop()
+    result = await asyncio.wait_for(loop.run_in_executor(_executor, _fetch), timeout=18.0)
+    if "error" not in result:
+        _FUND_CACHE[clean] = (now, result)
+    return result
+
+
+# ── 52-Week Highs ─────────────────────────────────────────────────────────────
+
+@router.get("/52w-highs")
+@_cached("52w_highs", ttl=900)
+async def get_52w_highs(limit: int = Query(20, le=50)):
+    """
+    Stocks hitting 52-week highs today.
+    Primary: NSE official API. Fallback: BSE API.
+    """
+    loop = asyncio.get_running_loop()
+
+    def _from_nse() -> list[dict]:
+        if not _NSE_AVAILABLE:
+            return []
+        try:
+            data = _nsefetch("https://www.nseindia.com/api/live-analysis-52Week-high-low-data?index=broadly")
+            items = data.get("HIGH", []) if isinstance(data, dict) else []
+            result = []
+            for it in items[:limit]:
+                price = _sf(it.get("ltp", 0) or it.get("ltP", 0))
+                high52 = _sf(it.get("high52", 0) or it.get("wkhi", 0))
+                prev   = _sf(it.get("previousClose", 0) or it.get("pChange", 0))
+                chg_pct = _sf(it.get("pChange", 0))
+                result.append({
+                    "symbol":   it.get("symbol", ""),
+                    "company":  it.get("companyName", it.get("symbol", "")),
+                    "sector":   it.get("industryInfo", {}).get("sector", "") if isinstance(it.get("industryInfo"), dict) else "",
+                    "cmp":      round(price, 2),
+                    "high_52w": round(high52, 2) if high52 else round(price, 2),
+                    "change_pct": round(chg_pct, 2),
+                    "exchange": "NSE",
+                })
+            return result
+        except Exception:
+            return []
+
+    def _from_bse() -> list[dict]:
+        try:
+            import json as _json, urllib.request as _urq
+            url = "https://api.bseindia.com/BseIndiaAPI/api/GetSensexStocks/w?flag=5"
+            req = _urq.Request(url, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Referer": "https://www.bseindia.com/",
+                "Accept": "application/json",
+            })
+            with _urq.urlopen(req, timeout=6) as r:
+                data = _json.loads(r.read())
+            items = data.get("Table", data) if isinstance(data, dict) else data
+            result = []
+            for it in (items or [])[:limit]:
+                price = _sf(it.get("LTP", 0))
+                high52 = _sf(it.get("High52Week", 0) or it.get("WeekHigh52", 0))
+                chg_pct = _sf(it.get("PerChange", 0) or it.get("PER_CHANGE", 0))
+                sym = str(it.get("scrip_code") or it.get("SCRIP_CD", ""))
+                name = str(it.get("LNAME") or it.get("SLNAME") or sym)
+                result.append({
+                    "symbol":   sym,
+                    "company":  name,
+                    "sector":   "",
+                    "cmp":      round(price, 2),
+                    "high_52w": round(high52, 2) if high52 else round(price, 2),
+                    "change_pct": round(chg_pct, 2),
+                    "exchange": "BSE",
+                })
+            return result
+        except Exception:
+            return []
+
+    result = await loop.run_in_executor(_executor, _from_nse)
+    if result:
+        return result
+    result = await loop.run_in_executor(_executor, _from_bse)
+    if result:
+        return result
+
+    # Fallback: compute from NIFTY 500 live data using yfinance
+    def _from_yfinance_nifty() -> list[dict]:
+        try:
+            import yfinance as _yf
+            nifty_tickers = NIFTY50[:20]
+            out = []
+            data = _yf.download(nifty_tickers, period="1y", interval="1d",
+                                progress=False, auto_adjust=True, threads=True)
+            closes = data["Close"] if hasattr(data, "columns") else None
+            if closes is None:
+                return []
+            for tkr in nifty_tickers:
+                try:
+                    sym = tkr.replace(".NS", "")
+                    col = tkr if tkr in closes.columns else None
+                    if col is None:
+                        continue
+                    series = closes[col].dropna()
+                    if len(series) < 2:
+                        continue
+                    cmp_val = float(series.iloc[-1])
+                    high_52 = float(series.tail(252).max())
+                    if cmp_val >= high_52 * 0.98:  # within 2% of 52W high
+                        prev = float(series.iloc[-2])
+                        chg  = (cmp_val - prev) / prev * 100 if prev else 0
+                        out.append({
+                            "symbol": sym, "company": sym, "sector": "",
+                            "cmp": round(cmp_val, 2), "high_52w": round(high_52, 2),
+                            "change_pct": round(chg, 2), "exchange": "NSE",
+                        })
+                except Exception:
+                    continue
+            return sorted(out, key=lambda x: x["change_pct"], reverse=True)
+        except Exception:
+            return []
+
+    return await loop.run_in_executor(_executor, _from_yfinance_nifty)
+
+
 # ── Sparkline endpoint — 30 daily closes for hover mini-charts ─────────────────
 _SPARK_CACHE: dict[str, tuple[float, list]] = {}
 

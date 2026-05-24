@@ -847,10 +847,40 @@ def _upsert_result(row: dict) -> bool:
         return False
 
 
+# ── Sector Lookup ─────────────────────────────────────────────────────────────
+
+def _lookup_sector(symbol: str) -> tuple[str, str]:
+    """Return (sector, industry) from stock_universe table, or ("", "") on miss."""
+    if not (SUPABASE_URL and SUPABASE_KEY):
+        return "", ""
+    try:
+        import urllib.parse
+        url = (
+            f"{SUPABASE_URL}/rest/v1/stock_universe"
+            f"?symbol=eq.{urllib.parse.quote(symbol)}&select=sector,industry&limit=1"
+        )
+        req = urllib.request.Request(url, headers=_sb_headers())
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            rows = json.loads(resp.read())
+        if rows:
+            return rows[0].get("sector") or "", rows[0].get("industry") or ""
+    except Exception:
+        pass
+    return "", ""
+
+
 # ── Telegram Push ─────────────────────────────────────────────────────────────
 
 _RATING_EMOJI = {
     "Excellent": "🚀", "Great": "🟢", "Good": "🔵", "Ok": "🟡", "Weak": "🔴",
+}
+
+_RECOMMENDATION = {
+    "Excellent": "BUY — Exceptional quarter, all metrics firing. Strong entry on any dip.",
+    "Great":     "ACCUMULATE — Solid beat with improving trajectory. Stagger buys.",
+    "Good":      "HOLD — Healthy results, watch next quarter for confirmation before adding.",
+    "Ok":        "HOLD/WAIT — Mixed performance. No rush to add; wait for clarity.",
+    "Weak":      "REVIEW — Weak quarter. Consider reducing exposure or setting stop-loss.",
 }
 
 
@@ -858,60 +888,115 @@ def _send_telegram(row: dict) -> None:
     if not (TG_TOKEN and TG_CHAT_ID):
         return
 
-    rating   = row.get("rating", "Good")
-    emoji    = _RATING_EMOJI.get(rating, "📊")
-    company  = row.get("company", "?")
-    symbol   = row.get("symbol", "?")
-    quarter  = row.get("quarter", "")
-    insight  = row.get("insight", "")
-    cmp      = row.get("cmp")
-    pdf_url  = row.get("pdf_url", "")
-    metrics  = row.get("metrics") or {}
-    note     = row.get("rating_note", "")
+    rating    = row.get("rating", "Good")
+    emoji     = _RATING_EMOJI.get(rating, "📊")
+    company   = row.get("company", "?")
+    symbol    = row.get("symbol", "?")
+    exchange  = row.get("exchange", "NSE")
+    quarter   = row.get("quarter", "")
+    insight   = (row.get("insight") or "").strip()
+    cmp       = row.get("cmp")
+    mc        = row.get("market_cap") or 0
+    pe        = row.get("pe")
+    pdf_url   = row.get("pdf_url", "")
+    metrics   = row.get("metrics") or {}
+    sector    = row.get("sector", "")
+    industry  = row.get("industry", "")
+    rec       = _RECOMMENDATION.get(rating, "")
 
-    def _fmt(val, suffix="Cr"):
-        if val is None or val == 0:
+    # Date formatted
+    rd = row.get("report_date", "")
+    try:
+        date_str = datetime.fromisoformat(rd).strftime("%-d %b %y") if rd else ""
+    except Exception:
+        date_str = rd[:10] if rd else ""
+
+    def _cr(val):
+        if not val:
             return "—"
         if val >= 1_00_000:
-            return f"₹{val/1_00_000:.1f}L {suffix}"
+            return f"₹{val/1_00_000:.1f}L"
         if val >= 1_000:
-            return f"₹{val/1_000:.1f}k {suffix}"
-        return f"₹{val:.0f} {suffix}"
+            return f"₹{val/1_000:.1f}K"
+        return f"₹{val:.0f}"
 
     def _pct(val):
         if val is None:
-            return "—"
+            return "  — "
         sign = "+" if val > 0 else ""
         return f"{sign}{val:.1f}%"
 
-    pat_row   = metrics.get("pat", {})
-    rev_row   = metrics.get("sales", {})
-    eps_row   = metrics.get("eps", {})
-    rev_val   = rev_row.get("q3") or rev_row.get("q1") or 0
-    pat_val   = pat_row.get("q3") or pat_row.get("q1") or 0
-    eps_val   = eps_row.get("q3") or eps_row.get("q1") or 0
+    def _arrow(val):
+        if val is None:
+            return "·"
+        return "▲" if val >= 0 else "▼"
 
-    lines = [
-        f"{emoji} *{company}* ({symbol}) — {quarter}",
-        f"Rating: *{rating}*  _{note}_",
-        "",
-        f"Revenue : {_fmt(rev_val)}  YoY {_pct(rev_row.get('yoy'))}  QoQ {_pct(rev_row.get('qoq'))}",
-        f"PAT     : {_fmt(pat_val)}  YoY {_pct(pat_row.get('yoy'))}  QoQ {_pct(pat_row.get('qoq'))}",
-        f"EPS     : ₹{eps_val:.1f}  YoY {_pct(eps_row.get('yoy'))}",
+    rev = metrics.get("sales", {})
+    pat = metrics.get("pat", {})
+    opm = metrics.get("opm", {})
+    eps = metrics.get("eps", {})
+
+    rev_cur = rev.get("q3") or 0
+    pat_cur = pat.get("q3") or 0
+    opm_cur = opm.get("q3") or 0
+    eps_cur = eps.get("q3") or 0
+
+    mc_label = (
+        f"L·{mc/1000:.0f}K Cr" if mc >= 10000
+        else f"M·{mc:.0f} Cr" if mc >= 1000
+        else f"S·{mc:.0f} Cr" if mc > 0 else ""
+    )
+
+    sector_line = ""
+    if sector or industry:
+        parts = [s for s in [sector, industry if industry != sector else ""] if s]
+        sector_line = f"🏭 {' · '.join(parts)}\n"
+
+    # Monospace table for metrics
+    table_rows = [
+        f"{'Revenue':<8} {_cr(rev_cur):<9} {_arrow(rev.get('yoy'))} {_pct(rev.get('yoy')):<8} {_arrow(rev.get('qoq'))} {_pct(rev.get('qoq'))}",
+        f"{'PAT':<8} {_cr(pat_cur):<9} {_arrow(pat.get('yoy'))} {_pct(pat.get('yoy')):<8} {_arrow(pat.get('qoq'))} {_pct(pat.get('qoq'))}",
+        f"{'OPM':<8} {f'{opm_cur:.1f}%':<9} {'·':<2} {'  — ':<8} {'·':<2} {'  — '}",
+        f"{'EPS':<8} {f'₹{eps_cur:.1f}':<9} {_arrow(eps.get('yoy'))} {_pct(eps.get('yoy')):<8} {'·':<2} {'  — '}",
     ]
-    if cmp:
-        lines.append(f"CMP     : ₹{cmp:,.0f}")
-    lines += ["", f"💡 {insight}"]
-    if pdf_url:
-        lines.append(f"\n📄 [BSE Filing]({pdf_url})")
-    lines.append(f"🔗 [Dashboard]({DASHBOARD_URL}/results)")
-    lines.append("\n_Source: BSE India · Parsed by DeepSeek AI_")
+    header_row = f"{'Metric':<8} {'Cur':<9} {'':>2} {'YoY':<8} {'':>2} {'QoQ'}"
+    divider    = "─" * 42
+    table_txt  = "\n".join([header_row, divider] + table_rows)
 
-    text = "\n".join(lines)
+    cmp_line = f"CMP ₹{cmp:,.0f}" if cmp else ""
+    footer_parts = [p for p in [cmp_line, mc_label, f"P/E {pe:.1f}" if pe else ""] if p]
+    footer_str = "  ·  ".join(footer_parts)
+
+    # Trim insight to one sentence for brevity
+    short_insight = (insight.split(".")[0] + ".") if insight and "." in insight else insight
+
+    text_parts = [
+        f"{emoji} *{company}*  ·  {exchange}",
+        f"⭐ *{rating}*  |  {quarter}  |  {date_str}",
+        sector_line,
+        f"```",
+        table_txt,
+        f"```",
+        f"",
+        f"💡 _{short_insight}_" if short_insight else "",
+        f"",
+        f"📌 *{rec}*",
+        f"",
+        footer_str,
+    ]
+
+    text = "\n".join(p for p in text_parts if p is not None)
+
+    links = []
+    if pdf_url:
+        links.append(f"[📄 BSE Filing]({pdf_url})")
+    links.append(f"[🔗 Dashboard]({DASHBOARD_URL}/results)")
+    text += "\n" + "  ·  ".join(links)
+
     payload = json.dumps({
         "chat_id":    TG_CHAT_ID,
         "text":       text,
-        "parse_mode": "Markdown",
+        "parse_mode": "MarkdownV2" if False else "Markdown",
         "disable_web_page_preview": True,
     }).encode()
     req = urllib.request.Request(
@@ -981,6 +1066,53 @@ def _fetch_avg_volume(ticker: str, days: int = 20) -> int | None:
     except Exception:
         pass
     return None
+
+
+# ── Auto Universe Population ──────────────────────────────────────────────────
+
+def _ensure_in_universe(symbol: str, ticker: str, company: str,
+                         sector: str, industry: str,
+                         cmp: float | None, market_cap: float) -> None:
+    """Insert symbol into stock_universe if not already present."""
+    if not (SUPABASE_URL and SUPABASE_KEY):
+        return
+    try:
+        # Check existence
+        import urllib.parse
+        url = (
+            f"{SUPABASE_URL}/rest/v1/stock_universe"
+            f"?symbol=eq.{urllib.parse.quote(symbol)}&select=symbol&limit=1"
+        )
+        req = urllib.request.Request(url, headers=_sb_headers())
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            rows = json.loads(resp.read())
+        if rows:
+            return  # already in universe
+
+        # Insert
+        item = {
+            "symbol":       symbol,
+            "ticker":       ticker or f"{symbol}.NS",
+            "company":      company,
+            "exchange":     "NSE",
+            "sector":       sector or "",
+            "industry":     industry or "",
+            "market_cap_cr": market_cap or 0,
+            "last_price":   cmp,
+            "is_active":    True,
+        }
+        headers = _sb_headers()
+        headers["Prefer"] = "return=minimal"
+        data = json.dumps(item, default=str).encode()
+        req = urllib.request.Request(
+            f"{SUPABASE_URL}/rest/v1/stock_universe",
+            data=data, headers=headers, method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            resp.read()
+        print(f"    ✓ Added {symbol} to stock_universe")
+    except Exception as exc:
+        print(f"    [UNI] add failed for {symbol}: {exc}")
 
 
 # ── Auto Watchlist Population ─────────────────────────────────────────────────
@@ -1209,14 +1341,20 @@ def main() -> None:
 
         row_id = f"{scrip_code}_{filing_id[:40].replace('/', '_')}"
 
+        # Sector from AI — fall back to stock_universe lookup if blank or looks wrong
+        ai_sector   = (ai.get("sector") or "").strip()
+        ai_industry = (ai.get("industry") or "").strip()
+        if not ai_sector:
+            ai_sector, ai_industry = _lookup_sector(symbol)
+
         row = {
             "id":             row_id,
             "symbol":         symbol,
             "ticker":         price_data.get("ticker") or f"{symbol}.NS",
             "company":        company,
             "exchange":       "BSE",
-            "sector":         ai.get("sector", ""),
-            "industry":       ai.get("industry", ""),
+            "sector":         ai_sector,
+            "industry":       ai_industry,
             "quarter":        quarter,
             "report_date":    report_date,
             "report_time":    ai.get("report_time", "After Market Hours"),
@@ -1244,6 +1382,17 @@ def main() -> None:
             print("    ✗ Supabase upsert failed")
             continue
 
+        # 5e2. Ensure symbol is in stock_universe (adds new stocks discovered via filings)
+        _ensure_in_universe(
+            symbol=symbol,
+            ticker=price_data.get("ticker") or f"{symbol}.NS",
+            company=company,
+            sector=ai_sector,
+            industry=ai_industry,
+            cmp=price_data.get("cmp"),
+            market_cap=price_data.get("market_cap") or 0,
+        )
+
         # 5f. Auto-add to Results Radar + quarterly watchlist for Good/Great/Excellent
         if rating in ("Good", "Great", "Excellent"):
             used_ticker = price_data.get("ticker") or f"{symbol}.NS"
@@ -1259,8 +1408,8 @@ def main() -> None:
                 result_date=report_date,
                 result_high=_fetch_result_day_high(used_ticker, report_date),
                 result_volume=_fetch_avg_volume(used_ticker),
-                sector=ai.get("sector", ""),
-                industry=ai.get("industry", ""),
+                sector=ai_sector,
+                industry=ai_industry,
                 extra_watchlist_ids=extra_ids,
             )
 

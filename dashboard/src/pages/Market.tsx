@@ -11,8 +11,10 @@ import {
   useMarketIndices, useMarketMovers, useMarketSectors,
   useAdvancesDeclines, useCorporateActions,
   useResultsCalendar, useFilings, useGlobalIndices,
+  use52wHighs,
   type CorporateAction, type ResultsMeeting,
   type IndexData, type Filing, type GlobalIndexData,
+  type HighLowEntry,
 } from "@/api/market-queries";
 
 // ── Symbol maps ────────────────────────────────────────────────────────────────
@@ -692,6 +694,81 @@ function CorporateActionsPanel() {
 }
 
 // ── Results Calendar ───────────────────────────────────────────────────────────
+function HighsPanel() {
+  const { data: highs, isLoading } = use52wHighs();
+  const { openChart } = useUIStore();
+
+  if (isLoading) {
+    return (
+      <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 7 }}>
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="skeleton" style={{ height: 32, borderRadius: 5 }} />
+        ))}
+      </div>
+    );
+  }
+
+  if (!highs?.length) {
+    return (
+      <div style={{ padding: "24px 16px", textAlign: "center", fontSize: 11, color: "var(--text-4)", fontFamily: "var(--font-body)" }}>
+        No 52-week high data
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {highs.map((h: HighLowEntry, i: number) => {
+        const pctFromHigh = h.high_52w > 0
+          ? ((h.cmp - h.high_52w) / h.high_52w * 100)
+          : 0;
+        const isNearHigh = Math.abs(pctFromHigh) <= 2;
+        return (
+          <div
+            key={`${h.symbol}-${i}`}
+            onClick={() => openChart(`${h.exchange}:${h.symbol}`, h.company || h.symbol)}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "7px 14px", borderBottom: "1px solid var(--border-2)",
+              cursor: "pointer",
+              borderLeft: `3px solid ${isNearHigh ? "var(--green)" : "var(--amber)"}`,
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = "var(--card-hover)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+          >
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "var(--text-1)" }}>
+                  {h.symbol}
+                </span>
+                {isNearHigh && (
+                  <span style={{ fontSize: 8, fontWeight: 700, background: "rgba(16,185,129,0.12)", color: "var(--green)", padding: "1px 5px", borderRadius: 3, letterSpacing: "0.05em" }}>
+                    NEW HIGH
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {h.company !== h.symbol ? h.company : ""}
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 1, flexShrink: 0 }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "var(--text-1)" }}>
+                ₹{h.cmp.toLocaleString("en-IN")}
+              </span>
+              <span style={{
+                fontSize: 9.5, fontFamily: "var(--font-mono)", fontWeight: 700,
+                color: h.change_pct >= 0 ? "var(--green)" : "var(--red)",
+              }}>
+                {h.change_pct >= 0 ? "▲" : "▼"}{Math.abs(h.change_pct).toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ResultsCalendarPanel() {
   const { data, isLoading } = useResultsCalendar();
   const PURPOSE_COLOR: Record<string, string> = {
@@ -1069,8 +1146,8 @@ export function MarketPage() {
           </Card>
         </div>
 
-        {/* ── Bottom row: Corporate Actions + Results Calendar ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        {/* ── Bottom row: Corporate Actions + Results Calendar + 52W Highs ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
           <Card
             title="Corporate Actions"
             icon={<Calendar style={{ width: 12, height: 12 }} />}
@@ -1088,6 +1165,16 @@ export function MarketPage() {
           >
             <div style={{ maxHeight: 280, overflowY: "auto" }}>
               <ResultsCalendarPanel />
+            </div>
+          </Card>
+
+          <Card
+            title="52-Week Highs"
+            icon={<ArrowUpRight style={{ width: 12, height: 12 }} />}
+            accent="var(--green)"
+          >
+            <div style={{ maxHeight: 280, overflowY: "auto" }}>
+              <HighsPanel />
             </div>
           </Card>
         </div>

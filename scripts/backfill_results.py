@@ -333,6 +333,9 @@ def _process_yfinance_item(it: dict, filing_id: str) -> dict | None:
     except Exception:
         pass
 
+    # Look up sector/industry from stock_universe (yfinance has no sector in fast_info)
+    sector_val, industry_val = rp._lookup_sector(symbol)
+
     ai = {
         "quarter":       quarter,
         "revenue_cr":    rev_cr,
@@ -346,8 +349,8 @@ def _process_yfinance_item(it: dict, filing_id: str) -> dict | None:
         "revenue_prev_y": rev_prev_y,
         "pat_prev_q":    pat_prev_q,
         "pat_prev_y":    pat_prev_y,
-        "sector":        "",
-        "industry":      "",
+        "sector":        sector_val,
+        "industry":      industry_val,
         "insight":       f"Data sourced from yfinance quarterly financials. AI analysis not available.",
         "report_time":   "After Market Hours",
         "currency_unit": "Cr",
@@ -371,8 +374,8 @@ def _process_yfinance_item(it: dict, filing_id: str) -> dict | None:
         "ticker":         price_data.get("ticker") or ticker,
         "company":        company,
         "exchange":       "NSE",
-        "sector":         "",
-        "industry":       "",
+        "sector":         sector_val,
+        "industry":       industry_val,
         "quarter":        quarter,
         "report_date":    report_dt,
         "report_time":    "After Market Hours",
