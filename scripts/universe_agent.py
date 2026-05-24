@@ -28,6 +28,25 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any
 
+# ── Load .env from project root (works locally without exporting vars) ────────
+def _load_dotenv():
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env_path = os.path.join(root, ".env")
+    if not os.path.exists(env_path):
+        return
+    with open(env_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            k = k.strip()
+            v = v.strip().strip('"').strip("'")
+            if k and k not in os.environ:
+                os.environ[k] = v
+
+_load_dotenv()
+
 # ── Config ───────────────────────────────────────────────────────────────────
 SUPABASE_URL    = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
 SUPABASE_KEY    = os.getenv("SUPABASE_KEY", "").strip()
