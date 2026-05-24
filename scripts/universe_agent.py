@@ -90,7 +90,7 @@ def _sb_upsert_batch(rows: list[dict]) -> int:
         return 0
     data = json.dumps(rows, default=str).encode()
     req = urllib.request.Request(
-        f"{SUPABASE_URL}/rest/v1/stock_universe",
+        f"{SUPABASE_URL}/rest/v1/stock_universe?on_conflict=symbol",
         data=data, headers=_sb_headers(), method="POST"
     )
     try:
@@ -452,7 +452,7 @@ def _sync_universe_watchlist(stocks: list[dict], now: str) -> None:
         ]
         data = json.dumps(wl_items, default=str).encode()
         req = urllib.request.Request(
-            f"{SUPABASE_URL}/rest/v1/watchlist_items",
+            f"{SUPABASE_URL}/rest/v1/watchlist_items?on_conflict=watchlist_id,symbol",
             data=data, headers=headers, method="POST"
         )
         try:
