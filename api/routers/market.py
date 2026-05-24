@@ -1598,30 +1598,104 @@ async def get_corporate_actions(symbol: str = Query("", description="NSE symbol 
 
 
 @router.get("/advances-declines")
-@_cached("adv_dec", ttl=60)
+@_cached("adv_dec", ttl=300)
 async def get_advances_declines():
-    """Market breadth — total advances, declines, unchanged."""
-    loop = asyncio.get_running_loop()
-    if _NSE_AVAILABLE:
+    """
+    Market breadth — advances, declines, unchanged.
+    Sources tried in order:
+      1. NSE official API — NIFTY 500 (500 stocks)
+      2. NSE official API — NIFTY TOTAL MARKET (~750 stocks)
+      3. yfinance batch download — Nifty 50 (50 stocks, most liquid)
+    Returns source label so UI can display it correctly.
+    Never returns random fake data.
+    """
+    loop  = asyncio.get_running_loop()
+    now_s = datetime.now(IST).strftime("%I:%M %p IST")
+
+    def _from_nse_index(index_name: str) -> dict | None:
+        if not _NSE_AVAILABLE:
+            return None
         try:
-            def _fetch():
-                url = "https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20500"
-                data = _nsefetch(url)
-                stocks = data.get("data", [])
-                adv = sum(1 for s in stocks if _sf(s.get("pChange", 0)) > 0)
-                dec = sum(1 for s in stocks if _sf(s.get("pChange", 0)) < 0)
-                unc = len(stocks) - adv - dec
-                return {"advances": adv, "declines": dec, "unchanged": unc, "total": len(stocks), "ratio": round(adv / max(dec, 1), 2)}
-            result = await loop.run_in_executor(_executor, _fetch)
-            if result and result.get("total", 0) > 0:
-                return result
+            import urllib.parse
+            url  = f"https://www.nseindia.com/api/equity-stockIndices?index={urllib.parse.quote(index_name)}"
+            data = _nsefetch(url)
+            stocks = data.get("data", [])
+            if len(stocks) < 10:
+                return None
+            adv = sum(1 for s in stocks if _sf(s.get("pChange", 0)) > 0)
+            dec = sum(1 for s in stocks if _sf(s.get("pChange", 0)) < 0)
+            unc = len(stocks) - adv - dec
+            return {
+                "advances": adv, "declines": dec, "unchanged": unc,
+                "total": len(stocks),
+                "ratio": round(adv / max(dec, 1), 2),
+                "index_name": index_name,
+                "source": "NSE Official",
+                "as_of": now_s,
+            }
         except Exception:
-            pass
-    import random
-    adv = random.randint(900, 1400)
-    dec = random.randint(700, 1200)
-    unc = random.randint(50, 150)
-    return {"advances": adv, "declines": dec, "unchanged": unc, "total": adv + dec + unc, "ratio": round(adv/max(dec,1), 2)}
+            return None
+
+    def _from_yfinance() -> dict | None:
+        try:
+            import yfinance as _yf
+            tickers = NIFTY50  # 50 most liquid NSE stocks
+            data = _yf.download(
+                tickers, period="2d", interval="1d",
+                progress=False, auto_adjust=True, threads=True,
+            )
+            closes = data["Close"] if "Close" in data.columns else None
+            if closes is None:
+                return None
+            adv = dec = unc = 0
+            counted = 0
+            for tkr in tickers:
+                try:
+                    col = tkr if tkr in closes.columns else None
+                    if col is None:
+                        continue
+                    series = closes[col].dropna()
+                    if len(series) < 2:
+                        continue
+                    chg = float(series.iloc[-1]) - float(series.iloc[-2])
+                    if chg > 0:
+                        adv += 1
+                    elif chg < 0:
+                        dec += 1
+                    else:
+                        unc += 1
+                    counted += 1
+                except Exception:
+                    continue
+            if counted < 10:
+                return None
+            last_date = closes.index[-1].strftime("%d %b")
+            return {
+                "advances": adv, "declines": dec, "unchanged": unc,
+                "total": counted,
+                "ratio": round(adv / max(dec, 1), 2),
+                "index_name": "Nifty 50",
+                "source": f"yfinance · {last_date}",
+                "as_of": last_date,
+            }
+        except Exception:
+            return None
+
+    # Try NSE NIFTY 500 first, then NIFTY TOTAL MARKET, then yfinance
+    for index in ("NIFTY 500", "NIFTY TOTAL MARKET"):
+        result = await loop.run_in_executor(_executor, _from_nse_index, index)
+        if result:
+            return result
+
+    result = await loop.run_in_executor(_executor, _from_yfinance)
+    if result:
+        return result
+
+    # Return empty rather than fake data
+    return {
+        "advances": 0, "declines": 0, "unchanged": 0, "total": 0,
+        "ratio": 1.0, "index_name": "—", "source": "Unavailable", "as_of": "—",
+    }
 
 
 @router.get("/global-indices")
@@ -2141,31 +2215,22 @@ async def get_52w_highs(limit: int = Query(20, le=50)):
     if result:
         return result
 
-    # Fallback: compute from NIFTY 500 live data using yfinance
+    # Fallback: use yfinance fast_info per ticker — works on holidays (uses last trading day)
     def _from_yfinance_nifty() -> list[dict]:
         try:
             import yfinance as _yf
-            nifty_tickers = NIFTY50[:20]
             out = []
-            data = _yf.download(nifty_tickers, period="1y", interval="1d",
-                                progress=False, auto_adjust=True, threads=True)
-            closes = data["Close"] if hasattr(data, "columns") else None
-            if closes is None:
-                return []
-            for tkr in nifty_tickers:
+            for tkr in NIFTY50:
                 try:
-                    sym = tkr.replace(".NS", "")
-                    col = tkr if tkr in closes.columns else None
-                    if col is None:
+                    fi = _yf.Ticker(tkr).fast_info
+                    cmp_val  = _sf(getattr(fi, "last_price", None) or getattr(fi, "previous_close", 0))
+                    high_52  = _sf(getattr(fi, "year_high", 0))
+                    prev_cls = _sf(getattr(fi, "previous_close", 0))
+                    if not cmp_val or not high_52:
                         continue
-                    series = closes[col].dropna()
-                    if len(series) < 2:
-                        continue
-                    cmp_val = float(series.iloc[-1])
-                    high_52 = float(series.tail(252).max())
-                    if cmp_val >= high_52 * 0.98:  # within 2% of 52W high
-                        prev = float(series.iloc[-2])
-                        chg  = (cmp_val - prev) / prev * 100 if prev else 0
+                    if cmp_val >= high_52 * 0.95:  # within 5% of 52W high
+                        chg = (cmp_val - prev_cls) / prev_cls * 100 if prev_cls else 0
+                        sym = tkr.replace(".NS", "")
                         out.append({
                             "symbol": sym, "company": sym, "sector": "",
                             "cmp": round(cmp_val, 2), "high_52w": round(high_52, 2),

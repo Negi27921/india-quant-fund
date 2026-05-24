@@ -1163,7 +1163,7 @@ function IndustryFilterBar({
           appearance: "none", WebkitAppearance: "none",
         }}
       >
-        <option value="">All Industries ({items.length})</option>
+        <option value="">All Sectors</option>
         {industries.map(([ind, count]) => (
           <option key={ind} value={ind}>{ind} ({count})</option>
         ))}
@@ -1196,23 +1196,35 @@ function StockListPane({
   const remove = useRemoveWatchlistItem(watchlist?.id ?? "");
   const [search, setSearch] = useState("");
   const [industryFilter, setIndustryFilter] = useState<string | null>(null);
+  const [letterFilter, setLetterFilter] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 100;
 
-  // Reset filter when watchlist changes
-  useEffect(() => { setIndustryFilter(null); setSearch(""); }, [watchlist?.id]);
+  // Reset all filters when watchlist changes
+  useEffect(() => { setIndustryFilter(null); setSearch(""); setLetterFilter(null); setPage(1); }, [watchlist?.id]);
 
-  const filtered = useMemo(() => items.filter(i => {
-    const matchSearch = !search || i.symbol.toLowerCase().includes(search.toLowerCase()) ||
-      (i.company || "").toLowerCase().includes(search.toLowerCase());
-    const matchIndustry = !industryFilter ||
-      i.industry === industryFilter || i.sector === industryFilter;
-    return matchSearch && matchIndustry;
-  }), [items, search, industryFilter]);
+  // Reset page when any filter changes
+  useEffect(() => { setPage(1); }, [search, industryFilter, letterFilter]);
 
-  // Batch CMP — fetch for up to 100 visible stocks
-  const priceSymbols = useMemo(
-    () => filtered.slice(0, 100).map(i => i.symbol),
-    [filtered],
+  const filtered = useMemo(() => {
+    let r = [...items].sort((a, b) => a.symbol.localeCompare(b.symbol));
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      r = r.filter(i => i.symbol.toLowerCase().includes(q) || (i.company || "").toLowerCase().includes(q));
+    }
+    if (industryFilter) r = r.filter(i => i.industry === industryFilter || i.sector === industryFilter);
+    if (letterFilter) r = r.filter(i => i.symbol.startsWith(letterFilter));
+    return r;
+  }, [items, search, industryFilter, letterFilter]);
+
+  const paginated = useMemo(
+    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filtered, page],
   );
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+
+  // Batch CMP — only for the current page
+  const priceSymbols = useMemo(() => paginated.map(i => i.symbol), [paginated]);
   const { data: prices = {} } = useBatchPrices(priceSymbols);
 
   if (!watchlist) {
@@ -1245,8 +1257,12 @@ function StockListPane({
               <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)" }}>{watchlist.name}</span>
             </div>
             <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>
-              {industryFilter ? `${filtered.length}/${items.length}` : items.length} stocks
-              {industryFilter && <span style={{ color: "var(--accent)", marginLeft: 4 }}>· {industryFilter}</span>}
+              {(search || industryFilter || letterFilter) ? `${filtered.length}/` : ""}{items.length} stocks
+              {(letterFilter || industryFilter) && (
+                <span style={{ color: "var(--accent)", marginLeft: 4 }}>
+                  {letterFilter ? `· ${letterFilter}…` : ""}{industryFilter ? `· ${industryFilter}` : ""}
+                </span>
+              )}
             </div>
           </div>
           {canAdd && (
@@ -1292,6 +1308,29 @@ function StockListPane({
         onFilter={setIndustryFilter}
       />
 
+      {/* A-Z letter filter (shown when items > 50) */}
+      {items.length > 50 && (
+        <div style={{
+          padding: "6px 10px", borderBottom: "1px solid var(--border)",
+          display: "flex", flexWrap: "wrap", gap: 3, background: "var(--surface-1)",
+        }}>
+          {["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"].map(l => (
+            <button
+              key={l}
+              onClick={() => setLetterFilter(letterFilter === l ? null : l)}
+              style={{
+                width: 22, height: 22, borderRadius: 4, border: "none",
+                background: letterFilter === l ? "var(--accent)" : "var(--surface-2)",
+                color: letterFilter === l ? "#fff" : "var(--text-3)",
+                fontSize: 10, fontWeight: 700, cursor: "pointer",
+                fontFamily: "var(--font-mono)", flexShrink: 0,
+                transition: "all 120ms",
+              }}
+            >{l}</button>
+          ))}
+        </div>
+      )}
+
       {/* Stock list */}
       <div style={{ flex: 1, overflowY: "auto" }}>
         {filtered.length === 0 ? (
@@ -1310,7 +1349,7 @@ function StockListPane({
               : "No matching stocks"}
           </div>
         ) : (
-          filtered.map(item => (
+          paginated.map(item => (
             <StockRow
               key={item.id}
               item={item}
@@ -1322,6 +1361,39 @@ function StockListPane({
           ))
         )}
       </div>
+
+      {/* Pagination controls (only when list is long) */}
+      {totalPages > 1 && (
+        <div style={{
+          padding: "8px 12px", borderTop: "1px solid var(--border)",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          background: "var(--surface-1)", flexShrink: 0,
+        }}>
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            style={{
+              padding: "4px 10px", borderRadius: 6, border: "1px solid var(--border)",
+              background: "transparent", color: page === 1 ? "var(--text-4)" : "var(--text-2)",
+              fontSize: 11, cursor: page === 1 ? "default" : "pointer",
+              fontFamily: "var(--font-body)", fontWeight: 600,
+            }}
+          >← Prev</button>
+          <span style={{ fontSize: 10, color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>
+            {page} / {totalPages}
+          </span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            style={{
+              padding: "4px 10px", borderRadius: 6, border: "1px solid var(--border)",
+              background: "transparent", color: page === totalPages ? "var(--text-4)" : "var(--text-2)",
+              fontSize: 11, cursor: page === totalPages ? "default" : "pointer",
+              fontFamily: "var(--font-body)", fontWeight: 600,
+            }}
+          >Next →</button>
+        </div>
+      )}
     </div>
   );
 }

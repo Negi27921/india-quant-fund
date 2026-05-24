@@ -389,7 +389,7 @@ function BreadthPanel() {
         color: "var(--text-3)", letterSpacing: "0.1em",
         textTransform: "uppercase", marginBottom: 10,
       }}>
-        Market Breadth · Nifty 500
+        Market Breadth · {ad?.index_name ?? "—"}
       </div>
       {isLoading ? (
         <div className="skeleton" style={{ height: 60, borderRadius: 8 }} />

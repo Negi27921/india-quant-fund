@@ -39,6 +39,7 @@ export interface CorporateAction {
 }
 export interface AdvancesDeclines {
   advances: number; declines: number; unchanged: number; total: number; ratio: number;
+  index_name?: string; source?: string; as_of?: string;
 }
 export interface ResultsMeeting {
   symbol: string; company: string; meeting_date: string; purpose: string; description: string;

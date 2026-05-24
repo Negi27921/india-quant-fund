@@ -324,6 +324,14 @@ export function ResultsPage() {
   const { data: apiResults, isLoading, isFetching, refetch } = useQuarterlyResults();
   const results = useMemo(() => apiResults ?? [], [apiResults]);
 
+  const dateRange = useMemo(() => {
+    const dates = results.map(r => r.report_date).filter(Boolean).sort();
+    if (!dates.length) return null;
+    const fmt = (d: string) => new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+    if (dates[0] === dates[dates.length - 1]) return fmt(dates[0]);
+    return `${fmt(dates[0])} – ${fmt(dates[dates.length - 1])}`;
+  }, [results]);
+
   // Build industry list from results
   const industries = useMemo(() => {
     const map = new Map<string, number>();
@@ -375,7 +383,7 @@ export function ResultsPage() {
               Earnings Results
             </h1>
             <p style={{ fontSize: 12, color: "var(--text-3)", fontFamily: "var(--font-body)", marginTop: 5, marginBottom: 0 }}>
-              BSE quarterly results from May 2026 · {results.length} result{results.length !== 1 ? "s" : ""} loaded
+              BSE quarterly results{dateRange ? ` · ${dateRange}` : ""} · {results.length} result{results.length !== 1 ? "s" : ""} loaded
               {isFetching && <span style={{ color: "var(--accent)", marginLeft: 8 }}>· Refreshing…</span>}
             </p>
           </div>
