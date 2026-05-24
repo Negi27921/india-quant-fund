@@ -408,57 +408,82 @@ def _extract_pdf_text(pdf_url: str, max_chars: int = 4000) -> str:
 # ── LLM extraction — NIM → Groq → Gemini ─────────────────────────────────────
 
 _SYSTEM = (
-    "You are a senior Indian equity analyst. Extract financial results from BSE/NSE filing data. "
+    "You are a forensic financial analyst operating like a Bloomberg terminal intelligence engine. "
+    "You extract ONLY verified data from official BSE/NSE exchange filings. "
     "Return ONLY a valid JSON object — no markdown, no explanation, no code fences. "
-    "For numbers in the PDF, use Crores (Cr) as the unit. "
-    "If the PDF uses Lakhs, divide by 100 to convert to Crores."
+    "ABSOLUTE RULES: "
+    "(1) Use EXACT numbers from the filing — never estimate or infer. "
+    "(2) Use null for any field not explicitly stated in the document. "
+    "(3) For numbers, use Crores (Cr). If PDF uses Lakhs, divide by 100. "
+    "(4) Never hallucinate management commentary — quote or paraphrase ONLY what is written. "
+    "(5) Confidence score = percentage of financial fields successfully extracted (0-100)."
 )
 
-_PROMPT_TMPL = """BSE Corporate Filing — Extract Quarterly Financial Results
+_PROMPT_TMPL = """OFFICIAL EXCHANGE FILING — QUARTERLY FINANCIAL RESULTS EXTRACTION
 
-Company  : {company}
-BSE Scrip: {scrip_code}
-Filed    : {dt}
-Category : {category}
-Headline : {headline}
+Company      : {company}
+BSE Scrip    : {scrip_code}
+Filing Date  : {dt}
+Category     : {category}
+Headline     : {headline}
 {pdf_section}
----
-TASK: Extract the financial results from the above data.
-- Use EXACT numbers from the PDF/headline where present.
-- For prior-quarter comparisons use numbers stated in the filing.
-- Do NOT guess or hallucinate numbers — use null when genuinely unavailable.
-- Identify which quarter (Q1/Q2/Q3/Q4 FY20XX) this result covers.
 
-Return ONLY this JSON (no extra text, no markdown fences):
+--- EXTRACTION TASK ---
+SOURCE OF TRUTH: The PDF extract above (if present) is the AUTHORITATIVE source.
+Do NOT use prior knowledge, cached data, or Yahoo Finance data.
+If a field is not stated in the filing: return null. Never fabricate.
+
+Return ONLY this JSON structure (no extra text, no markdown fences):
 {{
-  "quarter"         : "Q4 FY2026",
-  "revenue_cr"      : 0,
-  "other_income_cr" : null,
-  "op_cr"           : null,
-  "opm_pct"         : null,
-  "pat_cr"          : 0,
-  "eps"             : null,
-  "revenue_qoq"     : null,
-  "revenue_yoy"     : null,
-  "op_qoq"          : null,
-  "op_yoy"          : null,
-  "pat_qoq"         : null,
-  "pat_yoy"         : null,
-  "eps_qoq"         : null,
-  "eps_yoy"         : null,
-  "revenue_prev_q"  : null,
-  "revenue_prev_y"  : null,
-  "pat_prev_q"      : null,
-  "pat_prev_y"      : null,
-  "eps_prev_q"      : null,
-  "eps_prev_y"      : null,
-  "sector"          : "Technology",
-  "industry"        : "IT Services",
-  "ai_rating"       : "Good",
-  "insight"         : "Two concise sentences analysing this result and its market implications.",
-  "report_time"     : "After Market Hours",
-  "currency_unit"   : "Cr"
+  "quarter"              : "Q4 FY2026",
+  "revenue_cr"           : 0,
+  "other_income_cr"      : null,
+  "op_cr"                : null,
+  "opm_pct"              : null,
+  "pat_cr"               : 0,
+  "eps"                  : null,
+  "revenue_qoq"          : null,
+  "revenue_yoy"          : null,
+  "op_qoq"               : null,
+  "op_yoy"               : null,
+  "pat_qoq"              : null,
+  "pat_yoy"              : null,
+  "eps_qoq"              : null,
+  "eps_yoy"              : null,
+  "revenue_prev_q"       : null,
+  "revenue_prev_y"       : null,
+  "pat_prev_q"           : null,
+  "pat_prev_y"           : null,
+  "eps_prev_q"           : null,
+  "eps_prev_y"           : null,
+  "ebitda_cr"            : null,
+  "ebitda_margin_pct"    : null,
+  "debt_cr"              : null,
+  "capex_cr"             : null,
+  "orderbook_cr"         : null,
+  "fii_holding_pct"      : null,
+  "dii_holding_pct"      : null,
+  "promoter_holding_pct" : null,
+  "management_commentary": [],
+  "guidance"             : [],
+  "key_risks"            : [],
+  "key_positives"        : [],
+  "sector"               : "Technology",
+  "industry"             : "IT Services",
+  "ai_rating"            : "Good",
+  "insight"              : "Two concise sentences analysing this result and its market implications.",
+  "report_time"          : "After Market Hours",
+  "currency_unit"        : "Cr",
+  "confidence_score"     : 50
 }}
+
+FIELD NOTES:
+- management_commentary: list of 2-4 direct quotes or close paraphrases from the filing/press release. Empty list [] if none found.
+- guidance: list of forward-looking statements from management. Empty list [] if none.
+- key_risks: list of risk factors mentioned. Empty list [] if none.
+- key_positives: list of positive highlights. Empty list [] if none.
+- fii/dii/promoter_holding_pct: ONLY if shareholding pattern is in this filing. Otherwise null.
+- confidence_score: integer 0-100. 100 = all financial fields extracted from PDF. 50 = partial. 20 = headline only, no PDF.
 """
 
 
@@ -819,7 +844,8 @@ _QR_COLUMNS = {
     "quarter", "report_date", "report_time", "rating", "rating_note", "insight",
     "metrics", "revenue_trend", "pat_trend", "eps_trend", "quarter_labels",
     "cmp", "market_cap", "pe", "currency_unit", "pdf_url", "filing_id",
-    "score",  # added in migration 012
+    "score",        # migration 012
+    "intelligence", # migration 014 — management commentary, guidance, confidence
 }
 
 
@@ -1372,6 +1398,23 @@ def main() -> None:
             "currency_unit":  ai.get("currency_unit", "Cr"),
             "pdf_url":        pdf_url,
             "filing_id":      filing_id,
+            "intelligence":   {
+                "management_commentary": ai.get("management_commentary") or [],
+                "guidance":              ai.get("guidance") or [],
+                "key_risks":             ai.get("key_risks") or [],
+                "key_positives":         ai.get("key_positives") or [],
+                "fii_holding_pct":       ai.get("fii_holding_pct"),
+                "dii_holding_pct":       ai.get("dii_holding_pct"),
+                "promoter_holding_pct":  ai.get("promoter_holding_pct"),
+                "ebitda_cr":             ai.get("ebitda_cr"),
+                "ebitda_margin_pct":     ai.get("ebitda_margin_pct"),
+                "debt_cr":               ai.get("debt_cr"),
+                "capex_cr":              ai.get("capex_cr"),
+                "orderbook_cr":          ai.get("orderbook_cr"),
+                "confidence_score":      ai.get("confidence_score", 20),
+                "source_pdf_url":        pdf_url,
+                "parsed_at":             datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
         }
 
         # 5e. Upsert to Supabase

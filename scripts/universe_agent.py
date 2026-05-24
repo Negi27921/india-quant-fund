@@ -177,7 +177,7 @@ def _fetch_nse_eq_list() -> list[dict]:
 # ── Market cap check via yfinance ─────────────────────────────────────────────
 
 def _fetch_market_caps_batch(tickers: list[str]) -> dict[str, dict]:
-    """Batch fetch market cap + price for a list of tickers. Returns {ticker: {mcap_cr, price}}."""
+    """Batch fetch market cap, price, prev_close, 52W high/low for a list of tickers."""
     try:
         import yfinance as yf
         result = {}
@@ -185,14 +185,19 @@ def _fetch_market_caps_batch(tickers: list[str]) -> dict[str, dict]:
             try:
                 t = yf.Ticker(ticker)
                 fi = t.fast_info
-                price = getattr(fi, "last_price", None) or getattr(fi, "regular_market_price", None)
-                mcap  = getattr(fi, "market_cap", None) or 0
-                pe    = None
+                price      = getattr(fi, "last_price", None) or getattr(fi, "regular_market_price", None)
+                prev_close = getattr(fi, "previous_close", None)
+                week_high  = getattr(fi, "year_high", None)
+                week_low   = getattr(fi, "year_low", None)
+                mcap       = getattr(fi, "market_cap", None) or 0
                 if price and price > 0:
                     result[ticker] = {
                         "last_price":    round(float(price), 2),
                         "market_cap_cr": round(float(mcap) / 1e7, 2) if mcap else 0,
-                        "pe":            pe,
+                        "pe":            None,
+                        "prev_close":    round(float(prev_close), 2) if prev_close else None,
+                        "week_high_52":  round(float(week_high), 2) if week_high else None,
+                        "week_low_52":   round(float(week_low), 2) if week_low else None,
                     }
             except Exception:
                 pass
@@ -321,7 +326,7 @@ def main() -> None:
             excluded_mcap += 1
             continue
 
-        rows_to_upsert.append({
+        row = {
             "symbol":         c["symbol"],
             "ticker":         ticker,
             "company":        c["company"],
@@ -334,7 +339,14 @@ def main() -> None:
             "pe":             mcap_data.get("pe"),
             "is_active":      True,
             "last_updated":   now,
-        })
+        }
+        if mcap_data.get("prev_close"):
+            row["prev_close"] = mcap_data["prev_close"]
+        if mcap_data.get("week_high_52"):
+            row["week_high_52"] = mcap_data["week_high_52"]
+        if mcap_data.get("week_low_52"):
+            row["week_low_52"] = mcap_data["week_low_52"]
+        rows_to_upsert.append(row)
 
     print(f"\n[FILTER] Results:")
     print(f"  Pass filter : {len(rows_to_upsert)}")

@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import os as _os
 import threading as _threading
 import time
 import urllib.request as _ur
@@ -56,6 +57,131 @@ def _cached(key: str, ttl: int = 15):
 def _run(fn, *args, **kwargs):
     loop = asyncio.get_running_loop()
     return loop.run_in_executor(_executor, lambda: fn(*args, **kwargs))
+
+
+# ── Supabase helpers (for stock_universe queries) ─────────────────────────────
+_SB_URL = _os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+_SB_KEY = _os.getenv("SUPABASE_KEY", "").strip()
+
+def _sb_headers_mkt() -> dict:
+    return {
+        "apikey":        _SB_KEY,
+        "Authorization": f"Bearer {_SB_KEY}",
+        "Content-Type":  "application/json",
+        "Prefer":        "count=none",
+    }
+
+# Universe symbols cache (1h TTL — symbols don't change often)
+_UNIVERSE_CACHE: tuple[float, list[str]] = (0.0, [])
+
+def _get_universe_symbols() -> list[str]:
+    global _UNIVERSE_CACHE
+    ts, syms = _UNIVERSE_CACHE
+    if syms and time.monotonic() - ts < 3600:
+        return syms
+    if not (_SB_URL and _SB_KEY):
+        return []
+    try:
+        headers = {**_sb_headers_mkt(), "Range": "0-2999", "Range-Unit": "items"}
+        req = _ur.Request(
+            f"{_SB_URL}/rest/v1/stock_universe?select=symbol&is_active=eq.true&order=symbol.asc",
+            headers=headers,
+        )
+        with _ur.urlopen(req, timeout=10) as r:
+            rows = json.loads(r.read())
+        syms = [row["symbol"] for row in rows if row.get("symbol")]
+        _UNIVERSE_CACHE = (time.monotonic(), syms)
+        return syms
+    except Exception:
+        return []
+
+def _get_universe_breadth() -> dict | None:
+    """Query stock_universe for advances/declines using stored last_price vs prev_close."""
+    if not (_SB_URL and _SB_KEY):
+        return None
+    try:
+        # Single query: fetch all active symbols with last_price and prev_close
+        headers = {**_sb_headers_mkt(), "Range": "0-2999", "Range-Unit": "items"}
+        req = _ur.Request(
+            f"{_SB_URL}/rest/v1/stock_universe"
+            "?select=last_price,prev_close"
+            "&is_active=eq.true"
+            "&last_price=gt.0",
+            headers=headers,
+        )
+        with _ur.urlopen(req, timeout=10) as r:
+            rows = json.loads(r.read())
+        # Only count rows where we have both prices (prev_close populated after migration 014)
+        adv = dec = unc = counted = 0
+        for row in rows:
+            lp = row.get("last_price")
+            pc = row.get("prev_close")
+            if lp is None or pc is None or pc == 0:
+                continue
+            if lp > pc:
+                adv += 1
+            elif lp < pc:
+                dec += 1
+            else:
+                unc += 1
+            counted += 1
+        if counted < 50:
+            return None
+        from datetime import datetime
+        now_ist = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%I:%M %p IST")
+        return {
+            "advances": adv, "declines": dec, "unchanged": unc,
+            "total": counted,
+            "ratio": round(adv / max(dec, 1), 2),
+            "index_name": f"Project Universe ({counted} stocks)",
+            "source": "Supabase · stock_universe",
+            "as_of": now_ist,
+        }
+    except Exception:
+        return None
+
+def _get_universe_52w_highs(limit: int = 25) -> list[dict]:
+    """Query stock_universe for stocks near 52-week highs (within 5%)."""
+    if not (_SB_URL and _SB_KEY):
+        return []
+    try:
+        headers = {**_sb_headers_mkt(), "Range": f"0-{limit - 1}", "Range-Unit": "items"}
+        req = _ur.Request(
+            f"{_SB_URL}/rest/v1/stock_universe"
+            "?select=symbol,company,sector,last_price,week_high_52,exchange"
+            "&is_active=eq.true"
+            "&last_price=gt.0"
+            "&week_high_52=gt.0"
+            f"&order=last_price.desc",
+            headers=headers,
+        )
+        with _ur.urlopen(req, timeout=10) as r:
+            rows = json.loads(r.read())
+        result = []
+        for row in rows:
+            lp = float(row.get("last_price") or 0)
+            h52 = float(row.get("week_high_52") or 0)
+            if lp <= 0 or h52 <= 0:
+                continue
+            if lp >= h52 * 0.95:   # within 5% of 52W high
+                pct = round((lp / h52 - 1) * 100, 2)
+                result.append({
+                    "symbol":     row.get("symbol", ""),
+                    "company":    row.get("company", ""),
+                    "sector":     row.get("sector", ""),
+                    "cmp":        round(lp, 2),
+                    "high_52w":   round(h52, 2),
+                    "change_pct": pct,
+                    "exchange":   row.get("exchange", "NSE"),
+                })
+        return sorted(result, key=lambda x: x["change_pct"], reverse=True)[:limit]
+    except Exception:
+        return []
+
+
+# ── Per-symbol price cache (90s TTL) — speeds up watchlist batch prices ───────
+_PRICE_CACHE: dict[str, tuple[float, dict]] = {}
+_PRICE_CACHE_TTL = 90  # seconds
 
 
 # ── Constants ─────────────────────────────────────────────────────────────────
@@ -1374,9 +1500,24 @@ async def get_prices_batch(symbols: str = Query(..., description="Comma-separate
     if not raw or len(raw) > 100:
         return {}
 
-    def _batch_fetch() -> dict:
+    now_mono = time.monotonic()
+
+    # Return cached entries immediately; only fetch what's stale/missing
+    cached_result: dict[str, dict] = {}
+    to_fetch: list[str] = []
+    for sym in raw:
+        entry = _PRICE_CACHE.get(sym)
+        if entry and now_mono - entry[0] < _PRICE_CACHE_TTL:
+            cached_result[sym] = entry[1]
+        else:
+            to_fetch.append(sym)
+
+    if not to_fetch:
+        return cached_result
+
+    def _batch_fetch(syms: list[str]) -> dict:
         import yfinance as yf
-        tickers = [f"{s}.NS" for s in raw]
+        tickers = [f"{s}.NS" for s in syms]
         try:
             data = yf.download(
                 tickers, period="2d", interval="1d",
@@ -1384,7 +1525,7 @@ async def get_prices_batch(symbols: str = Query(..., description="Comma-separate
                 threads=True, group_by="ticker",
             )
             result: dict[str, dict] = {}
-            for sym, tkr in zip(raw, tickers):
+            for sym, tkr in zip(syms, tickers):
                 try:
                     if len(tickers) == 1:
                         closes = data["Close"]
@@ -1413,12 +1554,15 @@ async def get_prices_batch(symbols: str = Query(..., description="Comma-separate
 
     loop = asyncio.get_running_loop()
     try:
-        result = await asyncio.wait_for(
-            loop.run_in_executor(_executor, _batch_fetch), timeout=15.0
+        fresh = await asyncio.wait_for(
+            loop.run_in_executor(_executor, _batch_fetch, to_fetch), timeout=15.0
         )
-        return result
+        ts = time.monotonic()
+        for sym, data in fresh.items():
+            _PRICE_CACHE[sym] = (ts, data)
+        return {**cached_result, **fresh}
     except Exception:
-        return {}
+        return cached_result
 
 
 @router.get("/filings")
@@ -1681,12 +1825,18 @@ async def get_advances_declines():
         except Exception:
             return None
 
-    # Try NSE NIFTY 500 first, then NIFTY TOTAL MARKET, then yfinance
+    # Primary: project stock_universe via Supabase (instant query, 2142 stocks)
+    result = await loop.run_in_executor(_executor, _get_universe_breadth)
+    if result:
+        return result
+
+    # Fallback 1: NSE NIFTY 500 / NIFTY TOTAL MARKET
     for index in ("NIFTY 500", "NIFTY TOTAL MARKET"):
         result = await loop.run_in_executor(_executor, _from_nse_index, index)
         if result:
             return result
 
+    # Fallback 2: yfinance NIFTY50 batch
     result = await loop.run_in_executor(_executor, _from_yfinance)
     if result:
         return result
@@ -2208,6 +2358,11 @@ async def get_52w_highs(limit: int = Query(20, le=50)):
         except Exception:
             return []
 
+    # Primary: project stock_universe via Supabase (instant, uses week_high_52 column)
+    result = await loop.run_in_executor(_executor, _get_universe_52w_highs, limit)
+    if result:
+        return result
+
     result = await loop.run_in_executor(_executor, _from_nse)
     if result:
         return result
@@ -2215,7 +2370,7 @@ async def get_52w_highs(limit: int = Query(20, le=50)):
     if result:
         return result
 
-    # Fallback: use yfinance fast_info per ticker — works on holidays (uses last trading day)
+    # Last resort: yfinance fast_info per NIFTY50 ticker — works on holidays
     def _from_yfinance_nifty() -> list[dict]:
         try:
             import yfinance as _yf

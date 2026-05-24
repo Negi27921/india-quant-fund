@@ -93,7 +93,7 @@ function ResultCard({ r }: { r: QuarterlyResult }) {
             </div>
           </div>
 
-          {/* Right: rating + quarter + date */}
+          {/* Right: rating + quarter + date + filing badge */}
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
             <span style={{
               display: "inline-flex", alignItems: "center", gap: 4,
@@ -108,6 +108,20 @@ function ResultCard({ r }: { r: QuarterlyResult }) {
               <span style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 9, color: "var(--text-4)" }}>
                 <Clock style={{ width: 8, height: 8 }} />{dateStr}
               </span>
+            )}
+            {r.pdf_url && (
+              <a
+                href={r.pdf_url} target="_blank" rel="noopener noreferrer"
+                title="Official Exchange Filing"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 3,
+                  fontSize: 8.5, fontWeight: 700, color: "#10b981",
+                  background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.25)",
+                  padding: "1px 6px", borderRadius: 4, textDecoration: "none",
+                }}
+              >
+                ✓ Official Filing
+              </a>
             )}
           </div>
         </div>
