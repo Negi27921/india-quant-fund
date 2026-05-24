@@ -814,19 +814,34 @@ def _get_processed_filing_ids() -> set[str]:
         return set()
 
 
+_QR_COLUMNS = {
+    "id", "symbol", "ticker", "company", "exchange", "sector", "industry",
+    "quarter", "report_date", "report_time", "rating", "rating_note", "insight",
+    "metrics", "revenue_trend", "pat_trend", "eps_trend", "quarter_labels",
+    "cmp", "market_cap", "pe", "currency_unit", "pdf_url", "filing_id",
+    "score",  # added in migration 012
+}
+
+
 def _upsert_result(row: dict) -> bool:
     if not (SUPABASE_URL and SUPABASE_KEY):
         print("  [SB] No credentials — skipping upsert")
         return False
+    # Strip any keys not in the table schema to avoid HTTP 400
+    clean = {k: v for k, v in row.items() if k in _QR_COLUMNS}
     url = f"{SUPABASE_URL}/rest/v1/quarterly_results"
     headers = _sb_headers()
     headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
-    data = json.dumps(row, default=str).encode()
+    data = json.dumps(clean, default=str).encode()
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             resp.read()
         return True
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="ignore")[:300]
+        print(f"  [SB] upsert failed: HTTP {exc.code} — {body}")
+        return False
     except Exception as exc:
         print(f"  [SB] upsert failed: {exc}")
         return False
