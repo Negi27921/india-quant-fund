@@ -326,6 +326,60 @@ function AddStockModal({ watchlistId, onClose }: { watchlistId: string; onClose:
 // ── Chat message ──────────────────────────────────────────────────────────────
 interface ChatMsg { role: "user" | "assistant"; content: string }
 
+function renderMarkdown(text: string): React.ReactNode[] {
+  const lines = text.split("\n");
+  const nodes: React.ReactNode[] = [];
+  let key = 0;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // Headings: ### ## #
+    const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const sz = level === 1 ? 14 : level === 2 ? 13 : 12;
+      nodes.push(
+        <div key={key++} style={{ fontWeight: 700, fontSize: sz, color: "var(--text-1)", marginTop: 10, marginBottom: 2 }}>
+          {inlineMd(headingMatch[2])}
+        </div>
+      );
+      continue;
+    }
+    // Bullet: - item or * item
+    if (/^[-*]\s/.test(trimmed)) {
+      nodes.push(
+        <div key={key++} style={{ display: "flex", gap: 8, marginBottom: 3, paddingLeft: 4 }}>
+          <span style={{ color: "var(--accent)", flexShrink: 0, marginTop: 2 }}>•</span>
+          <span style={{ fontSize: 13, lineHeight: 1.65, color: "var(--text-1)" }}>{inlineMd(trimmed.slice(2))}</span>
+        </div>
+      );
+      continue;
+    }
+    // Empty line → spacer
+    if (!trimmed) {
+      nodes.push(<div key={key++} style={{ height: 6 }} />);
+      continue;
+    }
+    // Normal line
+    nodes.push(
+      <div key={key++} style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 2, color: "var(--text-1)" }}>
+        {inlineMd(line)}
+      </div>
+    );
+  }
+  return nodes;
+}
+
+function inlineMd(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((p, i) => {
+    if (p.startsWith("**") && p.endsWith("**")) {
+      return <strong key={i} style={{ color: "var(--text-1)", fontWeight: 700 }}>{p.slice(2, -2)}</strong>;
+    }
+    return p;
+  });
+}
+
 function ChatBubble({ msg }: { msg: ChatMsg }) {
   const isUser = msg.role === "user";
   return (
@@ -334,23 +388,35 @@ function ChatBubble({ msg }: { msg: ChatMsg }) {
       marginBottom: 12,
     }}>
       <div style={{
-        maxWidth: "88%",
+        maxWidth: "92%",
         padding: "10px 14px",
         borderRadius: isUser ? "14px 14px 4px 14px" : "4px 14px 14px 14px",
         background: isUser ? "var(--accent)" : "var(--surface-2)",
         border: isUser ? "none" : "1px solid var(--border)",
         color: isUser ? "#fff" : "var(--text-1)",
-        fontSize: 13, lineHeight: 1.7,
         fontFamily: "var(--font-body)",
-        whiteSpace: "pre-wrap",
       }}>
-        {msg.content}
+        {isUser
+          ? <span style={{ fontSize: 13, lineHeight: 1.7 }}>{msg.content}</span>
+          : <div>{renderMarkdown(msg.content)}</div>
+        }
       </div>
     </div>
   );
 }
 
 // ── AI Chat tab ───────────────────────────────────────────────────────────────
+
+// Pre-defined FAQs — label shown on button, question sent to AI
+const FAQS: { label: string; question: string }[] = [
+  { label: "Full analysis", question: "Give full analysis: thesis, fundamentals, technicals, trade structure with entry/stop/target." },
+  { label: "Entry & targets", question: "What is the best 1:3 risk-reward setup for this stock? Give specific entry zone, stop-loss, TP1 and TP2 levels with reasoning." },
+  { label: "FII/DII flow", question: "Analyse FII/DII trend and institutional positioning for this stock. Is smart money accumulating or distributing?" },
+  { label: "Near-term catalyst", question: "Is there a near-term catalyst that can reprice this stock fast? Any upcoming earnings, policy, or sector trigger?" },
+  { label: "Breakout level", question: "Where is the key breakout level for this stock? What price and volume conditions would confirm a breakout?" },
+  { label: "Key risks", question: "What are the key risks, red flags, and invalidation levels I should watch for this stock?" },
+];
+
 function AIChatTab({ symbol }: { symbol: string }) {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
@@ -361,39 +427,16 @@ function AIChatTab({ symbol }: { symbol: string }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Reset chat when stock changes
-  useEffect(() => { setMessages([]); }, [symbol]);
+  // Reset chat when stock changes — do NOT auto-send analysis
+  useEffect(() => { setMessages([]); setInput(""); }, [symbol]);
 
-  // Auto-send initial comprehensive analysis when stock is first opened
-  useEffect(() => {
-    if (symbol) {
-      const q = "Give full analysis: thesis, fundamentals, technicals, trade structure with entry/stop/target";
-      const userMsg: ChatMsg = { role: "user", content: q };
-      setMessages([userMsg]);
-      analyse.mutate(
-        { symbol, question: q, history: [] },
-        {
-          onSuccess: (data) => {
-            setMessages(prev => [...prev, { role: "assistant", content: data.response }]);
-          },
-          onError: (err) => {
-            setMessages(prev => [...prev, { role: "assistant", content: `Analysis error: ${err.message}. Try asking a specific question.` }]);
-          },
-        },
-      );
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol]);
-
-  const sendMessage = useCallback(async () => {
-    const q = input.trim();
-    if (!q || analyse.isPending) return;
-    const userMsg: ChatMsg = { role: "user", content: q };
+  const sendQuestion = useCallback((question: string) => {
+    if (!question.trim() || analyse.isPending) return;
+    const userMsg: ChatMsg = { role: "user", content: question };
     setMessages(prev => [...prev, userMsg]);
     setInput("");
-
     analyse.mutate(
-      { symbol, question: q, history: messages.slice(-6) },
+      { symbol, question, history: messages.slice(-6) },
       {
         onSuccess: (data) => {
           setMessages(prev => [...prev, { role: "assistant", content: data.response }]);
@@ -403,42 +446,54 @@ function AIChatTab({ symbol }: { symbol: string }) {
         },
       },
     );
-  }, [input, symbol, messages, analyse]);
+  }, [symbol, messages, analyse]);
 
-  const SUGGESTIONS = [
-    "Give full analysis: thesis, fundamentals, technicals, trade structure",
-    "What is the 1:3 risk-reward setup with entry, stop-loss and targets?",
-    "Analyse FII/DII trend and institutional positioning",
-    "Is there a near-term catalyst that can reprice this fast?",
-    "Where is smart money accumulating? What is the breakout level?",
-    "What are the key risks and invalidation levels for this stock?",
-  ];
+  const sendMessage = useCallback(() => sendQuestion(input.trim()), [input, sendQuestion]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-      {/* Messages */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 8px" }}>
+      {/* Messages / FAQ home */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px 8px" }}>
         {messages.length === 0 ? (
-          <div style={{ padding: "24px 0" }}>
+          <div>
             <div style={{
-              display: "flex", alignItems: "center", gap: 8, marginBottom: 16,
-              color: "var(--text-2)", fontSize: 14, fontWeight: 600,
+              display: "flex", alignItems: "center", gap: 8, marginBottom: 4,
+              color: "var(--text-2)", fontSize: 13, fontWeight: 700,
             }}>
-              <Sparkles style={{ width: 16, height: 16, color: "var(--accent)" }} />
-              Elite Analysis — {symbol}
+              <Sparkles style={{ width: 14, height: 14, color: "var(--accent)" }} />
+              AI Analysis · {symbol}
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {SUGGESTIONS.map(s => (
-                <button key={s} onClick={() => setInput(s)} style={{
-                  textAlign: "left", padding: "9px 14px", borderRadius: 10,
-                  background: "var(--surface-2)", border: "1px solid var(--border)",
-                  color: "var(--text-2)", fontSize: 12, cursor: "pointer",
-                  fontFamily: "var(--font-body)", transition: "all 150ms",
-                }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--accent)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--text-1)"; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border)"; (e.currentTarget as HTMLButtonElement).style.color = "var(--text-2)"; }}
+            <div style={{ fontSize: 11, color: "var(--text-4)", marginBottom: 14, fontFamily: "var(--font-body)" }}>
+              Pick a question or type your own below
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {FAQS.map(faq => (
+                <button
+                  key={faq.label}
+                  onClick={() => sendQuestion(faq.question)}
+                  disabled={analyse.isPending}
+                  style={{
+                    textAlign: "left", padding: "9px 14px", borderRadius: 10,
+                    background: "var(--surface-2)", border: "1px solid var(--border)",
+                    color: "var(--text-2)", fontSize: 12, cursor: "pointer",
+                    fontFamily: "var(--font-body)", transition: "all 150ms",
+                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+                  }}
+                  onMouseEnter={e => {
+                    const el = e.currentTarget as HTMLButtonElement;
+                    el.style.borderColor = "var(--accent)";
+                    el.style.color = "var(--text-1)";
+                    el.style.background = "var(--accent-dim)";
+                  }}
+                  onMouseLeave={e => {
+                    const el = e.currentTarget as HTMLButtonElement;
+                    el.style.borderColor = "var(--border)";
+                    el.style.color = "var(--text-2)";
+                    el.style.background = "var(--surface-2)";
+                  }}
                 >
-                  {s}
+                  <span style={{ fontWeight: 600 }}>{faq.label}</span>
+                  <Send style={{ width: 11, height: 11, flexShrink: 0, opacity: 0.5 }} />
                 </button>
               ))}
             </div>
@@ -452,13 +507,21 @@ function AIChatTab({ symbol }: { symbol: string }) {
             Analysing…
           </div>
         )}
+        {messages.length > 0 && !analyse.isPending && (
+          <button
+            onClick={() => setMessages([])}
+            style={{ fontSize: 10, color: "var(--text-4)", background: "none", border: "none", cursor: "pointer", padding: "4px 0", marginBottom: 4 }}
+          >
+            ← Back to questions
+          </button>
+        )}
         <div ref={bottomRef} />
       </div>
 
       {/* Input */}
       <div style={{
-        padding: "12px 16px", borderTop: "1px solid var(--border)",
-        display: "flex", gap: 10, alignItems: "flex-end",
+        padding: "10px 14px", borderTop: "1px solid var(--border)",
+        display: "flex", gap: 8, alignItems: "flex-end",
       }}>
         <textarea
           value={input}
@@ -467,9 +530,9 @@ function AIChatTab({ symbol }: { symbol: string }) {
           placeholder={`Ask about ${symbol}…`}
           rows={2}
           style={{
-            flex: 1, resize: "none", padding: "9px 12px", borderRadius: 10,
+            flex: 1, resize: "none", padding: "8px 11px", borderRadius: 10,
             background: "var(--surface-2)", border: "1px solid var(--border)",
-            color: "var(--text-1)", fontSize: 13, outline: "none",
+            color: "var(--text-1)", fontSize: 12, outline: "none",
             fontFamily: "var(--font-body)", lineHeight: 1.5,
           }}
         />
@@ -477,7 +540,7 @@ function AIChatTab({ symbol }: { symbol: string }) {
           onClick={sendMessage}
           disabled={!input.trim() || analyse.isPending}
           style={{
-            width: 38, height: 38, borderRadius: 10, border: "none",
+            width: 36, height: 36, borderRadius: 9, border: "none",
             background: input.trim() ? "var(--accent)" : "var(--surface-3)",
             color: input.trim() ? "#fff" : "var(--text-4)",
             display: "flex", alignItems: "center", justifyContent: "center",
@@ -486,8 +549,8 @@ function AIChatTab({ symbol }: { symbol: string }) {
           }}
         >
           {analyse.isPending
-            ? <Loader2 style={{ width: 16, height: 16, animation: "spin 1s linear infinite" }} />
-            : <Send style={{ width: 16, height: 16 }} />}
+            ? <Loader2 style={{ width: 15, height: 15, animation: "spin 1s linear infinite" }} />
+            : <Send style={{ width: 15, height: 15 }} />}
         </button>
       </div>
     </div>

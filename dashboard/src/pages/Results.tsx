@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Trophy, Star, ThumbsUp, Minus, TrendingDown as WeakIcon,
   ExternalLink, FileText, RefreshCw, Search,
-  Clock, BarChart3,
+  Clock, BarChart3, TrendingUp, TrendingDown, Filter,
   Loader2, LayoutGrid, List,
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
@@ -23,73 +23,18 @@ const RATING_CONFIG: Record<Rating, {
 
 const RATINGS: Rating[] = ["Excellent", "Great", "Good", "Ok", "Weak"];
 
-// ── Change formatter ──────────────────────────────────────────────────────────
-function ChangePct({ v, isBps = false }: { v: number | null; isBps?: boolean }) {
-  if (v === null) return <span style={{ color: "var(--text-4)", fontSize: 12 }}>—</span>;
+// ── Trend arrow ───────────────────────────────────────────────────────────────
+function TrendPct({ v, isBps = false }: { v: number | null; isBps?: boolean }) {
+  if (v === null || v === undefined) return <span style={{ color: "var(--text-4)", fontSize: 11 }}>—</span>;
   const pos = v >= 0;
   const label = isBps
-    ? `${v > 0 ? "+" : ""}${v.toFixed(0)} bps`
-    : `${v > 0 ? "+" : ""}${v.toFixed(0)}%`;
+    ? `${v > 0 ? "+" : ""}${v.toFixed(0)}bps`
+    : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
   return (
-    <span style={{
-      fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700,
-      color: pos ? "#10b981" : "#f87171",
-      display: "inline-flex", alignItems: "center", gap: 2,
-    }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 2, fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: pos ? "#10b981" : "#f87171" }}>
+      {pos ? <TrendingUp style={{ width: 10, height: 10 }} /> : <TrendingDown style={{ width: 10, height: 10 }} />}
       {label}
     </span>
-  );
-}
-
-// ── Mini inline bar chart (SVG) ───────────────────────────────────────────────
-function MiniBarChart({
-  values, labels, color, title, range,
-}: {
-  values: number[]; labels: string[]; color: string;
-  title: string; range?: string;
-}) {
-  const maxV = Math.max(...values.map(Math.abs), 1);
-  const w = 16, gap = 3, totalW = values.length * (w + gap) - gap;
-  const chartH = 40;
-
-  return (
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
-        <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.07em", textTransform: "uppercase" }}>{title}</span>
-        {range && <span style={{ fontSize: 8, color: color, fontFamily: "var(--font-mono)", fontWeight: 700 }}>{range}</span>}
-      </div>
-      <svg width="100%" viewBox={`0 0 ${totalW} ${chartH + 14}`} style={{ overflow: "visible", display: "block" }}>
-        {values.map((v, i) => {
-          const barH = Math.max(3, (Math.abs(v) / maxV) * chartH);
-          const isLast = i === values.length - 1;
-          const x = i * (w + gap);
-          const y = chartH - barH;
-          return (
-            <g key={i}>
-              <rect x={x} y={y} width={w} height={barH} rx={2}
-                fill={isLast ? color : `${color}44`} />
-              {isLast && (
-                <text x={x + w / 2} y={chartH + 10}
-                  textAnchor="middle" fontSize={7} fontFamily="JetBrains Mono, monospace"
-                  fill={color} fontWeight="700">
-                  {v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v >= 100 ? v.toFixed(0) : v.toFixed(1)}
-                </text>
-              )}
-            </g>
-          );
-        })}
-        {/* quarter labels */}
-        {labels.map((l, i) => (
-          <text key={i}
-            x={i * (w + gap) + w / 2}
-            y={chartH + 20}
-            textAnchor="middle" fontSize={6} fontFamily="JetBrains Mono, monospace"
-            fill={i === labels.length - 1 ? color : "rgba(255,255,255,0.3)"}>
-            {l}
-          </text>
-        ))}
-      </svg>
-    </div>
   );
 }
 
@@ -97,211 +42,193 @@ function MiniBarChart({
 function ResultCard({ r }: { r: QuarterlyResult }) {
   const cfg = RATING_CONFIG[r.rating];
   const m = r.metrics;
+  const ql = r.quarter_labels; // [Q-4, Q-3, Q-2, Q-1, Q0] latest-last
 
-  const rows = [
-    { label: "Sales",     qoq: m.sales.qoq,     yoy: m.sales.yoy,     q1: m.sales.q1,     q2: m.sales.q2,     q3: m.sales.q3,     isBps: false },
-    { label: "Other Inc.", qoq: null,            yoy: null,            q1: m.other_income.q1, q2: m.other_income.q2, q3: m.other_income.q3, isBps: false },
-    { label: "OP",        qoq: m.op.qoq,        yoy: m.op.yoy,        q1: m.op.q1,        q2: m.op.q2,        q3: m.op.q3,        isBps: false },
-    { label: "OPM",       qoq: m.opm.qoq,       yoy: m.opm.yoy,       q1: m.opm.q1,       q2: m.opm.q2,       q3: m.opm.q3,       isBps: true,  pct: true },
-    { label: "PAT",       qoq: m.pat.qoq,       yoy: m.pat.yoy,       q1: m.pat.q1,       q2: m.pat.q2,       q3: m.pat.q3,       isBps: false },
-    { label: "EPS",       qoq: m.eps.qoq,       yoy: m.eps.yoy,       q1: m.eps.q1,       q2: m.eps.q2,       q3: m.eps.q3,       isBps: false },
-  ] as const;
+  const capLabel = r.market_cap >= 10000
+    ? `Large (${(r.market_cap / 1000).toFixed(0)}K Cr)`
+    : r.market_cap >= 1000
+    ? `Mid (${r.market_cap.toFixed(0)} Cr)`
+    : `Small (${r.market_cap.toFixed(0)} Cr)`;
 
-  const ql = r.quarter_labels;
+  // Date display
+  const dateStr = r.report_date
+    ? new Date(r.report_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "2-digit" })
+    : "";
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 16, scale: 0.98 }}
+      initial={{ opacity: 0, y: 14, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ duration: 0.25, ease: "easeOut" }}
+      transition={{ duration: 0.22, ease: "easeOut" }}
       style={{
         background: "var(--surface)",
         border: `1px solid var(--border)`,
-        borderRadius: 16, overflow: "hidden",
-        boxShadow: r.rating === "Excellent" || r.rating === "Great" ? cfg.glow : "0 2px 12px rgba(0,0,0,0.3)",
+        borderRadius: 14, overflow: "hidden",
+        boxShadow: cfg.glow !== "none" ? cfg.glow : "0 2px 8px rgba(0,0,0,0.25)",
         borderTop: `3px solid ${cfg.color}`,
-        position: "relative",
       }}
     >
-      {/* Header */}
-      <div style={{ padding: "14px 16px 10px", borderBottom: "1px solid var(--border-2)" }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 6 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-            {/* Logo placeholder */}
+      {/* ── Header ────────────────────────────────────────────────── */}
+      <div style={{ padding: "12px 14px 10px" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+          {/* Left: symbol + company */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
             <div style={{
-              width: 38, height: 38, borderRadius: 10, flexShrink: 0,
-              background: `${cfg.color}18`, border: `1.5px solid ${cfg.color}44`,
+              width: 36, height: 36, borderRadius: 9, flexShrink: 0,
+              background: `${cfg.color}18`, border: `1.5px solid ${cfg.color}40`,
               display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 11, fontWeight: 800, color: cfg.color, fontFamily: "var(--font-mono)",
-              letterSpacing: "0.02em",
+              fontSize: 10, fontWeight: 800, color: cfg.color, fontFamily: "var(--font-mono)",
             }}>
               {r.symbol.slice(0, 3)}
             </div>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontFamily: "var(--font-heading)", fontSize: 15, fontWeight: 700, color: "var(--text-1)", letterSpacing: "-0.01em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-heading)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 }}>
                 {r.company}
               </div>
-              <div style={{ fontSize: 9.5, color: "var(--text-3)", fontFamily: "var(--font-body)", marginTop: 1 }}>
-                {r.sector} · {r.industry}
+              <div style={{ fontSize: 9.5, color: "var(--text-4)", marginTop: 1, fontFamily: "var(--font-mono)" }}>
+                {r.symbol} · {r.exchange}
               </div>
             </div>
           </div>
 
-          {/* Quarter + exchange */}
+          {/* Right: rating + quarter + date */}
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: "var(--text-3)", fontFamily: "var(--font-mono)", letterSpacing: "0.04em" }}>{r.quarter}</span>
-            <span style={{ fontSize: 8, padding: "1px 5px", borderRadius: 4, background: "var(--surface-2)", color: "var(--text-3)", fontFamily: "var(--font-body)", fontWeight: 700 }}>{r.exchange}</span>
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 4,
+              fontSize: 10, fontWeight: 800, color: cfg.color,
+              background: cfg.bg, border: `1px solid ${cfg.border}`,
+              padding: "2px 8px", borderRadius: 99,
+            }}>
+              {cfg.icon} {r.rating}
+            </span>
+            <span style={{ fontSize: 9.5, fontWeight: 700, color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>{r.quarter}</span>
+            {dateStr && (
+              <span style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 9, color: "var(--text-4)" }}>
+                <Clock style={{ width: 8, height: 8 }} />{dateStr}
+              </span>
+            )}
           </div>
         </div>
 
-        {/* Pulse rating */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 10, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>Pulse Rating:</span>
-          <span style={{
-            display: "inline-flex", alignItems: "center", gap: 4,
-            fontSize: 11, fontWeight: 800, color: cfg.color, fontFamily: "var(--font-body)",
-            letterSpacing: "0.03em",
-          }}>
-            {cfg.icon} {r.rating}
-          </span>
-          <span style={{ marginLeft: "auto", fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>₹ in Cr</span>
+        {/* Sector / industry tags */}
+        <div style={{ display: "flex", gap: 5, marginTop: 8, flexWrap: "wrap" }}>
+          {r.sector && (
+            <span style={{ fontSize: 9, fontWeight: 600, color: "var(--text-3)", background: "var(--surface-2)", border: "1px solid var(--border)", padding: "1px 6px", borderRadius: 4 }}>
+              {r.sector}
+            </span>
+          )}
+          {r.industry && r.industry !== r.sector && (
+            <span style={{ fontSize: 9, fontWeight: 600, color: "var(--text-4)", background: "var(--surface-2)", border: "1px solid var(--border)", padding: "1px 6px", borderRadius: 4 }}>
+              {r.industry}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Metrics table */}
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
+      {/* ── Insight ───────────────────────────────────────────────── */}
+      {r.insight && (
+        <div style={{ margin: "0 14px 10px", padding: "8px 11px", borderRadius: 8, border: `1px solid ${cfg.color}28`, background: `${cfg.color}08` }}>
+          <p style={{ fontSize: 11, color: cfg.color, fontFamily: "var(--font-body)", lineHeight: 1.55, margin: 0, fontWeight: 500 }}>
+            {r.insight}
+          </p>
+        </div>
+      )}
+
+      {/* ── Key metrics table ─────────────────────────────────────── */}
+      <div style={{ overflowX: "auto", borderTop: "1px solid var(--border-2)", borderBottom: "1px solid var(--border-2)" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
-            <tr style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
-              {["Metric", "QoQ", "YoY", ql[4], ql[3], ql[2]].map((h, i) => (
+            <tr style={{ background: "var(--surface-2)" }}>
+              {["Metric", "YoY", "QoQ", ql[4] ?? "Cur", ql[3] ?? "Q-1", ql[2] ?? "Q-2"].map((h, i) => (
                 <th key={i} style={{
                   padding: "5px 10px", textAlign: i === 0 ? "left" : "right",
-                  fontSize: 9, fontWeight: 700, color: "var(--text-3)",
-                  letterSpacing: "0.07em", fontFamily: "var(--font-body)",
+                  fontSize: 8.5, fontWeight: 700, color: "var(--text-4)",
+                  letterSpacing: "0.08em", fontFamily: "var(--font-body)",
                   textTransform: "uppercase", whiteSpace: "nowrap",
                 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, ri) => (
-              <tr key={row.label} style={{
-                borderBottom: "1px solid var(--border-2)",
-                background: ri % 2 === 0 ? "transparent" : "rgba(255,255,255,0.012)",
-              }}>
-                <td style={{ padding: "5px 10px", fontFamily: "var(--font-body)", fontWeight: 700, color: "var(--text-2)", fontSize: 11, whiteSpace: "nowrap" }}>
-                  {row.label}
-                </td>
-                <td style={{ padding: "5px 10px", textAlign: "right" }}>
-                  <ChangePct v={row.qoq ?? null} isBps={'isBps' in row && row.isBps && !('pct' in row && row.pct) ? false : false} />
-                  {'pct' in row && row.pct
-                    ? (row.qoq !== null ? <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: row.qoq >= 0 ? "#10b981" : "#f87171" }}>{row.qoq > 0 ? "+" : ""}{row.qoq.toFixed(0)} bps</span> : <span style={{ color: "var(--text-4)" }}>—</span>)
-                    : null
-                  }
-                </td>
-                <td style={{ padding: "5px 10px", textAlign: "right" }}>
-                  {'pct' in row && row.pct
-                    ? (row.yoy !== null ? <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: row.yoy >= 0 ? "#10b981" : "#f87171" }}>{row.yoy > 0 ? "+" : ""}{row.yoy.toFixed(0)} bps</span> : <span style={{ color: "var(--text-4)" }}>—</span>)
-                    : <ChangePct v={row.yoy ?? null} />
-                  }
-                </td>
-                <td style={{ padding: "5px 10px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: "var(--text-1)" }}>
-                  {'pct' in row && row.pct ? `${row.q1.toFixed(1)}%` : row.q1.toLocaleString("en-IN")}
-                </td>
-                <td style={{ padding: "5px 10px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text-3)" }}>
-                  {'pct' in row && row.pct ? `${row.q2.toFixed(1)}%` : row.q2.toLocaleString("en-IN")}
-                </td>
-                <td style={{ padding: "5px 10px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text-3)" }}>
-                  {'pct' in row && row.pct ? `${row.q3.toFixed(1)}%` : row.q3.toLocaleString("en-IN")}
-                </td>
-              </tr>
-            ))}
+            {[
+              { label: "Revenue", key: "sales", isBps: false },
+              { label: "PAT",     key: "pat",   isBps: false },
+              { label: "OPM",     key: "opm",   isBps: true  },
+              { label: "EPS",     key: "eps",   isBps: false },
+            ].map((row, ri) => {
+              const d = m[row.key as keyof typeof m] as { qoq: number | null; yoy: number | null; q1: number; q2: number; q3: number };
+              const fmt = (v: number) => row.key === "opm"
+                ? `${v.toFixed(1)}%`
+                : row.key === "eps"
+                ? `₹${v.toFixed(1)}`
+                : v >= 1000
+                ? `${(v / 1000).toFixed(1)}K`
+                : v.toFixed(0);
+              return (
+                <tr key={row.label} style={{
+                  borderBottom: "1px solid var(--border-2)",
+                  background: ri % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)",
+                }}>
+                  <td style={{ padding: "6px 10px", fontFamily: "var(--font-body)", fontWeight: 700, color: "var(--text-2)", fontSize: 11, whiteSpace: "nowrap" }}>
+                    {row.label}
+                  </td>
+                  <td style={{ padding: "6px 10px", textAlign: "right" }}>
+                    <TrendPct v={d.yoy} isBps={row.isBps} />
+                  </td>
+                  <td style={{ padding: "6px 10px", textAlign: "right" }}>
+                    <TrendPct v={d.qoq} isBps={row.isBps} />
+                  </td>
+                  <td style={{ padding: "6px 10px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--text-1)" }}>
+                    {fmt(d.q1)}
+                  </td>
+                  <td style={{ padding: "6px 10px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-3)" }}>
+                    {fmt(d.q2)}
+                  </td>
+                  <td style={{ padding: "6px 10px", textAlign: "right", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-4)" }}>
+                    {fmt(d.q3)}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
-      {/* Insight box */}
-      <div style={{ margin: "10px 12px 0", padding: "7px 10px", borderRadius: 7, border: `1px solid ${cfg.color}33`, background: `${cfg.color}08` }}>
-        <p style={{ fontSize: 10.5, color: cfg.color, fontFamily: "var(--font-body)", lineHeight: 1.5, margin: 0, fontWeight: 500 }}>
-          {r.insight}
-        </p>
-      </div>
-
-      {/* Mini bar charts */}
-      <div style={{ padding: "10px 12px 6px", display: "flex", gap: 10 }}>
-        <MiniBarChart
-          values={r.revenue_trend}
-          labels={r.quarter_labels}
-          color={cfg.color}
-          title="Revenue"
-          range={`${(r.revenue_trend[0] / 100).toFixed(0)}–${(Math.max(...r.revenue_trend) / 100).toFixed(0)} Cr`}
-        />
-        <MiniBarChart
-          values={r.pat_trend}
-          labels={r.quarter_labels}
-          color={cfg.color}
-          title="PAT"
-          range={`${r.pat_trend[r.pat_trend.length - 1].toFixed(0)} Cr`}
-        />
-        <MiniBarChart
-          values={r.eps_trend}
-          labels={r.quarter_labels}
-          color={cfg.color}
-          title="EPS"
-          range={`₹${r.eps_trend[r.eps_trend.length - 1].toFixed(1)}`}
-        />
-      </div>
-
-      {/* Footer */}
+      {/* ── Footer ────────────────────────────────────────────────── */}
       <div style={{
-        padding: "8px 12px 10px",
-        borderTop: "1px solid var(--border-2)",
+        padding: "8px 14px",
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        flexWrap: "wrap", gap: 6,
+        flexWrap: "wrap", gap: 8,
       }}>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text-1)" }}>
-            CMP: ₹{(r.cmp ?? 0).toLocaleString("en-IN")}
-          </span>
-          <span style={{ fontSize: 11, fontFamily: "var(--font-body)", color: "var(--text-3)" }}>
-            {r.market_cap >= 10000
-              ? `Large-Cap (${(r.market_cap / 1000).toFixed(0)}K Cr)`
-              : r.market_cap >= 1000
-              ? `Mid-Cap (${(r.market_cap).toFixed(0)} Cr)`
-              : `Small-Cap (${r.market_cap.toFixed(0)} Cr)`}
-          </span>
-          {r.pe !== null && (
-            <span style={{ fontSize: 11, fontFamily: "var(--font-body)", color: "var(--text-3)" }}>P/E: {r.pe.toFixed(1)}</span>
-          )}
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          {r.cmp ? (
+            <span style={{ fontSize: 12, fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--text-1)" }}>
+              ₹{r.cmp.toLocaleString("en-IN")}
+            </span>
+          ) : null}
+          <span style={{ fontSize: 10, color: "var(--text-4)", fontFamily: "var(--font-body)" }}>{capLabel}</span>
+          {r.pe && <span style={{ fontSize: 10, color: "var(--text-4)" }}>P/E {r.pe.toFixed(1)}</span>}
+          <span style={{ fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>₹ Cr</span>
         </div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 3, color: "var(--text-4)", fontSize: 9 }}>
-            <Clock style={{ width: 9, height: 9 }} />
-            <span style={{ fontFamily: "var(--font-mono)" }}>{r.report_time}</span>
-          </div>
+        <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
           {r.pdf_url && (
-            <a href={r.pdf_url} target="_blank" rel="noopener noreferrer"
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 3,
-                padding: "3px 8px", borderRadius: 5, fontSize: 9.5, fontWeight: 700,
-                background: "var(--surface-2)", border: "1px solid var(--border)",
-                color: "var(--text-2)", textDecoration: "none",
-                fontFamily: "var(--font-body)",
-              }}>
-              <FileText style={{ width: 9, height: 9 }} /> PDF
+            <a href={r.pdf_url} target="_blank" rel="noopener noreferrer" style={{
+              display: "inline-flex", alignItems: "center", gap: 3,
+              padding: "4px 9px", borderRadius: 6, fontSize: 9.5, fontWeight: 700,
+              background: "var(--surface-2)", border: "1px solid var(--border)",
+              color: "var(--text-2)", textDecoration: "none",
+            }}>
+              <FileText style={{ width: 9, height: 9 }} /> Filing PDF
             </a>
           )}
-          <a
-            href={`https://www.tradingview.com/chart/?symbol=${r.exchange}:${r.symbol}`}
-            target="_blank" rel="noopener noreferrer"
-            style={{
+          <a href={`https://www.tradingview.com/chart/?symbol=${r.exchange}:${r.symbol}`}
+            target="_blank" rel="noopener noreferrer" style={{
               display: "inline-flex", alignItems: "center", gap: 3,
-              padding: "3px 8px", borderRadius: 5, fontSize: 9.5, fontWeight: 700,
+              padding: "4px 9px", borderRadius: 6, fontSize: 9.5, fontWeight: 700,
               background: "var(--accent-dim)", border: "1px solid var(--accent-border)",
               color: "var(--accent)", textDecoration: "none",
-              fontFamily: "var(--font-body)",
             }}>
             <ExternalLink style={{ width: 9, height: 9 }} /> Chart
           </a>
@@ -389,6 +316,7 @@ function ResultListRow({ r, idx }: { r: QuarterlyResult; idx: number }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 export function ResultsPage() {
   const [ratingFilter, setRatingFilter] = useState<Rating | "ALL">("ALL");
+  const [industryFilter, setIndustryFilter] = useState<string>("ALL");
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortBy, setSortBy] = useState<"time" | "rating" | "sales" | "pat">("time");
@@ -396,9 +324,20 @@ export function ResultsPage() {
   const { data: apiResults, isLoading, isFetching, refetch } = useQuarterlyResults();
   const results = useMemo(() => apiResults ?? [], [apiResults]);
 
+  // Build industry list from results
+  const industries = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of results) {
+      const ind = r.industry || r.sector || "";
+      if (ind) map.set(ind, (map.get(ind) ?? 0) + 1);
+    }
+    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
+  }, [results]);
+
   const filtered = useMemo(() => {
     let r = results;
     if (ratingFilter !== "ALL") r = r.filter(x => x.rating === ratingFilter);
+    if (industryFilter !== "ALL") r = r.filter(x => x.industry === industryFilter || x.sector === industryFilter);
     if (search.trim()) {
       const q = search.trim().toUpperCase();
       r = r.filter(x => x.symbol.includes(q) || x.company.toUpperCase().includes(q));
@@ -409,7 +348,7 @@ export function ResultsPage() {
       if (sortBy === "pat")   return (b.metrics.pat.yoy ?? -999) - (a.metrics.pat.yoy ?? -999);
       return new Date(b.report_date).getTime() - new Date(a.report_date).getTime();
     });
-  }, [results, ratingFilter, search, sortBy]);
+  }, [results, ratingFilter, industryFilter, search, sortBy]);
 
   // Rating counts
   const counts = useMemo(() => {
@@ -509,7 +448,7 @@ export function ResultsPage() {
             );
           })}
 
-          {/* Sort + search on right */}
+          {/* Sort + industry + search on right */}
           <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <select
               value={sortBy}
@@ -526,6 +465,26 @@ export function ResultsPage() {
               <option value="sales">Sales growth</option>
               <option value="pat">PAT growth</option>
             </select>
+
+            {industries.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 5, background: "var(--surface)", border: `1px solid ${industryFilter !== "ALL" ? "var(--accent-border)" : "var(--border)"}`, borderRadius: 8, padding: "5px 9px" }}>
+                <Filter style={{ width: 11, height: 11, color: "var(--text-4)" }} />
+                <select
+                  value={industryFilter}
+                  onChange={e => setIndustryFilter(e.target.value)}
+                  style={{
+                    background: "transparent", border: "none", outline: "none",
+                    color: industryFilter !== "ALL" ? "var(--accent)" : "var(--text-2)",
+                    fontFamily: "var(--font-body)", fontSize: 11, cursor: "pointer",
+                  }}
+                >
+                  <option value="ALL">All Industries</option>
+                  {industries.map(([ind, cnt]) => (
+                    <option key={ind} value={ind}>{ind} ({cnt})</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, padding: "6px 10px" }}>
               <Search style={{ width: 12, height: 12, color: "var(--text-3)" }} />
@@ -599,7 +558,7 @@ export function ResultsPage() {
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 80, gap: 12 }}>
             <div style={{ fontSize: 40 }}>📊</div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-2)", fontFamily: "var(--font-body)" }}>No results match your filters</div>
-            <button onClick={() => { setRatingFilter("ALL"); setSearch(""); }}
+            <button onClick={() => { setRatingFilter("ALL"); setIndustryFilter("ALL"); setSearch(""); }}
               style={{ padding: "8px 20px", borderRadius: 8, background: "var(--accent)", color: "#fff", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
               Clear Filters
             </button>

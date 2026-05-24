@@ -1,4 +1,4 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { Sidebar } from "./Sidebar";
@@ -19,6 +19,8 @@ export function Layout() {
   useTheme(); // applies data-theme to documentElement, initialises theme from localStorage
   const { connect } = useLiveStore();
   const { chartTarget, openChart, closeChart, searchOpen, openSearch, closeSearch } = useUIStore();
+  const { pathname } = useLocation();
+  const showChatBot = !pathname.startsWith("/watchlist");
 
   useEffect(() => {
     const cleanup = connect();
@@ -75,7 +77,7 @@ export function Layout() {
           openChart(symbol, name);
         }}
       />
-      <ChatBot />
+      {showChatBot && <ChatBot />}
     </div>
   );
 }

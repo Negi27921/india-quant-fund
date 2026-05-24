@@ -702,7 +702,8 @@ export function ScreenerPage() {
                   )}
                 </>
               ) : data?.total != null ? (
-                <> · {data.total} results
+                <> · <span style={{ color: "var(--text-3)" }}>scanned all</span>
+                  {" · "}<span style={{ color: "var(--text-1)", fontWeight: 700 }}>{data.total} matched</span>
                   {" · "}<span style={{ color: "var(--green)", fontWeight: 600 }}>{strong.length} Strong</span>
                   {" · "}<span style={{ color: "var(--amber)", fontWeight: 600 }}>{moderate.length} Moderate</span>
                 </>
