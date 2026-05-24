@@ -433,6 +433,7 @@ export interface StockFundamentals {
   week_low_52:    number;
   shares_cr:      number;
   float_cr:       number;
+  ticker_used?:   string;
   error?:         string;
 }
 
