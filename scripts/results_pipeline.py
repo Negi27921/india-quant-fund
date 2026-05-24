@@ -1341,11 +1341,11 @@ def main() -> None:
 
         row_id = f"{scrip_code}_{filing_id[:40].replace('/', '_')}"
 
-        # Sector from AI — fall back to stock_universe lookup if blank or looks wrong
-        ai_sector   = (ai.get("sector") or "").strip()
-        ai_industry = (ai.get("industry") or "").strip()
-        if not ai_sector:
-            ai_sector, ai_industry = _lookup_sector(symbol)
+        # Always prefer stock_universe for sector/industry — LLM can hallucinate.
+        # Only fall back to LLM output if the symbol isn't in stock_universe.
+        su_sector, su_industry = _lookup_sector(symbol)
+        ai_sector   = su_sector   or (ai.get("sector")   or "").strip()
+        ai_industry = su_industry or (ai.get("industry") or "").strip()
 
         row = {
             "id":             row_id,

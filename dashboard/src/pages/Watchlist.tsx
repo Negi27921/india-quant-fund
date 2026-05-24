@@ -753,7 +753,7 @@ function TechnicalTab({ item }: { item: WatchlistItem }) {
 // ── Stock detail pane ─────────────────────────────────────────────────────────
 type TabType = "fundamentals" | "technical" | "ai";
 
-function StockDetailPane({ item }: { item: WatchlistItem }) {
+function StockDetailPane({ item, watchlistName }: { item: WatchlistItem; watchlistName?: string }) {
   const [tab, setTab] = useState<TabType>("fundamentals");
 
   const [livePrice, setLivePrice] = useState<{
@@ -786,18 +786,33 @@ function StockDetailPane({ item }: { item: WatchlistItem }) {
     }}>
       {/* Header */}
       <div style={{
-        padding: "16px 20px 0",
+        padding: "12px 20px 0",
         borderBottom: "1px solid var(--border)",
         flexShrink: 0,
       }}>
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
+        {/* Breadcrumb */}
+        {watchlistName && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 5, marginBottom: 10,
+            fontSize: 10, color: "var(--text-4)", fontFamily: "var(--font-body)", fontWeight: 600,
+          }}>
+            <span style={{ letterSpacing: "0.06em", textTransform: "uppercase" }}>{watchlistName}</span>
+            <ChevronRight style={{ width: 10, height: 10 }} />
+            <span style={{ color: "var(--accent)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700 }}>{item.symbol}</span>
+          </div>
+        )}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
           <div>
             <div style={{ fontSize: 20, fontWeight: 800, color: "var(--text-1)", letterSpacing: "-0.02em", fontFamily: "var(--font-heading)" }}>
               {item.symbol}
             </div>
             {item.company && (
-              <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 2 }}>{item.company}</div>
+              <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 1 }}>{item.company}</div>
             )}
+            <div style={{ display: "flex", gap: 5, marginTop: 5, flexWrap: "wrap" }}>
+              {item.sector && <span style={{ fontSize: 9, fontWeight: 600, color: "var(--text-4)", background: "var(--surface-2)", border: "1px solid var(--border)", padding: "1px 6px", borderRadius: 4 }}>{item.sector}</span>}
+              {item.industry && item.industry !== item.sector && <span style={{ fontSize: 9, fontWeight: 600, color: "var(--text-4)", background: "var(--surface-2)", border: "1px solid var(--border)", padding: "1px 6px", borderRadius: 4 }}>{item.industry}</span>}
+            </div>
           </div>
           <RatingBadge rating={item.result_rating} />
         </div>
@@ -1034,17 +1049,19 @@ function StockRow({
       style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "10px 14px", cursor: "pointer",
-        background: isSelected ? "var(--accent-dim)" : "transparent",
+        background: isSelected ? "rgba(96,165,250,0.10)" : "transparent",
         borderLeft: `3px solid ${isSelected ? "var(--accent)" : "transparent"}`,
+        borderRight: `3px solid ${isSelected ? "var(--accent)" : "transparent"}`,
         borderBottom: "1px solid var(--surface-2)",
         transition: "all 150ms",
+        boxShadow: isSelected ? "inset 0 0 0 1px rgba(96,165,250,0.18)" : "none",
       }}
       onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = "var(--surface-2)"; }}
       onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = "transparent"; }}
     >
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-mono)" }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: isSelected ? "var(--accent)" : "var(--text-1)", fontFamily: "var(--font-mono)" }}>
             {item.symbol}
           </span>
           {item.result_rating && <RatingBadge rating={item.result_rating} />}
@@ -1380,7 +1397,7 @@ export function WatchlistPage() {
         {/* Right: detail pane */}
         <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", minWidth: 0 }}>
           {selectedItem ? (
-            <StockDetailPane item={selectedItem} />
+            <StockDetailPane item={selectedItem} watchlistName={selectedWl?.name} />
           ) : (
             <div style={{
               flex: 1, display: "flex", flexDirection: "column",

@@ -300,6 +300,35 @@ def _fetch_yfinance_results(from_date: str, to_date: str,
     return results
 
 
+def _yf_insight(rev_cr, pat_cr, rev_yoy, pat_yoy, rev_qoq) -> str:
+    """Generate deterministic insight from yfinance numbers."""
+    parts = []
+    if rev_yoy is not None:
+        if rev_yoy >= 20:
+            parts.append(f"Revenue grew strongly at +{rev_yoy:.1f}% YoY")
+        elif rev_yoy >= 10:
+            parts.append(f"Revenue up +{rev_yoy:.1f}% YoY")
+        elif rev_yoy >= 0:
+            parts.append(f"Revenue grew modestly at +{rev_yoy:.1f}% YoY")
+        else:
+            parts.append(f"Revenue declined {rev_yoy:.1f}% YoY")
+    if pat_yoy is not None:
+        if pat_yoy >= 25:
+            parts.append(f"PAT surged +{pat_yoy:.1f}% YoY — strong profitability")
+        elif pat_yoy >= 10:
+            parts.append(f"PAT grew +{pat_yoy:.1f}% YoY")
+        elif pat_yoy >= 0:
+            parts.append(f"PAT up marginally at +{pat_yoy:.1f}% YoY")
+        else:
+            parts.append(f"PAT fell {pat_yoy:.1f}% YoY")
+    if rev_qoq is not None and abs(rev_qoq) >= 5:
+        direction = "accelerating" if rev_qoq >= 5 else "sequentially lower"
+        parts.append(f"Sequential momentum {direction} at {rev_qoq:+.1f}% QoQ")
+    if not parts:
+        return "Numbers extracted from yfinance quarterly financials."
+    return ". ".join(parts) + "."
+
+
 def _process_yfinance_item(it: dict, filing_id: str) -> dict | None:
     """
     Build a quarterly_results row from a synthetic yfinance item.
@@ -351,7 +380,7 @@ def _process_yfinance_item(it: dict, filing_id: str) -> dict | None:
         "pat_prev_y":    pat_prev_y,
         "sector":        sector_val,
         "industry":      industry_val,
-        "insight":       f"Data sourced from yfinance quarterly financials. AI analysis not available.",
+        "insight":       _yf_insight(rev_cr, pat_cr, rev_yoy, pat_yoy, rev_qoq),
         "report_time":   "After Market Hours",
         "currency_unit": "Cr",
     }
