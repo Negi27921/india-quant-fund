@@ -325,9 +325,9 @@ export type Rating = "Excellent" | "Great" | "Good" | "Ok" | "Weak";
 export interface MetricValues {
   qoq: number | null;
   yoy: number | null;
-  q1: number;
-  q2: number;
-  q3: number;
+  q1: number | null;
+  q2: number | null;
+  q3: number | null;
 }
 
 export interface ResultMetrics {

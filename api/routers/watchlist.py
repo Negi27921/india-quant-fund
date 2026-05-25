@@ -286,109 +286,174 @@ def _analyse_with_fallback(symbol: str, question: str,
     raise ValueError(f"All LLM providers failed: {'; '.join(errors)}")
 
 
+def _screener_quick(symbol: str) -> dict[str, str]:
+    """Scrape key ratios from screener.in. Blocking, max 4s."""
+    url = f"https://www.screener.in/company/{symbol}/"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; research-bot/1.0)"})
+    try:
+        with urllib.request.urlopen(req, timeout=4) as r:
+            if r.status != 200:
+                return {}
+            body = r.read().decode("utf-8", errors="ignore")
+    except Exception:
+        return {}
+
+    idx = body.find("Market Cap")
+    if idx < 0:
+        return {}
+    snippet = body[max(0, idx - 100): idx + 3000]
+    text = re.sub(r"<[^>]+>", " ", snippet)
+    text = re.sub(r"\s+", " ", text).strip()
+
+    result: dict[str, str] = {}
+    for metric in ("Market Cap", "Stock P/E", "Book Value", "Dividend Yield", "ROCE", "ROE", "Debt to equity", "Current ratio"):
+        m = re.search(re.escape(metric) + r"\s*[₹%]?\s*([\d,\.]+\s*(?:Cr\.?|%|x)?)", text, re.IGNORECASE)
+        if m:
+            result[metric] = m.group(1).strip()
+    for label, regex in [
+        ("Promoter %", r"Promoter\s+Holding.*?([\d\.]+\s*%)"),
+        ("FII %",      r"FII\s+Holding.*?([\d\.]+\s*%)"),
+        ("DII %",      r"DII\s+Holding.*?([\d\.]+\s*%)"),
+    ]:
+        m = re.search(regex, body[:80000], re.IGNORECASE | re.DOTALL)
+        if m:
+            result[label] = m.group(1).strip()
+    return result
+
+
 def _build_stock_context(symbol: str) -> str:
-    """Pull quarterly results + basic price context for the AI prompt."""
-    lines: list[str] = []
+    """Build rich LLM context from NEO tables + screener.in for a given ticker."""
+    lines: list[str] = [f"=== STOCK: {symbol} ==="]
+    sym = symbol.upper()
 
-    # Quarterly results from Supabase
+    # 1. screener.in fundamentals
     try:
-        safe_sym = symbol.upper().replace("'", "")
-        rows = _sb_get(
-            f"quarterly_results?symbol=eq.{safe_sym}&order=report_date.desc&limit=4&select=*"
-        )
-        if isinstance(rows, list) and rows:
-            lines.append("=== RECENT QUARTERLY RESULTS ===")
-            for row in rows:
-                m = row.get("metrics") or {}
-                rev = m.get("sales") or m.get("revenue") or {}
-                pat = m.get("pat") or {}
-                eps = m.get("eps") or {}
-                rv = rev.get("q3") or rev.get("q1") or 0
-                pv = pat.get("q3") or pat.get("q1") or 0
-                ev = eps.get("q3") or eps.get("q1") or 0
-
-                def _p(v: Any) -> str:
-                    if v is None: return "—"
-                    return f"{'+'if float(v)>0 else ''}{float(v):.1f}%"
-
-                lines.append(
-                    f"{row.get('quarter','?')} | Revenue: ₹{rv:,.0f}Cr YoY:{_p(rev.get('yoy'))} QoQ:{_p(rev.get('qoq'))}"
-                    f" | PAT: ₹{pv:,.0f}Cr YoY:{_p(pat.get('yoy'))} | EPS: ₹{ev:.1f}"
-                    f" | Rating: {row.get('rating','?')} | CMP: ₹{row.get('cmp') or '—'}"
-                )
-                if row.get("insight"):
-                    lines.append(f"  AI insight: {row['insight']}")
+        sc = _screener_quick(sym)
+        if sc:
+            lines.append("\n--- FUNDAMENTALS (screener.in) ---")
+            for k, v in sc.items():
+                lines.append(f"{k}: {v}")
     except Exception:
         pass
 
-    # Watchlist items metadata (result high, breakout, sector)
+    # 2. Company master (dim_company)
     try:
-        rows2 = _sb_get(
-            f"watchlist_items?symbol=eq.{symbol.upper()}&select=result_date,result_high,breakout_date,result_rating,sector,industry&limit=1"
+        co_rows = _sb_get(
+            f"dim_company?ticker=eq.{sym}&select=company_name,sector,industry,"
+            f"marketcap_category,market_cap_inr_cr,current_price_inr,high_52w_inr,low_52w_inr&limit=1"
         )
-        if isinstance(rows2, list) and rows2:
-            wi = rows2[0]
-            parts = [
-                f"Result day high: ₹{wi.get('result_high','—')}",
-                f"Result date: {wi.get('result_date','—')}",
-                f"Breakout: {'Yes on ' + wi['breakout_date'] if wi.get('breakout_date') else 'Not yet'}",
-            ]
-            if wi.get("sector"):
-                parts.append(f"Sector: {wi['sector']}")
-            if wi.get("industry"):
-                parts.append(f"Industry: {wi['industry']}")
-            lines.append("\n" + " | ".join(parts))
-    except Exception:
-        pass
-
-    # Universe data (sector, market cap, exchange)
-    try:
-        rows3 = _sb_get(
-            f"stock_universe?symbol=eq.{symbol.upper()}&select=sector,industry,market_cap_cr,exchange,last_price&limit=1"
-        )
-        if isinstance(rows3, list) and rows3:
-            u = rows3[0]
+        if isinstance(co_rows, list) and co_rows:
+            co = co_rows[0]
+            lines.append("\n--- COMPANY MASTER ---")
             lines.append(
-                f"Universe: {u.get('exchange','—')} | Sector: {u.get('sector','—')} | "
-                f"Industry: {u.get('industry','—')} | Market Cap: ₹{u.get('market_cap_cr',0):,.0f} Cr"
+                f"Name: {co.get('company_name','—')} | Sector: {co.get('sector','—')} | "
+                f"Industry: {co.get('industry','—')} | Cap tier: {co.get('marketcap_category','—')}"
+            )
+            if co.get("market_cap_inr_cr"):
+                lines.append(f"Market Cap: ₹{float(co['market_cap_inr_cr']):,.0f} Cr")
+            if co.get("current_price_inr"):
+                lines.append(
+                    f"Ref price: ₹{co['current_price_inr']} | "
+                    f"52W High: ₹{co.get('high_52w_inr','—')} | 52W Low: ₹{co.get('low_52w_inr','—')}"
+                )
+    except Exception:
+        pass
+
+    # 3. Technicals (fact_technicals — latest row)
+    try:
+        t_rows = _sb_get(
+            f"fact_technicals?ticker=eq.{sym}&select=date,close,open,high,low,volume,"
+            f"rsi_14,macd,macd_signal,sma_20,sma_50,sma_200,ema_20,bb_upper,bb_lower,atr_14,"
+            f"pct_change_1d,pct_change_5d,pct_change_20d,high_52w,low_52w,pct_from_52w_high,"
+            f"rel_volume&order=date.desc&limit=1"
+        )
+        if isinstance(t_rows, list) and t_rows:
+            t = t_rows[0]
+            lines.append(f"\n--- TECHNICALS ({t.get('date','?')}) ---")
+            lines.append(
+                f"Price: ₹{t.get('close','—')} | RSI(14): {t.get('rsi_14','—')} | "
+                f"MACD: {t.get('macd','—')} / Signal: {t.get('macd_signal','—')}"
+            )
+            lines.append(
+                f"SMA20: {t.get('sma_20','—')} | SMA50: {t.get('sma_50','—')} | SMA200: {t.get('sma_200','—')}"
+            )
+            lines.append(
+                f"BB Upper: {t.get('bb_upper','—')} | BB Lower: {t.get('bb_lower','—')} | ATR(14): {t.get('atr_14','—')}"
+            )
+            lines.append(
+                f"52W High: {t.get('high_52w','—')} | 52W Low: {t.get('low_52w','—')} | "
+                f"From 52W High: {t.get('pct_from_52w_high','—')}%"
+            )
+            lines.append(
+                f"1D: {t.get('pct_change_1d','—')}% | 5D: {t.get('pct_change_5d','—')}% | "
+                f"20D: {t.get('pct_change_20d','—')}% | Rel Volume: {t.get('rel_volume','—')}x"
             )
     except Exception:
         pass
 
-    # Live price from NSE (best available)
+    # 4. AI-tagged announcements (last 6)
     try:
-        import requests as _rq
-        nse_headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Referer": "https://www.nseindia.com/",
-            "Accept": "application/json, text/plain, */*",
-        }
-        ns = _rq.Session()
-        ns.headers.update(nse_headers)
-        ns.get("https://www.nseindia.com/", timeout=6)
-        r = ns.get(f"https://www.nseindia.com/api/quote-equity?symbol={symbol.upper()}", timeout=8)
-        if r.status_code == 200:
-            pd_ = r.json()
-            pi = pd_.get("priceInfo", {})
-            md = pd_.get("metadata", {})
-            whl = pi.get("weekHighLow", {})
-            cmp  = pi.get("lastPrice") or pi.get("close")
-            chg  = pi.get("pChange")
-            if cmp:
+        ann_rows = _sb_get(
+            f"fact_announcements_tagged?ticker=eq.{sym}&select=announcement_type,sentiment,"
+            f"summary_header,summary_text,published_date&order=published_date.desc&limit=6"
+        )
+        if isinstance(ann_rows, list) and ann_rows:
+            lines.append("\n--- RECENT ANNOUNCEMENTS (AI-tagged) ---")
+            sent_map = {"positive": "🟢", "negative": "🔴", "neutral": "⚪"}
+            for a in ann_rows:
+                em = sent_map.get(a.get("sentiment", ""), "")
                 lines.append(
-                    f"\n=== LIVE MARKET DATA (NSE) ===\n"
-                    f"CMP: ₹{cmp:,.2f}  Change: {chg:+.2f}%\n"
-                    f"Open: ₹{pi.get('open','—')}  Prev Close: ₹{pi.get('previousClose','—')}\n"
-                    f"52W High: ₹{whl.get('max','—')}  52W Low: ₹{whl.get('min','—')}\n"
-                    f"VWAP: ₹{pi.get('vwap','—')}\n"
-                    f"Volume: {md.get('totalTradedVolume','—'):,}  Delivery%: {md.get('deliveryToTradedQuantity','—')}%\n"
-                    f"Market Cap: ₹{round(md.get('marketCap',0)/1e7,0):,.0f} Cr\n"
-                    f"Industry: {md.get('industry','—')}"
+                    f"{em} [{str(a.get('published_date',''))[:10]}] "
+                    f"{a.get('announcement_type','')} — {a.get('summary_header','')}"
+                )
+                if a.get("summary_text"):
+                    lines.append(f"   {str(a['summary_text'])[:200]}")
+    except Exception:
+        pass
+
+    # 5. Results calendar (next 3 events)
+    try:
+        cal_rows = _sb_get(
+            f"fact_results_calendar?ticker=eq.{sym}&select=result_date,fiscal_year,"
+            f"fiscal_quarter,result_type&order=result_date.asc&limit=3"
+        )
+        if isinstance(cal_rows, list) and cal_rows:
+            lines.append("\n--- RESULTS CALENDAR ---")
+            for r in cal_rows:
+                lines.append(
+                    f"Q{r.get('fiscal_quarter','?')} FY{r.get('fiscal_year','?')}: "
+                    f"{r.get('result_date','TBD')} ({r.get('result_type','')})"
                 )
     except Exception:
         pass
 
-    return "\n".join(lines) if lines else "No historical data available for this stock."
+    # 6. Live NSE price (best-effort, may fail outside market hours)
+    try:
+        import requests as _rq
+        ns = _rq.Session()
+        ns.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://www.nseindia.com/",
+            "Accept": "application/json",
+        })
+        ns.get("https://www.nseindia.com/", timeout=4)
+        r = ns.get(f"https://www.nseindia.com/api/quote-equity?symbol={sym}", timeout=6)
+        if r.status_code == 200:
+            pi = r.json().get("priceInfo", {})
+            md = r.json().get("metadata", {})
+            cmp = pi.get("lastPrice") or pi.get("close")
+            chg = pi.get("pChange")
+            if cmp:
+                lines.append(
+                    f"\n--- LIVE NSE PRICE ---\n"
+                    f"CMP: ₹{cmp:,.2f}  Change: {chg:+.2f}%  VWAP: ₹{pi.get('vwap','—')}\n"
+                    f"Open: ₹{pi.get('open','—')}  Prev Close: ₹{pi.get('previousClose','—')}\n"
+                    f"Volume: {md.get('totalTradedVolume','—')}  Delivery%: {md.get('deliveryToTradedQuantity','—')}%"
+                )
+    except Exception:
+        pass
+
+    return "\n".join(lines) if len(lines) > 1 else f"No data found for {symbol}."
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -396,28 +461,38 @@ def _build_stock_context(symbol: str) -> str:
 @router.get("/universe/search")
 async def universe_search(q: str = "", limit: int = 40) -> list[dict]:
     """
-    Search the stock_universe table for the universe stock picker.
-    Returns symbol, company, sector, industry sorted by relevance.
-    q="" returns the top stocks by market cap.
+    Search dim_company (NEO universe: 5,400+ NSE/BSE stocks) for the stock picker.
+    Returns {symbol, company, sector, industry} sorted by ticker.
+    q="" returns the first N stocks alphabetically.
     """
     if not (_SB_URL and _SB_KEY):
         return []
     try:
         q_clean = q.strip().upper()
+        cap = min(limit, 80)
         if q_clean:
-            # ilike search on symbol and company name
             path = (
-                f"stock_universe?select=symbol,company,sector,industry"
-                f"&or=(symbol.ilike.{q_clean}*,company.ilike.*{q.strip()}*)"
-                f"&order=symbol.asc&limit={min(limit, 80)}"
+                f"dim_company?select=ticker,company_name,sector,industry"
+                f"&or=(ticker.ilike.{q_clean}*,company_name.ilike.*{q.strip()}*)"
+                f"&order=ticker.asc&limit={cap}"
             )
         else:
             path = (
-                f"stock_universe?select=symbol,company,sector,industry"
-                f"&order=symbol.asc&limit={min(limit, 80)}"
+                f"dim_company?select=ticker,company_name,sector,industry"
+                f"&order=ticker.asc&limit={cap}"
             )
         rows = _sb_get(path)
-        return rows if isinstance(rows, list) else []
+        if not isinstance(rows, list):
+            return []
+        return [
+            {
+                "symbol":   r["ticker"],
+                "company":  r.get("company_name", ""),
+                "sector":   r.get("sector", ""),
+                "industry": r.get("industry", ""),
+            }
+            for r in rows
+        ]
     except Exception:
         return []
 

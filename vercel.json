@@ -17,6 +17,7 @@
         "maxDuration": 60,
         "includeFiles": [
           "api/**",
+          "core/**",
           "agents/**",
           "data/storage/supabase_db.py",
           "data/storage/__init__.py",

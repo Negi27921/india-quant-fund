@@ -31,6 +31,7 @@ class Settings:
         "SUPABASE_URL", "https://ohwgibzmaxfxivenbfhm.supabase.co"
     )
     SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
+    SUPABASE_SERVICE_KEY: str = os.getenv("SUPABASE_SERVICE_KEY", "")
 
     # ── Auth ──────────────────────────────────────────────────────────────────
     INTERNAL_API_KEY: str = os.getenv("INTERNAL_API_KEY", "")
@@ -92,6 +93,23 @@ class Settings:
     NOTIFY_PROVIDER: str = os.getenv(
         "NOTIFY_PROVIDER", "telegram"
     )  # "telegram" | "email" | "both" | "none"
+
+    # ── StockInsights.ai (primary data source, 7-day trial) ──────────────────
+    SI_API_KEY: str = os.getenv("SI_API_KEY", "")
+    SI_BASE: str = os.getenv("SI_BASE", "https://stockinsights-ai-main-95a26a0.zuplo.app")
+    SI_API_PATH_PREFIX: str = os.getenv("SI_API_PATH_PREFIX", "/api/in/v0")
+    # "stockinsights" during trial, "nse_bse" from day 8
+    DATA_PRIMARY_SOURCE: str = os.getenv("DATA_PRIMARY_SOURCE", "stockinsights")
+    TRIAL_STARTED_AT: str = os.getenv("TRIAL_STARTED_AT", "2026-05-25T00:00:00Z")
+    TRIAL_EXPIRES_AT: str = os.getenv("TRIAL_EXPIRES_AT", "2026-06-01T22:00:00Z")
+
+    @property
+    def si_base_url(self) -> str:
+        return self.SI_BASE.rstrip("/") + self.SI_API_PATH_PREFIX
+
+    @property
+    def is_si_primary(self) -> bool:
+        return self.DATA_PRIMARY_SOURCE == "stockinsights" and bool(self.SI_API_KEY)
 
     # ── Rate limits ───────────────────────────────────────────────────────────
     RATE_LIMIT_RPM: int = int(os.getenv("RATE_LIMIT_RPM", "60"))

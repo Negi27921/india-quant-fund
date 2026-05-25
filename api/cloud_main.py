@@ -18,6 +18,7 @@ from api.routers import (
     chat, journal, market, portfolio, risk,
     screener, settings, strategies, telegram_bot, trades, watchlist,
 )
+from api.routers import profile as profile_router
 
 # ── System router (Supabase-compatible stubs) ─────────────────────────────────
 # The full system.py uses DuckDB which is not available on Vercel.
@@ -116,6 +117,7 @@ app.include_router(strategies.router, prefix="/api/strategies", tags=["Strategie
 app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
 app.include_router(journal.router, prefix="/api/journal", tags=["Journal"])
 app.include_router(watchlist.router, prefix="/api/watchlists", tags=["Watchlist"])
+app.include_router(profile_router.router, prefix="/api", tags=["Profile"])
 app.include_router(_system, prefix="/api/system", tags=["System"])
 
 

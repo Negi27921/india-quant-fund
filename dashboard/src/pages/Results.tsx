@@ -172,14 +172,15 @@ function ResultCard({ r }: { r: QuarterlyResult }) {
               { label: "OPM",     key: "opm",   isBps: true  },
               { label: "EPS",     key: "eps",   isBps: false },
             ].map((row, ri) => {
-              const d = m[row.key as keyof typeof m] as { qoq: number | null; yoy: number | null; q1: number; q2: number; q3: number };
-              const fmt = (v: number) => row.key === "opm"
-                ? `${v.toFixed(1)}%`
-                : row.key === "eps"
-                ? `₹${v.toFixed(1)}`
-                : v >= 1000
-                ? `${(v / 1000).toFixed(1)}K`
-                : v.toFixed(0);
+              const d = m[row.key as keyof typeof m] as { qoq: number | null; yoy: number | null; q1: number | null; q2: number | null; q3: number | null };
+              const fmt = (v: number | null | undefined) => {
+                if (v === null || v === undefined) return <span style={{ color: "var(--text-4)", fontSize: 10 }}>—</span>;
+                if (row.key === "opm") return `${v.toFixed(1)}%`;
+                if (row.key === "eps") return `₹${v.toFixed(2)}`;
+                if (v >= 10000) return `${(v / 1000).toFixed(1)}K`;
+                if (v >= 1000)  return `${(v / 1000).toFixed(2)}K`;
+                return v % 1 === 0 ? v.toFixed(0) : v.toFixed(2);
+              };
               return (
                 <tr key={row.label} style={{
                   borderBottom: "1px solid var(--border-2)",
@@ -397,7 +398,7 @@ export function ResultsPage() {
               Earnings Results
             </h1>
             <p style={{ fontSize: 12, color: "var(--text-3)", fontFamily: "var(--font-body)", marginTop: 5, marginBottom: 0 }}>
-              BSE quarterly results{dateRange ? ` · ${dateRange}` : ""} · {results.length} result{results.length !== 1 ? "s" : ""} loaded
+              BSE · NSE · Trendlyne official filings{dateRange ? ` · ${dateRange}` : ""} · {results.length} result{results.length !== 1 ? "s" : ""} loaded
               {isFetching && <span style={{ color: "var(--accent)", marginLeft: 8 }}>· Refreshing…</span>}
             </p>
           </div>

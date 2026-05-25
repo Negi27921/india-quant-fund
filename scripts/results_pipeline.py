@@ -45,9 +45,38 @@ import urllib.error
 from datetime import datetime, timezone
 from io import BytesIO
 
+
+def _load_dotenv() -> None:
+    """Load .env from project root without requiring python-dotenv."""
+    for candidate in (
+        os.path.join(os.path.dirname(__file__), "..", ".env"),
+        os.path.join(os.path.dirname(__file__), ".env"),
+    ):
+        path = os.path.normpath(candidate)
+        if not os.path.isfile(path):
+            continue
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                k = k.strip()
+                v = v.strip().strip('"').strip("'")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+        break
+
+
+_load_dotenv()
+
 # ── Config ──────────────────────────────────────────────────────────────────
 SUPABASE_URL    = os.getenv("SUPABASE_URL",    "").strip()
-SUPABASE_KEY    = os.getenv("SUPABASE_KEY",    "").strip()
+SUPABASE_KEY    = (
+    os.getenv("SUPABASE_SERVICE_KEY") or
+    os.getenv("SUPABASE_SERVICE_ROLE_KEY") or
+    os.getenv("SUPABASE_KEY") or ""
+).strip()
 NVIDIA_API_KEY  = os.getenv("NVIDIA_API_KEY",  "").strip()
 GROQ_API_KEY    = os.getenv("GROQ_API_KEY",    "").strip()
 GEMINI_API_KEY  = os.getenv("GEMINI_API_KEY",  "").strip()
@@ -55,7 +84,7 @@ TG_TOKEN        = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TG_CHAT_ID      = os.getenv("TELEGRAM_CHAT_ID",   "").strip()
 
 # LLM providers — fallback chain: NIM → Groq → Gemini
-NIM_MODEL       = os.getenv("NVIDIA_MODEL", "meta/llama-3.1-70b-instruct").strip()
+NIM_MODEL       = os.getenv("NVIDIA_MODEL", "nvidia/llama-3.1-nemotron-70b-instruct").strip()
 NIM_ENDPOINT    = "https://integrate.api.nvidia.com/v1/chat/completions"
 GROQ_MODEL      = os.getenv("GROQ_MODEL",   "llama-3.3-70b-versatile").strip()
 GROQ_ENDPOINT   = "https://api.groq.com/openai/v1/chat/completions"
@@ -199,6 +228,113 @@ def _fetch_nse_results(from_date: str, to_date: str) -> list[dict]:
         })
 
     print(f"  [NSE] {len(raw)} total announcements → {len(results)} results filings")
+    return results
+
+
+# ── Trendlyne Filing Fetch ────────────────────────────────────────────────────
+
+_TRENDLYNE_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept":          "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer":         "https://trendlyne.com/bse-corporate-announcements/",
+}
+
+_TRENDLYNE_RESULT_CATS = {
+    "financial results", "quarterly results", "annual results",
+    "financial results-audited", "financial results-unaudited",
+}
+
+
+def _fetch_trendlyne_results(from_date: str, to_date: str) -> list[dict]:
+    """
+    Fetch quarterly results from Trendlyne BSE announcements (tertiary source).
+    Returns BSE-compatible dicts with _source='trendlyne'.
+    Gracefully returns [] if Trendlyne's API is unavailable.
+    """
+    results: list[dict] = []
+    seen: set[str] = set()
+
+    # Trendlyne paginates: page=1..N, 50 per page
+    for page in range(1, 6):
+        url = (
+            "https://trendlyne.com/apis/bse-corporate-announcements/"
+            f"?category=Financial+Results&from_date={from_date}&to_date={to_date}"
+            f"&page={page}&page_size=50"
+        )
+        data = None
+        try:
+            import requests as _rq
+            resp = _rq.get(url, headers=_TRENDLYNE_HEADERS, timeout=15)
+            if resp.status_code == 200:
+                data = resp.json()
+            elif resp.status_code == 404:
+                break
+            else:
+                print(f"  [Trendlyne] HTTP {resp.status_code} on p{page}")
+                break
+        except Exception as exc:
+            print(f"  [Trendlyne] p{page} failed: {exc}")
+            break
+
+        if data is None:
+            break
+
+        # Try both common response shapes
+        items = (
+            data.get("results") or
+            data.get("data") or
+            data.get("announcements") or
+            (data if isinstance(data, list) else [])
+        )
+        if not items:
+            break
+
+        for item in items:
+            filing_date = (
+                item.get("exchange_datetime") or
+                item.get("created_at") or
+                item.get("date") or ""
+            )[:10]
+            if filing_date < from_date:
+                continue
+
+            cat = (item.get("category") or item.get("categoryname") or "").lower()
+            headline = (item.get("headline") or item.get("description") or item.get("newssub") or "").lower()
+            is_result = (
+                any(c in cat for c in _TRENDLYNE_RESULT_CATS) or
+                any(kw in headline for kw in RESULT_KEYWORDS)
+            )
+            if not is_result:
+                continue
+
+            uid = str(item.get("id") or item.get("seq_id") or f"{filing_date}_{item.get('scrip_cd','')}")
+            if uid in seen:
+                continue
+            seen.add(uid)
+
+            symbol = (item.get("symbol") or item.get("nse_symbol") or "").upper()
+            results.append({
+                "_source":        "trendlyne",
+                "SCRIP_CD":       str(item.get("scrip_cd") or item.get("security_code") or ""),
+                "SHORT_NAME":     (item.get("company_name") or item.get("short_name") or symbol).title(),
+                "NEWSSUB":        (item.get("headline") or item.get("description") or "")[:250],
+                "CATEGORYNAME":   "Financial Results",
+                "DT_TM":          filing_date,
+                "ATTACHMENTNAME": f"tl_{uid}",
+                "_symbol":        symbol,
+                "_pdf_url":       item.get("attachment") or item.get("pdf_url") or item.get("attach_url") or "",
+            })
+
+        if len(items) < 50:
+            break   # last page
+        time.sleep(0.5)
+
+    print(f"  [Trendlyne] {len(results)} results filings")
     return results
 
 
@@ -376,71 +512,448 @@ def _is_results_filing(item: dict) -> bool:
 
 # ── PDF Text Extraction ───────────────────────────────────────────────────────
 
-def _extract_pdf_text(pdf_url: str, max_chars: int = 4000) -> str:
-    """Download BSE PDF and extract plain text. Returns '' on any failure."""
-    if not pdf_url or not pdf_url.endswith(".pdf"):
-        return ""
-    try:
-        from pdfminer.high_level import extract_text_to_fp
-        from pdfminer.layout import LAParams
+# Keywords that signal the start of a financial results table
+_FINANCIAL_TABLE_MARKERS = [
+    # These only appear IN the P&L table, not in cover letters or auditor text
+    "revenue from operations",
+    "net revenue from operations",
+    "profit after tax",
+    "profit for the period",
+    "profit for the year",
+    "basic eps",
+    "basic & diluted eps",
+    "earnings per equity share",
+    "(₹ in lakhs)", "(₹ in crores)", "(₹ in millions)",
+    "(rs. in lakhs)", "(rs. in crores)", "(rs. in millions)",
+    "in lakhs)", "in crores)", "in millions)",
+    # NOTE: "standalone/consolidated financial results" and "statement of..."
+    # were removed because they appear in cover-letter preambles and caused the
+    # smart window to anchor before the actual P&L table (e.g. pos 200 vs 17000).
+]
 
-        headers = {
-            "User-Agent": "Mozilla/5.0",
-            "Referer":    "https://www.bseindia.com/",
-        }
-        req = urllib.request.Request(pdf_url, headers=headers)
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            pdf_bytes = resp.read()
 
-        out = BytesIO()
-        extract_text_to_fp(BytesIO(pdf_bytes), out, laparams=LAParams(), output_type="text")
-        text = out.getvalue().decode("utf-8", errors="ignore")
-        # strip noise: long runs of whitespace, form-feed chars
-        text = re.sub(r"\f", "\n", text)
-        text = re.sub(r" {4,}", "  ", text)
-        text = re.sub(r"\n{4,}", "\n\n", text).strip()
+def _smart_pdf_window(text: str, max_chars: int = 12000) -> str:
+    """
+    Returns the most financially relevant slice of PDF text.
+    Finds the P&L table start and returns a window around it.
+    """
+    text_lower = text.lower()
+    best_idx = len(text)
+
+    for marker in _FINANCIAL_TABLE_MARKERS:
+        idx = text_lower.find(marker)
+        if 0 < idx < best_idx:
+            best_idx = idx
+
+    if best_idx >= len(text):
         return text[:max_chars]
-    except Exception as exc:
-        print(f"  [PDF] extract failed for {pdf_url}: {exc}")
+
+    # Start a bit before the marker (grab table header context)
+    table_start = max(0, best_idx - 200)
+    return text[table_start:table_start + max_chars]
+
+
+def _extract_pdf_text(pdf_url: str, max_chars: int = 12000) -> str:
+    """Download exchange PDF and extract financial table text. Tries pdfminer → pypdf."""
+    if not pdf_url:
         return ""
+
+    # Download — handle both BSE and NSE domains
+    referer = "https://www.nseindia.com/" if "nseindia" in pdf_url else "https://www.bseindia.com/"
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Referer": referer,
+        "Accept":  "application/pdf,*/*",
+    }
+    pdf_bytes = b""
+    try:
+        req = urllib.request.Request(pdf_url, headers=headers)
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            pdf_bytes = resp.read()
+    except Exception as exc:
+        print(f"  [PDF] download failed: {exc}")
+        return ""
+
+    if not pdf_bytes:
+        return ""
+
+    raw_text = ""
+
+    # Method 1: pdfplumber — layout=True preserves column alignment so that each
+    # P&L row has its label and all numbers on the same text line.
+    # This fixes PDFs where extract_tables() merges all labels into one cell and
+    # separates them from their numbers (e.g. RAINBOW, STUDDS template).
+    try:
+        import pdfplumber
+        parts = []
+        with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
+            for page in pdf.pages[:30]:
+                t = page.extract_text(layout=True)
+                if t:
+                    parts.append(t)
+        raw_text = "\n".join(parts)
+    except ImportError:
+        print("  [PDF] pdfplumber not installed — trying pdfminer")
+    except Exception as exc:
+        print(f"  [PDF] pdfplumber failed: {exc}")
+
+    # Method 2: pdfminer fallback
+    if not raw_text.strip():
+        try:
+            from pdfminer.high_level import extract_text_to_fp
+            from pdfminer.layout import LAParams
+            out = BytesIO()
+            extract_text_to_fp(BytesIO(pdf_bytes), out, laparams=LAParams(), output_type="text")
+            raw_text = out.getvalue().decode("utf-8", errors="ignore")
+        except ImportError:
+            pass
+        except Exception as exc:
+            print(f"  [PDF] pdfminer failed: {exc}")
+
+    # Method 3: pypdf final fallback
+    if not raw_text.strip():
+        try:
+            import pypdf
+            reader = pypdf.PdfReader(BytesIO(pdf_bytes))
+            parts = []
+            for page in reader.pages[:30]:
+                t = page.extract_text()
+                if t:
+                    parts.append(t)
+            raw_text = "\n".join(parts)
+        except ImportError:
+            pass
+        except Exception as exc:
+            print(f"  [PDF] pypdf failed: {exc}")
+
+    if not raw_text.strip():
+        return ""
+
+    # Clean whitespace noise
+    raw_text = re.sub(r"\f", "\n", raw_text)
+    raw_text = re.sub(r" {4,}", "  ", raw_text)
+    raw_text = re.sub(r"\n{4,}", "\n\n", raw_text).strip()
+
+    # Repair PDF-broken numbers: some generators split "215.18" into "2 15.18"
+    # (the digit "2" and "15.18" are separate text runs with a gap).
+    # Pattern: lone 1-2 digits followed by space then 2-3 digits + decimal fraction.
+    raw_text = re.sub(r"(?<!\w)(\d{1,2}) (\d{2,3}\.\d{1,3})(?!\w)", r"\1\2", raw_text)
+
+    # Smart window: jump past boilerplate to the P&L table
+    return _smart_pdf_window(raw_text, max_chars)
+
+
+# ── Regex-based financial extractor (deterministic fallback) ──────────────────
+
+def _parse_indian_number(s: str) -> float | None:
+    """Parse Indian number format: '1,23,456.78' → 123456.78. Returns None on failure."""
+    try:
+        return float(s.replace(",", "").strip())
+    except (ValueError, AttributeError):
+        return None
+
+
+def _detect_currency_unit(text: str) -> str:
+    """Returns 'Lakhs', 'Millions', or 'Cr' based on PDF unit header."""
+    t = text.lower()
+    if any(k in t for k in ("in lakhs", "rs. lakhs", "₹ lakhs", "lakh)", "lakhs)", "in lakh", "lakh\n", "lakhs\n")):
+        return "Lakhs"
+    # Match "million" and common OCR garbles like "~lillion" (Rainbow PDF)
+    if re.search(r"(?:m|~l|ll)illion", t) and "billion" not in t:
+        return "Millions"
+    return "Cr"
+
+
+def _regex_extract_financials(pdf_text: str) -> dict:
+    """
+    Deterministic fallback extraction from PDF text using regex.
+    Handles standard Indian BSE/NSE quarterly results table format.
+    Returns a partial dict; caller merges into AI output (nulls only).
+    """
+    result: dict = {}
+
+    unit = _detect_currency_unit(pdf_text)
+
+    # Indian float pattern — handles 1,23,456.78 and -1,23,456.78
+    _N = r"-?[\d,]+\.?\d*"
+    # Between numbers: require at least 1 separator to prevent "25.0" → ("2","5.","0")
+    _SEP = r"[ \t|]+"
+
+    def _first_num(pattern: str) -> float | None:
+        m = re.search(pattern, pdf_text, re.IGNORECASE)
+        if not m:
+            return None
+        return _parse_indian_number(m.group(1))
+
+    def _three_nums(pattern: str) -> tuple[float | None, float | None, float | None]:
+        """Return (current, prev_q, prev_y) from a 3-column table row."""
+        m = re.search(pattern, pdf_text, re.IGNORECASE)
+        if not m:
+            return None, None, None
+        nums = [_parse_indian_number(m.group(i + 1)) for i in range(3)]
+        return tuple(nums)  # type: ignore
+
+    # ── Revenue from Operations ────────────────────────────────────────────
+    row_re = (
+        r"(?:revenue from operations|net revenue|net sales)"
+        rf"{_SEP}({_N}){_SEP}({_N}){_SEP}({_N})"
+    )
+    rev, rev_pq, rev_py = _three_nums(row_re)
+    if rev is None:
+        rev = _first_num(
+            rf"(?:revenue from operations|net revenue|net sales){_SEP}({_N})"
+        )
+
+    # ── Total Income (fallback for revenue) ──────────────────────────────
+    if rev is None:
+        rev = _first_num(rf"(?:total income|gross revenue){_SEP}({_N})")
+
+    # ── PAT / Profit After Tax ────────────────────────────────────────────
+    # Ind AS label: "Profit for the period/year (3-4)" — skip row-ref in parens/brackets
+    _PAT_LABELS = (
+        r"profit after tax"
+        r"|net profit(?! before)"
+        r"|profit for\s+the\s?(?:period|year|quarter)(?:\s*/\s*year)?"
+        r"|profit for\s?(?:the\s?)?(?:period|year)(?:\s*/\s*year)?"
+        r"|total profit"
+        r"|\bpat\b"
+    )
+    # After label, skip optional row-reference like "(3-4)", "(VII-VTII)", "15-6]", "(7 - 8}", etc.
+    # Uses [^\)\]\}\n] to accept digits AND letters (Roman numerals) in references
+    _PAT_PRE = r"[\s]*(?:[(\[{]?[^\)\]\}\n]{1,30}[)\]}])?[\s|]*"
+    pat_re = (
+        rf"(?:{_PAT_LABELS})"
+        rf"{_PAT_PRE}({_N}){_SEP}({_N}){_SEP}({_N})"
+    )
+    pat, pat_pq, pat_py = _three_nums(pat_re)
+    if pat is None:
+        pat = _first_num(
+            rf"(?:{_PAT_LABELS}){_PAT_PRE}({_N})"
+        )
+
+    # ── EBITDA / Operating Profit ─────────────────────────────────────────
+    ebitda = _first_num(rf"(?:ebitda|operating profit){_SEP}({_N})")
+
+    # ── OPM / EBITDA Margin ───────────────────────────────────────────────
+    opm_pct = _first_num(
+        r"(?:ebitda margin|operating profit margin|opm)[%\s]*(?:\()?(\d+\.?\d*)(?:\))?%?"
+    )
+    if opm_pct and opm_pct > 100:
+        opm_pct = None   # sanity check
+
+    # ── EPS ───────────────────────────────────────────────────────────────
+    # Use \d+\.?\d* so we never capture a lone "." from "(Rs.)"
+    eps = _first_num(
+        r"(?:basic(?:\s*(?:&\s*diluted)?)?\s*eps"
+        r"|eps\s*[-–]\s*basic"
+        r"|eps\s*\(?basic\)?"
+        r"|diluted\s*eps"
+        r"|earnings per (?:equity )?share)"
+        r"[^\n]{0,60}?(-?\d+\.?\d*)"
+    )
+
+    # ── Convert raw units → Crores ────────────────────────────────────────
+    def _to_cr(v: float | None) -> float | None:
+        if v is None:
+            return None
+        if unit == "Lakhs":
+            return round(v / 100, 2)
+        if unit == "Millions":
+            return round(v / 10, 2)   # 1 Crore = 10 million
+        return round(v, 2)
+
+    result["revenue_cr"]   = _to_cr(rev)
+    result["revenue_prev_q"] = _to_cr(rev_pq)
+    result["revenue_prev_y"] = _to_cr(rev_py)
+    result["pat_cr"]       = _to_cr(pat)
+    result["pat_prev_q"]   = _to_cr(pat_pq)
+    result["pat_prev_y"]   = _to_cr(pat_py)
+    result["ebitda_cr"]    = _to_cr(ebitda)
+    result["opm_pct"]      = opm_pct
+    result["eps"]          = eps
+    result["currency_unit"] = "Cr"
+
+    # ── Compute growth rates if prev values available ─────────────────────
+    if result["revenue_cr"] and result["revenue_prev_y"]:
+        try:
+            result["revenue_yoy"] = round(
+                (result["revenue_cr"] - result["revenue_prev_y"]) / result["revenue_prev_y"] * 100, 1
+            )
+        except ZeroDivisionError:
+            pass
+    if result["revenue_cr"] and result["revenue_prev_q"]:
+        try:
+            result["revenue_qoq"] = round(
+                (result["revenue_cr"] - result["revenue_prev_q"]) / result["revenue_prev_q"] * 100, 1
+            )
+        except ZeroDivisionError:
+            pass
+    if result["pat_cr"] and result["pat_prev_y"]:
+        try:
+            result["pat_yoy"] = round(
+                (result["pat_cr"] - result["pat_prev_y"]) / result["pat_prev_y"] * 100, 1
+            )
+        except ZeroDivisionError:
+            pass
+    if result["pat_cr"] and result["pat_prev_q"]:
+        try:
+            result["pat_qoq"] = round(
+                (result["pat_cr"] - result["pat_prev_q"]) / result["pat_prev_q"] * 100, 1
+            )
+        except ZeroDivisionError:
+            pass
+
+    # ── Sanity filter: null implausibly large values (OCR decimal-drop artifact) ──
+    # e.g. "60,241.23" OCR'd as "6024123" → parsed as 6,024,123 Lakhs = 60,241 Cr (wrong)
+    # Quarterly revenue > 50,000 Crores is implausible for any Indian listed company
+    # EXCEPT the very top companies (Reliance/TCS), which don't have OCR-garbled PDFs.
+    _MAX_PLAUSIBLE_CR = 50_000
+    for k in ("revenue_cr", "revenue_prev_q", "revenue_prev_y", "pat_cr", "pat_prev_q", "pat_prev_y"):
+        v = result.get(k)
+        if v is not None and abs(v) > _MAX_PLAUSIBLE_CR:
+            result.pop(k, None)
+    # Cascade: if revenue_cr was nulled, also null derived fields
+    if result.get("revenue_cr") is None:
+        result.pop("revenue_yoy", None)
+        result.pop("revenue_qoq", None)
+    if result.get("pat_cr") is None:
+        result.pop("pat_yoy", None)
+        result.pop("pat_qoq", None)
+
+    # Strip None values so caller can merge cleanly
+    return {k: v for k, v in result.items() if v is not None}
+
+
+_REGEX_CORE_FIELDS = (
+    "revenue_cr", "pat_cr", "eps",
+    "revenue_prev_q", "revenue_prev_y",
+    "pat_prev_q", "pat_prev_y",
+    "revenue_yoy", "revenue_qoq",
+    "pat_yoy", "pat_qoq",
+    "opm_pct", "currency_unit",
+)
+
+
+def _merge_regex_into_ai(ai: dict, pdf_text: str) -> dict:
+    """
+    Merge deterministic regex results into AI extraction.
+
+    For CORE financial fields (revenue, pat, eps, growth rates):
+      → Regex OVERRIDES the LLM when regex has a value.
+        The LLM (especially 8b models) hallucinates template examples and
+        picks wrong columns (annual vs quarterly). Regex is deterministic.
+
+    For NON-CORE fields (sector, industry, commentary, guidance):
+      → Keep LLM output (regex doesn't extract these).
+    """
+    if not pdf_text:
+        return ai
+    regex = _regex_extract_financials(pdf_text)
+    if not regex:
+        return ai
+
+    # Count how many core fields regex has vs LLM
+    regex_core = sum(1 for k in _REGEX_CORE_FIELDS if regex.get(k) is not None)
+    llm_core   = sum(1 for k in _REGEX_CORE_FIELDS if ai.get(k)  is not None)
+
+    overrides = 0
+    fills     = 0
+
+    for k in _REGEX_CORE_FIELDS:
+        if regex.get(k) is not None:
+            if ai.get(k) is None:
+                ai[k] = regex[k]
+                fills += 1
+            else:
+                # Override LLM — regex is the source of truth for numbers
+                ai[k] = regex[k]
+                overrides += 1
+
+    # Also fill any non-core fields the LLM missed
+    for k, v in regex.items():
+        if k not in _REGEX_CORE_FIELDS and ai.get(k) is None and v is not None:
+            ai[k] = v
+            fills += 1
+
+    if overrides > 0 or fills > 0:
+        print(f"    [Regex] {fills} filled, {overrides} overridden (LLM had {llm_core} / Regex has {regex_core} core fields)")
+    return ai
 
 
 # ── LLM extraction — NIM → Groq → Gemini ─────────────────────────────────────
 
 _SYSTEM = (
-    "You are a forensic financial analyst operating like a Bloomberg terminal intelligence engine. "
+    "You are a forensic financial analyst and PDF table extraction engine operating like a Bloomberg terminal. "
     "You extract ONLY verified data from official BSE/NSE exchange filings. "
     "Return ONLY a valid JSON object — no markdown, no explanation, no code fences. "
     "ABSOLUTE RULES: "
-    "(1) Use EXACT numbers from the filing — never estimate or infer. "
-    "(2) Use null for any field not explicitly stated in the document. "
-    "(3) For numbers, use Crores (Cr). If PDF uses Lakhs, divide by 100. "
-    "(4) Never hallucinate management commentary — quote or paraphrase ONLY what is written. "
-    "(5) Confidence score = percentage of financial fields successfully extracted (0-100)."
+    "(1) Use EXACT numbers from the filing — never estimate, infer, or use prior knowledge. "
+    "(2) Use null for any field not explicitly stated in the document. NEVER use 0 as a placeholder for unknown values. "
+    "(3) INDIAN NUMBER FORMAT: "
+    "    - If the filing header says '(₹ in Lakhs)' or 'Rs. Lakhs' → divide ALL numbers by 100 to get Crores. "
+    "    - If the filing header says '(₹ in Crores)' or 'Rs. Crores' → use numbers directly. "
+    "    - Indian comma notation: remove all commas before parsing numbers. "
+    "(4) EXTRACT FROM THE P&L TABLE: Look for 'Revenue from Operations', 'Profit Before Tax', "
+    "    'Profit After Tax', 'EPS', 'EBITDA' in the PDF table. These numbers ARE there — find them. "
+    "(5) Never hallucinate management commentary — quote or paraphrase ONLY what is written. "
+    "(6) Confidence score: 100 = all key financials extracted from PDF table. "
+    "    60 = partial extraction. 20 = headline only, no table found."
 )
 
 _PROMPT_TMPL = """OFFICIAL EXCHANGE FILING — QUARTERLY FINANCIAL RESULTS EXTRACTION
 
 Company      : {company}
-BSE Scrip    : {scrip_code}
+Exchange Code: {scrip_code}
 Filing Date  : {dt}
 Category     : {category}
 Headline     : {headline}
 {pdf_section}
 
---- EXTRACTION TASK ---
-SOURCE OF TRUTH: The PDF extract above (if present) is the AUTHORITATIVE source.
-Do NOT use prior knowledge, cached data, or Yahoo Finance data.
-If a field is not stated in the filing: return null. Never fabricate.
+=== STEP-BY-STEP EXTRACTION INSTRUCTIONS ===
 
-Return ONLY this JSON structure (no extra text, no markdown fences):
+STEP 1 — DETECT CURRENCY UNIT
+Find the currency unit statement in the PDF (e.g., "(₹ in Lakhs)", "(₹ in Crores)").
+If LAKHS → divide every financial number by 100 to convert to Crores.
+If CRORES → use directly.
+Record the unit in "currency_unit".
+
+STEP 2 — FIND THE P&L TABLE
+Look for the row labels: "Revenue from Operations", "Total Income", "EBITDA",
+"Profit Before Tax", "Tax Expense", "Profit After Tax", "EPS".
+NOTE: Under Indian Accounting Standards (Ind AS), PAT may be labelled:
+  "Profit for the period", "Profit for the year", "Profit for the period/year",
+  "Net Profit", or "Total Comprehensive Income". Use the first one found.
+The table has columns: Current Quarter | Previous Quarter | Same Quarter Last Year.
+
+STEP 3 — EXTRACT NUMBERS
+For each metric, find the number in the CURRENT QUARTER column.
+For prev_q use the Previous Quarter column.
+For prev_y use the Same Quarter Last Year column.
+Remove commas from Indian number format before parsing.
+NEVER return 0 for a field — return null if the number is not found in the table.
+
+STEP 4 — COMPUTE GROWTH RATES
+revenue_yoy = ((revenue_cr - revenue_prev_y) / revenue_prev_y) * 100 if both present, else null
+pat_yoy = ((pat_cr - pat_prev_y) / pat_prev_y) * 100 if both present, else null
+(same formula for qoq with prev_q)
+
+STEP 5 — EXTRACT INTELLIGENCE
+Find management commentary, guidance, key positives/risks from any press release or board resolution text in the PDF.
+
+=== OUTPUT FORMAT ===
+Return ONLY valid JSON. No markdown fences. No extra text. No trailing commas.
+
 {{
   "quarter"              : "Q4 FY2026",
-  "revenue_cr"           : 0,
+  "revenue_cr"           : null,
   "other_income_cr"      : null,
   "op_cr"                : null,
   "opm_pct"              : null,
-  "pat_cr"               : 0,
+  "pat_cr"               : null,
   "eps"                  : null,
   "revenue_qoq"          : null,
   "revenue_yoy"          : null,
@@ -468,22 +981,17 @@ Return ONLY this JSON structure (no extra text, no markdown fences):
   "guidance"             : [],
   "key_risks"            : [],
   "key_positives"        : [],
-  "sector"               : "Technology",
-  "industry"             : "IT Services",
+  "sector"               : null,
+  "industry"             : null,
   "ai_rating"            : "Good",
-  "insight"              : "Two concise sentences analysing this result and its market implications.",
+  "insight"              : "Two concise sentences on this quarter's result and market implication.",
   "report_time"          : "After Market Hours",
   "currency_unit"        : "Cr",
-  "confidence_score"     : 50
+  "confidence_score"     : 20
 }}
 
-FIELD NOTES:
-- management_commentary: list of 2-4 direct quotes or close paraphrases from the filing/press release. Empty list [] if none found.
-- guidance: list of forward-looking statements from management. Empty list [] if none.
-- key_risks: list of risk factors mentioned. Empty list [] if none.
-- key_positives: list of positive highlights. Empty list [] if none.
-- fii/dii/promoter_holding_pct: ONLY if shareholding pattern is in this filing. Otherwise null.
-- confidence_score: integer 0-100. 100 = all financial fields extracted from PDF. 50 = partial. 20 = headline only, no PDF.
+CRITICAL: null means "not found in filing". NEVER return 0 for a number you didn't find.
+confidence_score = 90 if P&L table fully parsed. 60 if partial. 20 if no PDF text.
 """
 
 
@@ -496,14 +1004,14 @@ def _clean_json_response(raw: str) -> str:
 
 
 def _llm_post(endpoint: str, api_key: str, model: str,
-              messages: list[dict], max_tokens: int = 1024) -> str:
+              messages: list[dict], max_tokens: int = 2048) -> str:
     """POST to any OpenAI-compatible endpoint. Returns raw content string."""
     import urllib.request as _ur
     payload = json.dumps({
         "model":       model,
         "messages":    messages,
         "max_tokens":  max_tokens,
-        "temperature": 0.1,
+        "temperature": 0.05,
         "stream":      False,
     }).encode()
     req = _ur.Request(
@@ -540,29 +1048,75 @@ def _call_nim_deepseek(company: str, scrip_code: str, dt: str,
         {"role": "user",   "content": prompt},
     ]
 
-    providers = []
+    # Build provider list — each entry is (name, endpoint, key, model)
+    # Multiple model IDs per provider so a 404/403 auto-advances to the next.
+    providers: list[tuple[str, str, str, str]] = []
+
     if NVIDIA_API_KEY:
-        providers.append(("NIM",    NIM_ENDPOINT,    NVIDIA_API_KEY, NIM_MODEL))
+        nim_models = []
+        if NIM_MODEL:
+            nim_models.append(NIM_MODEL)
+        # Fallback chain — Nemotron first (best structured extraction), then Llama
+        for m in [
+            "nvidia/llama-3.1-nemotron-70b-instruct",
+            "nvidia/nemotron-4-340b-instruct",
+            "nvidia/llama-3.3-70b-instruct",
+            "meta/llama-3.1-70b-instruct",
+            "meta/llama-3.1-8b-instruct",
+        ]:
+            if m not in nim_models:
+                nim_models.append(m)
+        for m in nim_models:
+            providers.append(("NIM", NIM_ENDPOINT, NVIDIA_API_KEY, m))
+
     if GROQ_API_KEY:
-        providers.append(("Groq",   GROQ_ENDPOINT,   GROQ_API_KEY,   GROQ_MODEL))
+        groq_models = []
+        if GROQ_MODEL:
+            groq_models.append(GROQ_MODEL)
+        for m in [
+            "llama-3.3-70b-versatile",
+            "llama3-70b-8192",
+            "llama-3.1-8b-instant",
+            "mixtral-8x7b-32768",
+        ]:
+            if m not in groq_models:
+                groq_models.append(m)
+        for m in groq_models:
+            providers.append(("Groq", GROQ_ENDPOINT, GROQ_API_KEY, m))
+
     if GEMINI_API_KEY:
-        providers.append(("Gemini", GEMINI_ENDPOINT, GEMINI_API_KEY, GEMINI_MODEL))
+        for m in [GEMINI_MODEL, "gemini-2.0-flash", "gemini-1.5-flash"]:
+            if m not in [p[3] for p in providers if p[0] == "Gemini"]:
+                providers.append(("Gemini", GEMINI_ENDPOINT, GEMINI_API_KEY, m))
 
     if not providers:
         print("    No LLM key available — skipping extraction")
         return None
 
+    import urllib.error as _ue
     for name, endpoint, key, model in providers:
         print(f"    [{name}] {model}")
         try:
             raw = _llm_post(endpoint, key, model, messages)
             return json.loads(_clean_json_response(raw))
+        except _ue.HTTPError as exc:
+            body = exc.read().decode(errors="ignore")[:120] if hasattr(exc, "read") else ""
+            print(f"    [{name}] HTTP {exc.code} — {body}")
+            if exc.code in (404, 400):
+                continue   # model not found / bad request → try next model
+            if exc.code == 403:
+                continue   # key has no access to this model → try next
+            if exc.code == 429:
+                print(f"    [{name}] rate-limited — trying next provider")
+                continue
+            # 5xx server error — still try next
+            continue
         except json.JSONDecodeError as exc:
             print(f"    [{name}] JSON parse failed: {exc}")
         except Exception as exc:
             print(f"    [{name}] failed: {exc}")
 
-    print("    All LLM providers failed — skipping")
+    print("    All LLM providers/models failed — skipping")
     return None
 
 
@@ -788,26 +1342,27 @@ def _fetch_price(symbol: str) -> dict:
 
 def _build_metrics(ai: dict) -> dict:
     def _mv(q1, q2, q3, qoq, yoy):
-        return {"q1": q1 or 0, "q2": q2 or 0, "q3": q3 or 0, "qoq": qoq, "yoy": yoy}
+        # Preserve None — frontend shows "—" for null; 0 means actual zero
+        return {"q1": q1, "q2": q2, "q3": q3, "qoq": qoq, "yoy": yoy}
 
-    rev   = ai.get("revenue_cr") or 0
-    rpq   = ai.get("revenue_prev_q") or 0
-    rpy   = ai.get("revenue_prev_y") or 0
-    pat   = ai.get("pat_cr") or 0
-    ppq   = ai.get("pat_prev_q") or 0
-    ppy   = ai.get("pat_prev_y") or 0
-    eps   = ai.get("eps") or 0
-    epq   = ai.get("eps_prev_q") or 0
-    epy   = ai.get("eps_prev_y") or 0
-    op    = ai.get("op_cr")
-    opm   = ai.get("opm_pct")
-    oi    = ai.get("other_income_cr")
+    rev = ai.get("revenue_cr")
+    rpq = ai.get("revenue_prev_q")
+    rpy = ai.get("revenue_prev_y")
+    pat = ai.get("pat_cr")
+    ppq = ai.get("pat_prev_q")
+    ppy = ai.get("pat_prev_y")
+    eps = ai.get("eps")
+    epq = ai.get("eps_prev_q")
+    epy = ai.get("eps_prev_y")
+    op  = ai.get("op_cr")
+    opm = ai.get("opm_pct")
+    oi  = ai.get("other_income_cr")
 
     return {
         "sales":        _mv(rpq, rpy, rev, ai.get("revenue_qoq"), ai.get("revenue_yoy")),
-        "other_income": _mv(0, 0, oi or 0, None, None),
-        "op":           _mv(0, 0, op or 0, ai.get("op_qoq"), ai.get("op_yoy")),
-        "opm":          _mv(0, 0, opm or 0, None, None),
+        "other_income": _mv(None, None, oi, None, None),
+        "op":           _mv(None, None, op, ai.get("op_qoq"), ai.get("op_yoy")),
+        "opm":          _mv(None, None, opm, None, None),
         "pat":          _mv(ppq, ppy, pat, ai.get("pat_qoq"), ai.get("pat_yoy")),
         "eps":          _mv(epq, epy, eps, ai.get("eps_qoq"), ai.get("eps_yoy")),
     }
@@ -1270,7 +1825,7 @@ def _ensure_quarterly_watchlist(quarter: str) -> str | None:
 
 # ── Main Pipeline ─────────────────────────────────────────────────────────────
 
-MAX_PER_RUN = int(os.getenv("MAX_PER_RUN", "8"))   # keep low for 20-min cron
+MAX_PER_RUN = int(os.getenv("MAX_PER_RUN", "20"))  # 20 per run; cron handles pagination
 
 
 def main() -> None:
@@ -1278,18 +1833,39 @@ def main() -> None:
     print(f"Results Pipeline  {datetime.now(timezone.utc).isoformat()}")
     print("=" * 60)
 
+    today     = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    FROM_DATE = "2026-05-22"
+
     if not NVIDIA_API_KEY and not GROQ_API_KEY and not GEMINI_API_KEY:
         print("WARNING: No AI key set — AI extraction will fail for every filing.")
         print("         Add NVIDIA_API_KEY, GROQ_API_KEY, or GEMINI_API_KEY to GitHub secrets.")
 
-    # 1. Fetch BSE filings
-    print("\n[1] Fetching BSE filings...")
-    raw_items = _fetch_bse_filings(pages=2)
-    print(f"    Got {len(raw_items)} announcements")
+    # 1. Fetch from all three sources with date range
+    print(f"\n[1] Fetching filings (BSE + NSE + Trendlyne) {FROM_DATE} → {today}...")
+    raw_items: list[dict] = []
+
+    print("  [BSE] date-range fetch...")
+    bse_items = _fetch_bse_filings_daterange(FROM_DATE, today, max_pages=60)
+    print(f"  [BSE] {len(bse_items)} announcements")
+    raw_items.extend(bse_items)
+
+    print("  [NSE] fetching results...")
+    nse_items = _fetch_nse_results(FROM_DATE, today)
+    raw_items.extend(nse_items)
+
+    print("  [Trendlyne] fetching results...")
+    tl_items = _fetch_trendlyne_results(FROM_DATE, today)
+    raw_items.extend(tl_items)
+
+    print(f"  Combined total: {len(raw_items)}")
+
+    # HARD DATE GATE — reject any filing with DT_TM before 2026-05-01
+    raw_items = [it for it in raw_items if (it.get("DT_TM") or "")[:10] >= FROM_DATE]
+    print(f"  After date gate (>= {FROM_DATE}): {len(raw_items)}")
 
     # 2. Filter to results filings
     results_items = [it for it in raw_items if _is_results_filing(it)]
-    print(f"    {len(results_items)} match results categories")
+    print(f"  {len(results_items)} match results categories")
 
     if not results_items:
         print("    Nothing to process.")
@@ -1316,16 +1892,30 @@ def main() -> None:
     # 5. Process each new filing
     processed_count = 0
     for it, filing_id in new_items[:MAX_PER_RUN]:
+        src        = it.get("_source", "bse")
         company    = it.get("SHORT_NAME", "Unknown").title()
         scrip_code = str(it.get("SCRIP_CD", ""))
         headline   = it.get("NEWSSUB", "")
         category   = it.get("CATEGORYNAME", "Financial Results")
         dt         = it.get("DT_TM", "")
         attachment = it.get("ATTACHMENTNAME", "")
-        pdf_url    = f"https://www.bseindia.com/xml-data/corpfiling/AttachLive/{attachment}" if attachment else ""
+        exchange   = "NSE" if src == "nse" else "BSE"
 
-        symbol = _scrip_to_symbol(scrip_code, company)
-        print(f"\n  → {company} ({symbol}) | {category} | {dt[:16]}")
+        # Build PDF URL — NSE/Trendlyne items carry direct URL; BSE uses attachment name
+        if src in ("nse", "trendlyne") and it.get("_pdf_url"):
+            pdf_url = it["_pdf_url"]
+        elif attachment and not attachment.startswith(("nse_", "tl_")):
+            pdf_url = f"https://www.bseindia.com/xml-data/corpfiling/AttachLive/{attachment}"
+        else:
+            pdf_url = ""
+
+        # Symbol: NSE/Trendlyne items carry _symbol directly
+        if it.get("_symbol"):
+            symbol = it["_symbol"]
+        else:
+            symbol = _scrip_to_symbol(scrip_code, company)
+
+        print(f"\n  → [{src.upper()}] {company} ({symbol}) | {category} | {dt[:16]}")
         print(f"    Headline: {headline[:80]}")
 
         # 5a. Extract PDF text
@@ -1341,6 +1931,23 @@ def main() -> None:
         if not ai:
             print("    AI extraction failed — skipping")
             continue
+
+        # 5b2. Regex fallback — fill null fields from PDF text deterministically
+        if pdf_text:
+            ai = _merge_regex_into_ai(ai, pdf_text)
+
+        # 5b3. Final sanity filter — null any implausibly large values from LLM or regex
+        _MAX_PLAUSIBLE_CR = 50_000
+        for k in ("revenue_cr", "revenue_prev_q", "revenue_prev_y", "pat_cr", "pat_prev_q", "pat_prev_y"):
+            v = ai.get(k)
+            if v is not None and abs(v) > _MAX_PLAUSIBLE_CR:
+                ai.pop(k, None)
+        if ai.get("revenue_cr") is None:
+            ai.pop("revenue_yoy", None)
+            ai.pop("revenue_qoq", None)
+        if ai.get("pat_cr") is None:
+            ai.pop("pat_yoy", None)
+            ai.pop("pat_qoq", None)
 
         # 5c. Deterministic v2 rating (overrides AI opinion)
         rating, rating_note, score = _compute_rating(ai)
@@ -1378,7 +1985,7 @@ def main() -> None:
             "symbol":         symbol,
             "ticker":         price_data.get("ticker") or f"{symbol}.NS",
             "company":        company,
-            "exchange":       "BSE",
+            "exchange":       exchange,
             "sector":         ai_sector,
             "industry":       ai_industry,
             "quarter":        quarter,
@@ -1386,6 +1993,7 @@ def main() -> None:
             "report_time":    ai.get("report_time", "After Market Hours"),
             "rating":         rating,
             "rating_note":    rating_note,
+            "score":          score,
             "insight":        ai.get("insight", ""),
             "metrics":        metrics,
             "revenue_trend":  [rev["q1"], rev["q2"], rev["q3"]],

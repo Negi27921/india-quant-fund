@@ -1,0 +1,75 @@
+# NEO Pipeline — Cron Schedule Declarations
+# All jobs declared here. The poller process reads this on startup.
+# primary_source toggle: DATA_PRIMARY_SOURCE env var
+# trial_clock: TRIAL_STARTED_AT / TRIAL_EXPIRES_AT env vars
+
+trial:
+  started_at:  "2026-05-25T00:00:00Z"
+  expires_at:  "2026-06-01T22:00:00Z"        # Day 8, 22:00 IST
+  flip_action: "set DATA_PRIMARY_SOURCE=nse_bse"
+  flip_script: "scripts/migrations/migration_si_to_nse_primary.sh"
+
+jobs:
+
+  # ── One-shot (run once, idempotent) ────────────────────────────────────────
+  si_universe_seed:
+    script:      scripts/si_universe_seed.py
+    schedule:    one_shot
+    description: "Page /companies exhaustively, upsert dim_company (5,443 rows)"
+    expected_runtime_min: 6
+    rollback:    "DELETE FROM dim_company WHERE source='stockinsights';"
+
+  # ── Real-time streaming (long-lived process) ────────────────────────────────
+  si_realtime_poller:
+    script:      scripts/si_realtime_poller.py
+    schedule:    continuous
+    interval_s:  60
+    description: "Poll filings-feed + announcements-tagged-feed, upsert, Telegram fan-out"
+    includes:
+      - fact_filings
+      - fact_announcements_tagged
+
+  # ── Results calendar (embedded in poller, also declarable standalone) ───────
+  si_calendar_sync:
+    script:      scripts/si_realtime_poller.py   # embedded in poller
+    schedule:    "0 * * * *"                     # every hour
+    description: "Sync /results-calendar → fact_results_calendar"
+
+  # ── Fundamentals backfill (one-shot, parallelised) ─────────────────────────
+  si_fundamentals_backfill:
+    script:      scripts/si_fundamentals_backfill.py  # TODO: build next
+    schedule:    one_shot
+    description: "20 quarters + 10 annual for every company: income, BS, CF"
+    expected_runtime_min: 120
+    parallelism: 10
+
+  # ── Reconciliation job (SI.ai primary vs NSE/BSE staging) ──────────────────
+  reconciliation_job:
+    script:      scripts/reconciliation_job.py    # TODO: build next
+    schedule:    "*/30 * * * *"                   # every 30 minutes
+    description: "Diff SI.ai primary tables vs staging_* NSE/BSE tables; log to data_quality_log"
+
+  # ── NSE FII/DII (existing, kept as-is, market-wide, no SI.ai equivalent) ───
+  nse_fii_dii:
+    script:      scripts/fii_dii_fetcher.py
+    schedule:    "30 13 * * 1-5"                  # 19:00 IST Mon-Fri (market-wide, after publish)
+    description: "Download NSE FII/DII CSV → Supabase fii_dii_daily"
+
+  # ── NSE bulk/block deals (intra-day) ───────────────────────────────────────
+  nse_bulk_block:
+    script:      scripts/bulk_block_fetcher.py
+    schedule:    "*/15 3-10 * * 1-5"              # every 15m during market hours (UTC)
+    description: "NSE snapshot-capital-market-largedeal → Supabase bulk_block_deals"
+
+  # ── Daily intelligence digest ───────────────────────────────────────────────
+  daily_digest:
+    script:      scripts/daily_digest.py
+    schedule:    "15 13 * * 1-5"                  # 18:45 IST Mon-Fri
+    description: "Watchlist digest: announcements + bulk deals + calendar + FII/DII + LLM narrative"
+
+  # ── Trial expiry handoff ────────────────────────────────────────────────────
+  trial_expiry_flip:
+    script:      scripts/trial_expiry_flip.py
+    schedule:    "0 16 01 06 *"                   # 2026-06-01 22:00 IST = 16:30 UTC
+    description: "Flip DATA_PRIMARY_SOURCE to nse_bse; freeze SI.ai cache; alert"
+    one_shot:    true

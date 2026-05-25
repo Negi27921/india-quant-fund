@@ -96,27 +96,41 @@ def _get_universe_symbols() -> list[str]:
         return []
 
 def _get_universe_breadth() -> dict | None:
-    """Query stock_universe for advances/declines using stored last_price vs prev_close."""
+    """Query stock_universe for advances/declines — paginated to bypass 1000-row server cap."""
     if not (_SB_URL and _SB_KEY):
         return None
     try:
-        # Single query: fetch all active symbols with last_price and prev_close
-        headers = {**_sb_headers_mkt(), "Range": "0-2999", "Range-Unit": "items"}
-        req = _ur.Request(
-            f"{_SB_URL}/rest/v1/stock_universe"
-            "?select=last_price,prev_close"
-            "&is_active=eq.true"
-            "&last_price=gt.0",
-            headers=headers,
-        )
-        with _ur.urlopen(req, timeout=10) as r:
-            rows = json.loads(r.read())
-        # Only count rows where we have both prices (prev_close populated after migration 014)
+        all_rows: list[dict] = []
+        page_size = 1000
+        offset = 0
+        while True:
+            headers = {
+                **_sb_headers_mkt(),
+                "Range":      f"{offset}-{offset + page_size - 1}",
+                "Range-Unit": "items",
+            }
+            req = _ur.Request(
+                f"{_SB_URL}/rest/v1/stock_universe"
+                "?select=last_price,prev_close"
+                "&is_active=eq.true"
+                "&last_price=gt.0"
+                "&prev_close=not.is.null",
+                headers=headers,
+            )
+            with _ur.urlopen(req, timeout=10) as r:
+                batch = json.loads(r.read())
+            if not batch:
+                break
+            all_rows.extend(batch)
+            if len(batch) < page_size:
+                break
+            offset += page_size
+
         adv = dec = unc = counted = 0
-        for row in rows:
+        for row in all_rows:
             lp = row.get("last_price")
             pc = row.get("prev_close")
-            if lp is None or pc is None or pc == 0:
+            if not lp or not pc or pc == 0:
                 continue
             if lp > pc:
                 adv += 1
@@ -125,9 +139,9 @@ def _get_universe_breadth() -> dict | None:
             else:
                 unc += 1
             counted += 1
+
         if counted < 50:
             return None
-        from datetime import datetime
         now_ist = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%I:%M %p IST")
         return {
             "advances": adv, "declines": dec, "unchanged": unc,
@@ -2186,7 +2200,7 @@ async def get_quarterly_results(limit: int = Query(200, le=500)):
     }
     url = (
         f"{sb_url}/rest/v1/quarterly_results"
-        f"?select=*&order=report_date.desc,created_at.desc"
+        f"?select=*&report_date=gte.2026-05-01&order=report_date.desc,created_at.desc"
     )
     try:
         req = _ur.Request(url, headers=headers)
@@ -2370,20 +2384,29 @@ async def get_52w_highs(limit: int = Query(20, le=50)):
     if result:
         return result
 
-    # Last resort: yfinance fast_info per NIFTY50 ticker — works on holidays
+    # Last resort: yfinance batch download for NIFTY50 — one HTTP call, fast
     def _from_yfinance_nifty() -> list[dict]:
         try:
-            import yfinance as _yf
+            import yfinance as _yf, math as _math
+            # Single batch download: 1y of daily OHLCV for all NIFTY50 tickers
+            raw = _yf.download(
+                NIFTY50, period="1y", interval="1d",
+                auto_adjust=True, progress=False, threads=True, group_by="ticker",
+            )
             out = []
             for tkr in NIFTY50:
                 try:
-                    fi = _yf.Ticker(tkr).fast_info
-                    cmp_val  = _sf(getattr(fi, "last_price", None) or getattr(fi, "previous_close", 0))
-                    high_52  = _sf(getattr(fi, "year_high", 0))
-                    prev_cls = _sf(getattr(fi, "previous_close", 0))
-                    if not cmp_val or not high_52:
+                    df = raw[tkr] if len(NIFTY50) > 1 else raw
+                    df = df.dropna(subset=["Close"])
+                    if len(df) < 2:
                         continue
-                    if cmp_val >= high_52 * 0.95:  # within 5% of 52W high
+                    # Last-trade logic: use last close as current price proxy
+                    cmp_val  = float(df["Close"].iloc[-1])
+                    prev_cls = float(df["Close"].iloc[-2])
+                    high_52  = float(df["High"].max())  # true 52W high from price history
+                    if _math.isnan(cmp_val) or cmp_val <= 0 or high_52 <= 0:
+                        continue
+                    if cmp_val >= high_52 * 0.95:   # within 5% of 52W high
                         chg = (cmp_val - prev_cls) / prev_cls * 100 if prev_cls else 0
                         sym = tkr.replace(".NS", "")
                         out.append({
