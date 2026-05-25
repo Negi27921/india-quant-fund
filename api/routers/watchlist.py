@@ -326,13 +326,45 @@ def _build_stock_context(symbol: str) -> str:
     lines: list[str] = [f"=== STOCK: {symbol} ==="]
     sym = symbol.upper()
 
-    # 1. screener.in fundamentals
+    # 1. screener.in fundamentals — live scrape first, cached DB fallback
     try:
         sc = _screener_quick(sym)
         if sc:
-            lines.append("\n--- FUNDAMENTALS (screener.in) ---")
+            lines.append("\n--- FUNDAMENTALS (screener.in live) ---")
             for k, v in sc.items():
                 lines.append(f"{k}: {v}")
+        else:
+            # Fall back to fact_screener_fundamentals if scrape timed out / failed
+            sdb_rows = _sb_get(
+                f"fact_screener_fundamentals?ticker=eq.{sym}&select=market_cap_cr,current_price,"
+                f"pe_ratio,book_value,eps_ttm,dividend_yield_pct,roce_pct,roe_pct,"
+                f"debt_to_equity,current_ratio,sales_ttm_cr,profit_ttm_cr,"
+                f"promoter_pct,promoter_pledge_pct,fii_pct,dii_pct,public_pct,scraped_at&limit=1"
+            )
+            if isinstance(sdb_rows, list) and sdb_rows:
+                sf = sdb_rows[0]
+                lines.append(f"\n--- FUNDAMENTALS (cached {str(sf.get('scraped_at',''))[:10]}) ---")
+                for label, key, unit in [
+                    ("Market Cap",      "market_cap_cr",      "Cr"),
+                    ("Price",           "current_price",      "₹"),
+                    ("P/E",             "pe_ratio",           "x"),
+                    ("Book Value",      "book_value",         "₹"),
+                    ("EPS TTM",         "eps_ttm",            "₹"),
+                    ("Dividend Yield",  "dividend_yield_pct", "%"),
+                    ("ROCE",            "roce_pct",           "%"),
+                    ("ROE",             "roe_pct",            "%"),
+                    ("Debt/Equity",     "debt_to_equity",     "x"),
+                    ("Current Ratio",   "current_ratio",      "x"),
+                    ("Sales TTM",       "sales_ttm_cr",       "Cr"),
+                    ("Profit TTM",      "profit_ttm_cr",      "Cr"),
+                    ("Promoter %",      "promoter_pct",       "%"),
+                    ("Promoter Pledge", "promoter_pledge_pct","%"),
+                    ("FII %",           "fii_pct",            "%"),
+                    ("DII %",           "dii_pct",            "%"),
+                ]:
+                    val = sf.get(key)
+                    if val is not None:
+                        lines.append(f"{label}: {val} {unit}")
     except Exception:
         pass
 

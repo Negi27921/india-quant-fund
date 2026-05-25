@@ -48,6 +48,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger("neo_poller")
 
+# Suppress yfinance "possibly delisted" noise — expected for large NSE universe
+logging.getLogger("yfinance").setLevel(logging.ERROR)
+logging.getLogger("yfinance.base").setLevel(logging.ERROR)
+logging.getLogger("peewee").setLevel(logging.WARNING)
+
 _THREAD_POOL = ThreadPoolExecutor(max_workers=8)
 
 
@@ -247,6 +252,10 @@ async def _upsert_filings(si, sb, seen: set, fundamentals_queue: asyncio.Queue) 
 
 async def _fetch_and_store_fundamentals(si, sb, ticker: str) -> int:
     """Fetch income statement + balance sheet + cash flow for one ticker."""
+    global _SI_QUOTA_EXHAUSTED
+    if _SI_QUOTA_EXHAUSTED:
+        return 0
+
     stored = 0
     # Find company_id
     try:
@@ -260,6 +269,13 @@ async def _fetch_and_store_fundamentals(si, sb, ticker: str) -> int:
             # Get results calendar to know which periods to fetch
             try:
                 cal, _ = await si.get_results_calendar(ticker=ticker, limit=8)
+            except SIFatalError as e:
+                if "rate_limited" in str(e) or "429" in str(e):
+                    _SI_QUOTA_EXHAUSTED = True
+                    logger.critical("[fund/%s] SI.ai quota exhausted — halting fundamentals stream. Upgrade at stockinsights.ai", ticker)
+                    return stored
+                logger.warning("[fund/%s] calendar error: %s", ticker, e)
+                cal = []
             except Exception as e:
                 logger.warning("[fund/%s] calendar error: %s", ticker, e)
                 cal = []
@@ -361,6 +377,12 @@ async def _stream_fundamentals(si, sb, queue: asyncio.Queue, backfill_tickers: l
 
     import time
     while True:
+        # Bail out entirely when quota is gone — sleep an hour then re-check
+        if _SI_QUOTA_EXHAUSTED:
+            logger.debug("[fund] quota exhausted, sleeping 3600s")
+            await asyncio.sleep(3600)
+            continue
+
         # 1. Drain triggered queue first (priority)
         try:
             ticker = queue.get_nowait()
@@ -399,7 +421,12 @@ async def _stream_fundamentals(si, sb, queue: asyncio.Queue, backfill_tickers: l
 # ---------------------------------------------------------------------------
 
 async def _stream_calendar(si, sb) -> None:
+    global _SI_QUOTA_EXHAUSTED
     while True:
+        if _SI_QUOTA_EXHAUSTED:
+            logger.debug("[calendar] quota exhausted, sleeping 3600s")
+            await asyncio.sleep(3600)
+            continue
         try:
             rows = []
             page = 1
@@ -431,6 +458,12 @@ async def _stream_calendar(si, sb) -> None:
                 ).execute()
                 logger.info("[calendar] synced %d entries", len(rows))
                 _log_job(sb, "si_calendar_sync", len(rows), len(rows), "success")
+        except SIFatalError as e:
+            if "rate_limited" in str(e) or "429" in str(e):
+                _SI_QUOTA_EXHAUSTED = True
+                logger.critical("[calendar] SI.ai quota exhausted — halting calendar stream.")
+            else:
+                logger.error("[calendar] error: %s", e)
         except Exception as e:
             logger.error("[calendar] error: %s", e)
 

@@ -149,6 +149,16 @@ def _get_supabase_context(symbol: str) -> dict[str, Any]:
         if cal.data:
             ctx["calendar"] = cal.data
 
+        # 5. Screener.in fundamentals cache (populated by screener_scraper.py)
+        sf = sb.table("fact_screener_fundamentals").select(
+            "market_cap_cr,current_price,pe_ratio,book_value,face_value,eps_ttm,"
+            "dividend_yield_pct,roce_pct,roe_pct,debt_to_equity,current_ratio,"
+            "sales_ttm_cr,profit_ttm_cr,promoter_pct,fii_pct,dii_pct,public_pct,"
+            "promoter_pledge_pct,scraped_at"
+        ).eq("ticker", symbol).limit(1).execute()
+        if sf.data:
+            ctx["screener_db"] = sf.data[0]
+
         return ctx
     except Exception:
         return {}
@@ -170,11 +180,37 @@ def _build_context_prompt(symbol: str, screener: dict, supabase: dict) -> str:
         if co.get("market_cap_inr_cr"):
             parts.append(f"Market Cap: ₹{co['market_cap_inr_cr']:,.0f} Cr")
 
-    # Screener fundamentals
+    # Screener fundamentals — prefer live scrape; fall back to cached DB row
+    sdb = supabase.get("screener_db", {})
     if screener:
-        parts.append("\n--- FUNDAMENTALS (screener.in) ---")
+        parts.append("\n--- FUNDAMENTALS (screener.in live) ---")
         for k, v in screener.items():
             parts.append(f"{k}: {v}")
+    elif sdb:
+        parts.append(f"\n--- FUNDAMENTALS (screener.in cached {str(sdb.get('scraped_at',''))[:10]}) ---")
+        mapping = {
+            "Market Cap":      ("market_cap_cr",      "Cr"),
+            "Price":           ("current_price",       "₹"),
+            "P/E":             ("pe_ratio",            "x"),
+            "Book Value":      ("book_value",          "₹"),
+            "EPS (TTM)":       ("eps_ttm",             "₹"),
+            "Dividend Yield":  ("dividend_yield_pct",  "%"),
+            "ROCE":            ("roce_pct",            "%"),
+            "ROE":             ("roe_pct",             "%"),
+            "Debt/Equity":     ("debt_to_equity",      "x"),
+            "Current Ratio":   ("current_ratio",       "x"),
+            "Sales TTM":       ("sales_ttm_cr",        "Cr"),
+            "Profit TTM":      ("profit_ttm_cr",       "Cr"),
+            "Promoter %":      ("promoter_pct",        "%"),
+            "Promoter Pledge": ("promoter_pledge_pct", "%"),
+            "FII %":           ("fii_pct",             "%"),
+            "DII %":           ("dii_pct",             "%"),
+            "Public %":        ("public_pct",          "%"),
+        }
+        for label, (key, unit) in mapping.items():
+            val = sdb.get(key)
+            if val is not None:
+                parts.append(f"{label}: {val} {unit}")
 
     # Technicals
     tech = supabase.get("technicals", {})

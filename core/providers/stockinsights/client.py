@@ -156,7 +156,14 @@ class SIClient:
         async def _do() -> Any:
             http = await self._get_http()
             r = await http.request(method, url, **kwargs)
-            if r.status_code in (429, 503, 502):
+            if r.status_code == 429:
+                # Monthly quota exhausted — retrying is futile, fail fast
+                if "rate_limited" in r.text or "free_trial" in r.text:
+                    _inc("si.quota_exhausted")
+                    raise SIFatalError(f"SI HTTP 429 rate_limited: {r.text[:300]}")
+                _inc("si.retryable_errors")
+                raise SIRetryableError(r.status_code, r.text)
+            if r.status_code in (503, 502):
                 _inc("si.retryable_errors")
                 raise SIRetryableError(r.status_code, r.text)
             if r.status_code >= 400:
