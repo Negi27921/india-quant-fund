@@ -166,23 +166,6 @@ function SectionHead({ title }: { title: string }) {
   );
 }
 
-function ShareBar({ label, value, color }: { label: string; value: number | null | undefined; color: string }) {
-  const v = value ?? 0;
-  return (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-        <span style={{ fontSize: 11, color: C.text3 }}>{label}</span>
-        <span style={{ fontSize: 11, fontWeight: 700, color, fontFamily: "var(--font-mono)" }}>
-          {v > 0 ? `${v.toFixed(1)}%` : "—"}
-        </span>
-      </div>
-      <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.07)", overflow: "hidden" }}>
-        <div style={{ height: "100%", width: `${Math.min(v, 100)}%`, background: color, borderRadius: 2, transition: "width 0.6s ease" }} />
-      </div>
-    </div>
-  );
-}
-
 function RsiGauge({ value }: { value: number | null }) {
   if (value === null) return <span style={{ fontSize: 12, color: C.text3 }}>—</span>;
   const pct = (value / 100) * 100;
@@ -325,7 +308,7 @@ function FundamentalsPanel({ symbol }: { symbol: string }) {
 
 // ── Technical panel ────────────────────────────────────────────────────────────
 
-function TechnicalPanel({ yfTicker, symbol }: { yfTicker: string; symbol: string }) {
+function TechnicalPanel({ yfTicker }: { yfTicker: string; symbol: string }) {
   const { data: bars, isLoading } = useQuery<OHLCBar[]>({
     queryKey: ["chart-ohlcv", yfTicker, "1y", "1d"],
     queryFn: () => api.get<OHLCBar[]>(`/market/history/${encodeURIComponent(yfTicker)}?period=1y&interval=1d`),
