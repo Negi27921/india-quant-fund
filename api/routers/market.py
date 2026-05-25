@@ -2301,7 +2301,161 @@ async def get_fundamentals(symbol: str):
     result = await asyncio.wait_for(loop.run_in_executor(_executor, _fetch), timeout=18.0)
     if "error" not in result:
         _FUND_CACHE[clean] = (now, result)
+
+    # Merge screener.in DB cache: ROCE, shareholding, promoter pledge (yFinance lacks these)
+    try:
+        scr = await _get_screener_row(clean)
+        if scr:
+            if "error" in result:
+                result = {
+                    "symbol":  clean,
+                    "company": clean,
+                    "sector":  "",
+                    "industry": "",
+                    "market_cap_cr": scr.get("market_cap_cr") or 0,
+                    "cmp":           scr.get("current_price")  or 0,
+                    "pe":            scr.get("pe_ratio")        or 0,
+                    "forward_pe":    0,
+                    "pb":            0,
+                    "ev_ebitda":     0,
+                    "eps_ttm":       scr.get("eps_ttm")        or 0,
+                    "eps_forward":   0,
+                    "roe":           scr.get("roe_pct")        or 0,
+                    "roa":           0,
+                    "profit_margin": 0,
+                    "op_margin":     0,
+                    "revenue_growth": 0,
+                    "earnings_growth": 0,
+                    "debt_to_equity":  scr.get("debt_to_equity")  or 0,
+                    "current_ratio":   scr.get("current_ratio")   or 0,
+                    "book_value":      scr.get("book_value")       or 0,
+                    "dividend_yield":  scr.get("dividend_yield_pct") or 0,
+                    "beta":            0,
+                    "week_high_52":    scr.get("high_52w")         or 0,
+                    "week_low_52":     scr.get("low_52w")          or 0,
+                    "shares_cr":       0,
+                    "float_cr":        0,
+                    "source":          "screener_db",
+                }
+            # Always overlay screener-exclusive fields
+            result["roce"]             = scr.get("roce_pct")
+            result["promoter_pct"]     = scr.get("promoter_pct")
+            result["promoter_pledge_pct"] = scr.get("promoter_pledge_pct")
+            result["fii_pct"]          = scr.get("fii_pct")
+            result["dii_pct"]          = scr.get("dii_pct")
+            result["public_pct"]       = scr.get("public_pct")
+            result["sales_ttm_cr"]     = scr.get("sales_ttm_cr")
+            result["profit_ttm_cr"]    = scr.get("profit_ttm_cr")
+            result["screener_url"]     = scr.get("screener_url")
+            result["screener_scraped_at"] = str(scr.get("scraped_at", ""))[:10]
+            # Fill blanks in yFinance fields with screener values
+            if not result.get("pe")     : result["pe"]      = scr.get("pe_ratio")  or 0
+            if not result.get("roe")    : result["roe"]     = scr.get("roe_pct")   or 0
+            if not result.get("market_cap_cr"): result["market_cap_cr"] = scr.get("market_cap_cr") or 0
+    except Exception as _e:
+        pass  # screener merge is best-effort
+
     return result
+
+
+async def _get_screener_row(clean_symbol: str) -> dict | None:
+    """Fetch one row from fact_screener_fundamentals (anon key read is fine)."""
+    if not (_SB_URL and _SB_KEY):
+        return None
+    url = (
+        f"{_SB_URL}/rest/v1/fact_screener_fundamentals"
+        f"?ticker=eq.{clean_symbol}&limit=1&select=*"
+    )
+    try:
+        req  = _ur.Request(url, headers=_sb_headers_mkt())
+        with _ur.urlopen(req, timeout=8) as resp:
+            rows = json.loads(resp.read())
+        return rows[0] if rows else None
+    except Exception:
+        return None
+
+
+# ── Universe sync (screener → dim_company) ───────────────────────────────────
+
+@router.post("/universe/sync")
+async def universe_sync(dry_run: bool = Query(False)):
+    """
+    Promote stocks from fact_screener_fundamentals into dim_company if missing.
+    Runs universe expansion without a DB migration — call once after each scrape.
+    """
+    svc_key = _os.getenv("SUPABASE_SERVICE_KEY", "").strip()
+    if not svc_key:
+        raise HTTPException(503, "SUPABASE_SERVICE_KEY not set — cannot write dim_company")
+
+    # 1. All tickers in screener cache
+    scr_url  = f"{_SB_URL}/rest/v1/fact_screener_fundamentals?select=ticker,company_id,market_cap_cr,current_price&limit=10000"
+    scr_rows = await _sb_get_all(scr_url, _sb_headers_mkt())
+
+    # 2. All company_ids already in dim_company
+    dim_url  = f"{_SB_URL}/rest/v1/dim_company?select=company_id,ticker&limit=10000"
+    dim_rows = await _sb_get_all(dim_url, _sb_headers_mkt())
+    existing_tickers = {r["ticker"] for r in dim_rows if r.get("ticker")}
+
+    new_rows = []
+    for r in scr_rows:
+        t = (r.get("ticker") or "").strip().upper()
+        if not t or t in existing_tickers:
+            continue
+        new_rows.append({
+            "company_id":         t,
+            "ticker":             t,
+            "company_name":       t,
+            "exchange":           "NSE",
+            "market_cap_inr_cr":  r.get("market_cap_cr"),
+            "current_price_inr":  r.get("current_price"),
+            "is_active":          True,
+        })
+
+    if not new_rows:
+        return {"added": 0, "message": "Universe already up-to-date"}
+
+    if dry_run:
+        return {"added": len(new_rows), "dry_run": True, "sample": new_rows[:5]}
+
+    # Write with service key
+    write_headers = {
+        "apikey":        svc_key,
+        "Authorization": f"Bearer {svc_key}",
+        "Content-Type":  "application/json",
+        "Prefer":        "resolution=ignore-duplicates,return=minimal",
+    }
+    BATCH = 200
+    added = 0
+    for i in range(0, len(new_rows), BATCH):
+        chunk = new_rows[i : i + BATCH]
+        body  = json.dumps(chunk).encode()
+        req   = _ur.Request(
+            f"{_SB_URL}/rest/v1/dim_company",
+            data=body, headers=write_headers, method="POST",
+        )
+        with _ur.urlopen(req, timeout=20) as resp:
+            resp.read()
+        added += len(chunk)
+
+    return {"added": added, "message": f"Expanded universe by {added} stocks"}
+
+
+async def _sb_get_all(url: str, headers: dict) -> list[dict]:
+    """Paginate through a Supabase REST endpoint, 1000 rows at a time."""
+    results: list[dict] = []
+    offset = 0
+    while True:
+        paged = f"{url}&offset={offset}&limit=1000"
+        req = _ur.Request(paged, headers=headers)
+        with _ur.urlopen(req, timeout=15) as resp:
+            rows = json.loads(resp.read())
+        if not isinstance(rows, list) or not rows:
+            break
+        results.extend(rows)
+        if len(rows) < 1000:
+            break
+        offset += 1000
+    return results
 
 
 # ── 52-Week Highs ─────────────────────────────────────────────────────────────

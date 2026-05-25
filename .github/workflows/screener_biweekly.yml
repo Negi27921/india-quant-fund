@@ -1,0 +1,87 @@
+name: Screener.in Biweekly Refresh
+
+on:
+  schedule:
+    # 1st and 15th of each month at 03:00 UTC (8:30 AM IST) — before market open
+    - cron: "0 3 1,15 * *"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Re-scrape rows older than N days"
+        default: "14"
+        required: false
+      priority_only:
+        description: "Only re-scrape LLM-flagged priority stocks"
+        type: boolean
+        default: false
+      reset:
+        description: "Re-scrape ALL stocks (full refresh)"
+        type: boolean
+        default: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180   # full 5k run takes ~2.3h
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-screener-${{ hashFiles('requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-screener-
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run LLM-guided screener refresh
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ANTHROPIC_API_KEY:    ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          DAYS="${{ github.event.inputs.days || '14' }}"
+          PRIORITY_FLAG="${{ github.event.inputs.priority_only == 'true' && '--priority-only' || '' }}"
+          RESET_FLAG="${{ github.event.inputs.reset == 'true' && '--reset' || '' }}"
+          python3 scripts/screener_refresh.py --days "$DAYS" $PRIORITY_FLAG $RESET_FLAG
+
+      - name: Sync universe (expand dim_company)
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          python3 - <<'EOF'
+          import os, sys
+          sys.path.insert(0, ".")
+          from dotenv import load_dotenv; load_dotenv()
+          from supabase import create_client
+
+          url = os.getenv("SUPABASE_URL","").strip().rstrip("/")
+          key = os.getenv("SUPABASE_SERVICE_KEY","").strip()
+          sb  = create_client(url, key)
+
+          scr = sb.table("fact_screener_fundamentals").select("ticker,market_cap_cr,current_price").execute().data or []
+          dim = sb.table("dim_company").select("ticker").execute().data or []
+          existing = {r["ticker"] for r in dim if r.get("ticker")}
+          scr_map  = {r["ticker"]: r for r in scr}
+
+          new_rows = [
+            {"company_id": t, "ticker": t, "company_name": t, "exchange": "NSE",
+             "market_cap_inr_cr": scr_map[t].get("market_cap_cr"),
+             "current_price_inr": scr_map[t].get("current_price"), "is_active": True}
+            for t in sorted(set(scr_map) - existing)
+          ]
+          if not new_rows:
+              print("Universe already complete.")
+          else:
+              for i in range(0, len(new_rows), 200):
+                  sb.table("dim_company").upsert(new_rows[i:i+200], on_conflict="ticker", ignore_duplicates=True).execute()
+              print(f"Universe expanded by {len(new_rows)} stocks.")
+          EOF

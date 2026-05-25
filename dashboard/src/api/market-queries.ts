@@ -434,8 +434,20 @@ export interface StockFundamentals {
   week_low_52:    number;
   shares_cr:      number;
   float_cr:       number;
-  ticker_used?:   string;
-  error?:         string;
+  // Screener.in exclusive fields (merged from fact_screener_fundamentals)
+  roce?:                 number | null;
+  promoter_pct?:         number | null;
+  promoter_pledge_pct?:  number | null;
+  fii_pct?:              number | null;
+  dii_pct?:              number | null;
+  public_pct?:           number | null;
+  sales_ttm_cr?:         number | null;
+  profit_ttm_cr?:        number | null;
+  screener_url?:         string;
+  screener_scraped_at?:  string;
+  source?:               string;
+  ticker_used?:          string;
+  error?:                string;
 }
 
 export const useStockFundamentals = (symbol: string) =>

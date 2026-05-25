@@ -166,6 +166,30 @@ function SectionHead({ title }: { title: string }) {
   );
 }
 
+function ShareBar({ label, value, color, pledge }: { label: string; value: number | null | undefined; color: string; pledge?: number | null }) {
+  const v = value ?? 0;
+  return (
+    <div style={{ marginBottom: 9 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+        <span style={{ fontSize: 11, color: C.text3 }}>{label}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {pledge != null && pledge > 0 && (
+            <span style={{ fontSize: 9.5, color: C.red, background: "rgba(239,68,68,0.12)", padding: "1px 5px", borderRadius: 3 }}>
+              {pledge.toFixed(1)}% pledged
+            </span>
+          )}
+          <span style={{ fontSize: 11, fontWeight: 700, color, fontFamily: "var(--font-mono)" }}>
+            {v > 0 ? `${v.toFixed(2)}%` : "—"}
+          </span>
+        </div>
+      </div>
+      <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.07)", overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${Math.min(v, 100)}%`, background: color, borderRadius: 2, transition: "width 0.6s ease" }} />
+      </div>
+    </div>
+  );
+}
+
 function RsiGauge({ value }: { value: number | null }) {
   if (value === null) return <span style={{ fontSize: 12, color: C.text3 }}>—</span>;
   const pct = (value / 100) * 100;
@@ -285,9 +309,12 @@ function FundamentalsPanel({ symbol }: { symbol: string }) {
 
       <SectionHead title="Profitability" />
       <FRow label="ROE"             value={pct(f.roe)}           positive={(f.roe ?? 0) > 0} />
+      {f.roce != null && <FRow label="ROCE" value={pct(f.roce)} positive={(f.roce ?? 0) > 15} negative={(f.roce ?? 0) < 0} highlight />}
       <FRow label="ROA"             value={pct(f.roa)}           positive={(f.roa ?? 0) > 0} />
       <FRow label="Operating Margin" value={pct(f.op_margin)} />
       <FRow label="Net Margin"      value={pct(f.profit_margin)} />
+      {f.sales_ttm_cr   != null && <FRow label="Sales TTM"   value={`₹${(f.sales_ttm_cr).toFixed(0)} Cr`} />}
+      {f.profit_ttm_cr  != null && <FRow label="Profit TTM"  value={`₹${(f.profit_ttm_cr).toFixed(0)} Cr`} positive={(f.profit_ttm_cr ?? 0) > 0} />}
 
       <SectionHead title="Growth (YoY)" />
       <FRow label="Revenue Growth"  value={pct(f.revenue_growth)}   positive={(f.revenue_growth ?? 0) > 0}  negative={(f.revenue_growth ?? 0) < -5} />
@@ -299,8 +326,27 @@ function FundamentalsPanel({ symbol }: { symbol: string }) {
       <FRow label="Book Value"     value={`₹${fmt(f.book_value)}`} />
       <FRow label="Shares"         value={f.shares_cr ? `${f.shares_cr.toFixed(2)} Cr` : na} />
 
+      {(f.promoter_pct != null || f.fii_pct != null) && (
+        <>
+          <SectionHead title="Shareholding Pattern" />
+          <ShareBar label="Promoters"  value={f.promoter_pct}  color={C.accent}  pledge={f.promoter_pledge_pct} />
+          <ShareBar label="FII / FPI"  value={f.fii_pct}       color="#818cf8" />
+          <ShareBar label="DII"        value={f.dii_pct}        color={C.amber} />
+          <ShareBar label="Public"     value={f.public_pct}     color={C.text3} />
+          {f.screener_scraped_at && (
+            <div style={{ fontSize: 9.5, color: C.text4, marginTop: 4 }}>
+              Shareholding as of screener.in scrape · {f.screener_scraped_at}
+            </div>
+          )}
+        </>
+      )}
+
       <div style={{ marginTop: 16, padding: "8px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 6, border: `1px solid ${C.border2}` }}>
-        <div style={{ fontSize: 9.5, color: C.text4 }}>Source: yFinance · updated every 6h · ⚠ not SEBI-registered advice</div>
+        <div style={{ fontSize: 9.5, color: C.text4 }}>
+          Source: {f.source === "screener_db" ? "screener.in cache" : "yFinance"} + screener.in
+          {f.screener_url && <> · <a href={f.screener_url} target="_blank" rel="noreferrer" style={{ color: C.accent }}>screener.in ↗</a></>}
+          {" "}· ⚠ not SEBI-registered advice
+        </div>
       </div>
     </div>
   );
