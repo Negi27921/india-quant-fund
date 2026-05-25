@@ -268,14 +268,36 @@ def _fetch_trendlyne_results(from_date: str, to_date: str) -> list[dict]:
         )
         data = None
         try:
-            import requests as _rq
-            resp = _rq.get(url, headers=_TRENDLYNE_HEADERS, timeout=15)
+            # Use curl_cffi for Chrome TLS impersonation (bypasses CF on Trendlyne)
+            import curl_cffi.requests as _cf
+            _tl_sess = _cf.Session(impersonate="chrome124")
+            resp = _tl_sess.get(url, headers=_TRENDLYNE_HEADERS, timeout=15)
             if resp.status_code == 200:
-                data = resp.json()
+                ct = resp.headers.get("content-type", "")
+                if "json" in ct or resp.text.strip().startswith(("{", "[")):
+                    data = resp.json()
+                else:
+                    print(f"  [Trendlyne] HTML response (blocked) on p{page}")
+                    break
             elif resp.status_code == 404:
                 break
             else:
                 print(f"  [Trendlyne] HTTP {resp.status_code} on p{page}")
+                break
+        except ImportError:
+            # curl_cffi not available — fall back to plain requests
+            try:
+                import requests as _rq
+                resp = _rq.get(url, headers=_TRENDLYNE_HEADERS, timeout=15)
+                if resp.status_code == 200:
+                    data = resp.json()
+                elif resp.status_code == 404:
+                    break
+                else:
+                    print(f"  [Trendlyne] HTTP {resp.status_code} on p{page}")
+                    break
+            except Exception as exc:
+                print(f"  [Trendlyne] p{page} failed: {exc}")
                 break
         except Exception as exc:
             print(f"  [Trendlyne] p{page} failed: {exc}")
@@ -559,24 +581,35 @@ def _extract_pdf_text(pdf_url: str, max_chars: int = 12000) -> str:
         return ""
 
     # Download — handle both BSE and NSE domains
+    is_bse = "bseindia" in pdf_url
     referer = "https://www.nseindia.com/" if "nseindia" in pdf_url else "https://www.bseindia.com/"
-    headers = {
+    dl_headers = {
         "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         ),
         "Referer": referer,
-        "Accept":  "application/pdf,*/*",
+        "Accept":  "application/pdf,application/octet-stream,*/*",
     }
     pdf_bytes = b""
-    try:
-        req = urllib.request.Request(pdf_url, headers=headers)
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            pdf_bytes = resp.read()
-    except Exception as exc:
-        print(f"  [PDF] download failed: {exc}")
-        return ""
+
+    if is_bse:
+        # BSE PDFs: use curl_cffi + BSE scraper session for proper cookies
+        try:
+            from scripts.bse_scraper import get_bse_scraper
+            bse_sc = get_bse_scraper()
+            pdf_bytes = bse_sc.download_pdf(pdf_url) or b""
+        except Exception as _bse_err:
+            print(f"  [PDF] BSE scraper download failed ({_bse_err}), trying urllib")
+
+    if not pdf_bytes:
+        try:
+            req = urllib.request.Request(pdf_url, headers=dl_headers)
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                pdf_bytes = resp.read()
+        except Exception as exc:
+            print(f"  [PDF] download failed: {exc}")
+            return ""
 
     if not pdf_bytes:
         return ""
@@ -1028,11 +1061,50 @@ def _llm_post(endpoint: str, api_key: str, model: str,
         return json.loads(resp.read())["choices"][0]["message"]["content"]
 
 
+class _OllamaModelCrashed(Exception):
+    """Raised when OLLAMA returns 500 — model runner OOM/crash, don't retry."""
+
+
+def _call_ollama(messages: list[dict], model: str = "llama3.2") -> str | None:
+    """
+    Call local OLLAMA server (localhost:11434).
+    Returns raw content string or None if OLLAMA is unavailable.
+    Raises _OllamaModelCrashed on HTTP 500 (model OOM on low-RAM machines).
+    """
+    import urllib.request as _ur
+    import urllib.error as _ue
+    import json as _json
+    payload = _json.dumps({
+        "model":    model,
+        "messages": messages,
+        "stream":   False,
+        "options":  {"temperature": 0.05, "num_predict": 2048},
+    }).encode()
+    req = _ur.Request(
+        "http://localhost:11434/api/chat",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with _ur.urlopen(req, timeout=120) as resp:
+            data = _json.loads(resp.read())
+            return data.get("message", {}).get("content", "")
+    except _ue.HTTPError as exc:
+        if exc.code == 500:
+            raise _OllamaModelCrashed(f"model={model} OOM/crash (HTTP 500)") from exc
+        print(f"    [OLLAMA] HTTP {exc.code}: {exc}")
+        return None
+    except Exception as exc:
+        print(f"    [OLLAMA] {exc}")
+        return None
+
+
 def _call_nim_deepseek(company: str, scrip_code: str, dt: str,
                         category: str, headline: str, pdf_text: str) -> dict | None:
     """
     Extract structured financial results JSON from a filing.
-    Tries NVIDIA NIM → Groq → Gemini in order.
+    Tries NVIDIA NIM → Groq → Gemini → OLLAMA (local) in order.
     Returns parsed dict or None if all providers fail.
     """
     pdf_section = (
@@ -1115,6 +1187,21 @@ def _call_nim_deepseek(company: str, scrip_code: str, dt: str,
             print(f"    [{name}] JSON parse failed: {exc}")
         except Exception as exc:
             print(f"    [{name}] failed: {exc}")
+
+    # Last resort: local OLLAMA (llama3.2:latest, 2GB — fits in 8GB RAM)
+    # 7B+ models (deepseek-r1:7b, llama3.1:8b) crash the runner on this machine
+    print("    [OLLAMA] llama3.2")
+    try:
+        raw = _call_ollama(messages, model="llama3.2")
+        if raw:
+            raw = _clean_json_response(raw)
+            return json.loads(raw)
+    except _OllamaModelCrashed as exc:
+        print(f"    [OLLAMA] {exc} — skipping")
+    except json.JSONDecodeError as exc:
+        print(f"    [OLLAMA] JSON parse failed: {exc}")
+    except Exception as exc:
+        print(f"    [OLLAMA] error: {exc}")
 
     print("    All LLM providers/models failed — skipping")
     return None
@@ -1844,10 +1931,19 @@ def main() -> None:
     print(f"\n[1] Fetching filings (BSE + NSE + Trendlyne) {FROM_DATE} → {today}...")
     raw_items: list[dict] = []
 
-    print("  [BSE] date-range fetch...")
-    bse_items = _fetch_bse_filings_daterange(FROM_DATE, today, max_pages=60)
-    print(f"  [BSE] {len(bse_items)} announcements")
-    raw_items.extend(bse_items)
+    # BSE: uses curl_cffi Chrome impersonation + pagination (real-time, today only)
+    print("  [BSE] scraper (curl_cffi)...")
+    try:
+        from scripts.bse_scraper import fetch_bse_results as _fetch_bse
+        bse_items = _fetch_bse(FROM_DATE, today)
+        print(f"  [BSE] {len(bse_items)} financial results")
+        raw_items.extend(bse_items)
+    except Exception as _bse_err:
+        print(f"  [BSE] scraper error: {_bse_err}")
+        # Legacy fallback
+        bse_items = _fetch_bse_filings_daterange(FROM_DATE, today, max_pages=60)
+        print(f"  [BSE-legacy] {len(bse_items)} announcements")
+        raw_items.extend(bse_items)
 
     print("  [NSE] fetching results...")
     nse_items = _fetch_nse_results(FROM_DATE, today)

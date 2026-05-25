@@ -16,6 +16,15 @@ numpy>=1.26.0
 beautifulsoup4>=4.12.0
 lxml>=5.2.0
 
+# BSE scraping (Cloudflare bypass via Chrome TLS impersonation)
+curl_cffi>=0.7.0
+
+# Local LLM fallback (OLLAMA)
+ollama>=0.3.0
+
+# Headless browser (BSE session refresh fallback)
+playwright>=1.40.0
+
 # Supabase cloud database
 supabase>=2.4.0
 
