@@ -43,5 +43,6 @@ CREATE INDEX IF NOT EXISTS fsf_roe_idx         ON fact_screener_fundamentals (ro
 
 -- RLS: anon read
 ALTER TABLE fact_screener_fundamentals ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "anon_read_screener_fundamentals" ON fact_screener_fundamentals;
 CREATE POLICY "anon_read_screener_fundamentals"
     ON fact_screener_fundamentals FOR SELECT TO anon USING (true);

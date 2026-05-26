@@ -41,9 +41,10 @@ CREATE INDEX IF NOT EXISTS fme_triggered_at_idx  ON fact_market_events (triggere
 CREATE INDEX IF NOT EXISTS fme_severity_idx      ON fact_market_events (severity, triggered_at DESC)
     WHERE severity IN ('WARN', 'ALERT');
 
--- Dedupe guard: one event per (type, symbol) per calendar day
+-- Dedupe guard: one event per (type, symbol) per calendar day (UTC)
+-- DATE(timestamptz) is not IMMUTABLE; use explicit UTC cast instead
 CREATE UNIQUE INDEX IF NOT EXISTS fme_daily_dedup_idx
-    ON fact_market_events (event_type, symbol, DATE(triggered_at));
+    ON fact_market_events (event_type, symbol, ((triggered_at AT TIME ZONE 'UTC')::date));
 
 -- RLS
 ALTER TABLE fact_market_events ENABLE ROW LEVEL SECURITY;

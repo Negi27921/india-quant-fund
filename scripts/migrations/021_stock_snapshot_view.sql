@@ -20,7 +20,7 @@ SELECT
     -- ── Identity ────────────────────────────────────────────────────────────
     dc.ticker                                       AS symbol,
     dc.company_name,
-    dc.exchange,
+    COALESCE(mr.exchange, 'NSE')                    AS exchange,
     dc.sector,
     dc.industry,
     dc.basic_industry,
