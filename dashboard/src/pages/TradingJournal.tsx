@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { NSE_STOCKS } from "@/lib/nse-stocks";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -630,11 +630,300 @@ const QUICK_PROMPTS = [
   { icon: "🔬", label: "Edge Check", msg: "Do I have a real edge? Evaluate my system quality honestly based on actual results, expectancy, and repeatability. Do not be optimistic without evidence." },
 ];
 
+// ── Equity Curve helpers ──────────────────────────────────────────────────────
+
+function getNiceTicks(lo: number, hi: number, n: number): number[] {
+  const span = hi - lo || 1;
+  const rough = span / (n - 1);
+  const mag = Math.pow(10, Math.floor(Math.log10(rough)));
+  const nice = ([1, 2, 2.5, 5, 10].find(x => x * mag >= rough) ?? 10) * mag;
+  const start = Math.ceil(lo / nice) * nice;
+  const ticks: number[] = [];
+  for (let v = start; v <= hi + nice * 0.01; v += nice)
+    ticks.push(Math.round(v * 1e8) / 1e8);
+  return ticks;
+}
+
+function fmtTick(v: number): string {
+  const a = Math.abs(v), s = v < 0 ? "-" : "";
+  if (a >= 1e7) return `${s}${(a / 1e7).toFixed(1)}Cr`;
+  if (a >= 1e5) return `${s}${(a / 1e5).toFixed(1)}L`;
+  if (a >= 1e3) return `${s}${(a / 1e3).toFixed(0)}K`;
+  return `${s}${a.toFixed(0)}`;
+}
+
+function MiniKpi({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div style={{ textAlign: "right" }}>
+      <div style={{ fontSize: 9, color: "var(--text-4)", fontWeight: 700, letterSpacing: "0.08em" }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 800, color: color ?? "var(--text-1)", fontFamily: "var(--font-mono)" }}>{value}</div>
+    </div>
+  );
+}
+
+function EquityCurve({ trades }: { trades: Trade[] }) {
+  const [tip, setTip] = useState<{
+    cx: number; cy: number; pnl: number; cum: number; symbol: string; date: string; pct: number;
+  } | null>(null);
+
+  const pts = useMemo(() => {
+    const closed = [...trades]
+      .filter(t => t.status === "Closed" && t.sellPrice != null && t.exitDate)
+      .sort((a, b) => new Date(a.exitDate!).getTime() - new Date(b.exitDate!).getTime());
+    let cum = 0;
+    return closed.map(t => {
+      const pnl = (t.sellPrice! - t.buyPrice) * t.quantity;
+      const pct = ((t.sellPrice! - t.buyPrice) / t.buyPrice) * 100;
+      cum += pnl;
+      return { date: t.exitDate!, cum, pnl, symbol: t.stockName, pct };
+    });
+  }, [trades]);
+
+  const monthly = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of trades) {
+      if (t.status !== "Closed" || !t.exitDate || t.sellPrice == null) continue;
+      const d = new Date(t.exitDate);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      map.set(key, (map.get(key) ?? 0) + (t.sellPrice - t.buyPrice) * t.quantity);
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([key, pnl]) => {
+      const [y, m] = key.split("-").map(Number);
+      const label = new Date(y, m - 1, 1).toLocaleString("en-IN", { month: "short", year: "2-digit" });
+      return { key, label, pnl };
+    });
+  }, [trades]);
+
+  if (pts.length === 0)
+    return <div style={{ padding: 48, textAlign: "center", color: "var(--text-4)", fontSize: 13 }}>No closed trades to plot.</div>;
+
+  // SVG layout constants
+  const W = 900, H = 240, PL = 72, PR = 24, PT = 18, PB = 46;
+  const iW = W - PL - PR, iH = H - PT - PB;
+
+  const allCums = [0, ...pts.map(p => p.cum)];
+  const minC = Math.min(...allCums), maxC = Math.max(...allCums);
+  const pad = (maxC - minC || 100) * 0.08;
+  const yLo = minC - pad, yHi = maxC + pad, ySpan = yHi - yLo;
+
+  const xOf = (i: number) => PL + (i / pts.length) * iW;
+  const yOf = (v: number) => PT + iH - ((v - yLo) / ySpan) * iH;
+  const y0 = yOf(0);
+
+  const svgPts = [{ x: PL, y: y0 }, ...pts.map((_, i) => ({ x: xOf(i + 1), y: yOf(pts[i].cum) }))];
+  const lineD = svgPts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  const fillD = `${lineD} L${svgPts[svgPts.length - 1].x.toFixed(1)},${y0.toFixed(1)} L${PL},${y0.toFixed(1)} Z`;
+
+  const yTicks = getNiceTicks(yLo, yHi, 6);
+
+  // X-axis month labels
+  const xLabels: { x: number; text: string }[] = [];
+  let lastMo = "";
+  pts.forEach((p, i) => {
+    const mo = p.date.slice(0, 7);
+    if (mo !== lastMo) {
+      const d = new Date(p.date);
+      xLabels.push({ x: xOf(i + 1), text: d.toLocaleString("en-IN", { day: "numeric", month: "short" }) });
+      lastMo = mo;
+    }
+  });
+
+  // Max drawdown
+  let peak = 0, mdd = 0;
+  let ddStartI = 0, ddEndI = 0, curPeakI = 0;
+  pts.forEach((p, i) => {
+    if (p.cum > peak) { peak = p.cum; curPeakI = i + 1; }
+    if (peak > 0) {
+      const dd = (peak - p.cum) / peak;
+      if (dd > mdd) { mdd = dd; ddStartI = curPeakI; ddEndI = i + 1; }
+    }
+  });
+
+  // Stats
+  const pnls = pts.map(p => p.pnl);
+  const wins = pnls.filter(v => v > 0), losses = pnls.filter(v => v < 0);
+  const sumW = wins.reduce((a, b) => a + b, 0);
+  const sumL = Math.abs(losses.reduce((a, b) => a + b, 0));
+  const avgWin = wins.length ? sumW / wins.length : 0;
+  const avgLoss = losses.length ? sumL / losses.length : 0;
+  const pf = sumL > 0 ? sumW / sumL : wins.length > 0 ? 99 : 0;
+  const expectancy = pts.length ? (sumW - sumL) / pts.length : 0;
+  const totalPnL = pts[pts.length - 1].cum;
+
+  // Monthly bar chart constants
+  const mW = 900, mH = 130, mPL = 72, mPR = 24, mPT = 12, mPB = 36;
+  const miW = mW - mPL - mPR, miH = mH - mPT - mPB;
+  const maxAbsM = Math.max(...monthly.map(m => Math.abs(m.pnl)), 1);
+  const mBarW = Math.max(20, Math.min(60, Math.floor(miW / monthly.length) - 8));
+  const mY0 = mPT + miH;
+
+  return (
+    <div style={{ overflowY: "auto", padding: "4px 0 24px" }}>
+      {/* Header row */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+        <div>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)" }}>Equity Curve</span>
+          <span style={{ fontSize: 10, color: "var(--text-4)", marginLeft: 8 }}>FY 2026-27 · {pts.length} closed trades</span>
+        </div>
+        <div style={{ display: "flex", gap: 20 }}>
+          <MiniKpi label="NET P&L"   value={fmtTick(totalPnL)}   color={totalPnL >= 0 ? "#10b981" : "#ef4444"} />
+          <MiniKpi label="MAX DD"    value={`${(mdd * 100).toFixed(1)}%`} color={mdd > 0.15 ? "#ef4444" : mdd > 0.08 ? "#f59e0b" : "var(--text-2)"} />
+          <MiniKpi label="WIN RATE"  value={`${wins.length}/${pts.length}`} color="var(--text-2)" />
+        </div>
+      </div>
+
+      {/* Equity curve SVG */}
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        <defs>
+          <linearGradient id="ecUp" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#10b981" stopOpacity="0.30" />
+            <stop offset="100%" stopColor="#10b981" stopOpacity="0.02" />
+          </linearGradient>
+          <linearGradient id="ecDn" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#ef4444" stopOpacity="0.02" />
+            <stop offset="100%" stopColor="#ef4444" stopOpacity="0.25" />
+          </linearGradient>
+          <clipPath id="ecClipAbove">
+            <rect x={PL} y={PT} width={iW} height={Math.max(0, y0 - PT)} />
+          </clipPath>
+          <clipPath id="ecClipBelow">
+            <rect x={PL} y={Math.max(PT, y0)} width={iW} height={Math.max(0, PT + iH - y0)} />
+          </clipPath>
+        </defs>
+
+        {/* Grid lines + Y labels */}
+        {yTicks.map(tick => (
+          <g key={tick}>
+            <line x1={PL} y1={yOf(tick)} x2={W - PR} y2={yOf(tick)} stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
+            <text x={PL - 8} y={yOf(tick)} textAnchor="end" dominantBaseline="middle"
+              fill="rgba(255,255,255,0.28)" fontSize="10" fontFamily="monospace">
+              {fmtTick(tick)}
+            </text>
+          </g>
+        ))}
+
+        {/* Zero baseline */}
+        <line x1={PL} y1={y0} x2={W - PR} y2={y0} stroke="rgba(255,255,255,0.22)" strokeWidth="1" strokeDasharray="4 3" />
+
+        {/* Max drawdown band */}
+        {mdd > 0.005 && (
+          <rect x={xOf(ddStartI)} y={PT} width={xOf(ddEndI) - xOf(ddStartI)} height={iH}
+            fill="rgba(239,68,68,0.05)" />
+        )}
+
+        {/* Area fills */}
+        <path d={fillD} fill="url(#ecUp)" clipPath="url(#ecClipAbove)" />
+        <path d={fillD} fill="url(#ecDn)" clipPath="url(#ecClipBelow)" />
+
+        {/* Main line */}
+        <path d={lineD} fill="none" stroke="#10b981" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+
+        {/* Trade dots */}
+        {pts.map((p, i) => {
+          const cx = xOf(i + 1), cy = yOf(p.cum);
+          const isHov = tip?.symbol === p.symbol && tip?.date === p.date && Math.abs(tip.cx - cx) < 1;
+          return (
+            <circle key={i} cx={cx} cy={cy} r={isHov ? 5.5 : 3.5}
+              fill={p.pnl >= 0 ? "#10b981" : "#ef4444"}
+              stroke={p.pnl >= 0 ? "#022c22" : "#450a0a"} strokeWidth="1"
+              style={{ cursor: "pointer" }}
+              onMouseEnter={() => setTip({ cx, cy, pnl: p.pnl, cum: p.cum, symbol: p.symbol, date: p.date, pct: p.pct })}
+              onMouseLeave={() => setTip(null)}
+            />
+          );
+        })}
+
+        {/* X-axis labels */}
+        {xLabels.map((xl, i) => (
+          <text key={i} x={xl.x} y={H - PB + 15} textAnchor="middle"
+            fill="rgba(255,255,255,0.30)" fontSize="9.5" fontFamily="system-ui">{xl.text}</text>
+        ))}
+
+        {/* Tooltip */}
+        {tip && (() => {
+          const tx = Math.min(tip.cx + 12, W - 138);
+          const ty = Math.max(PT + 2, tip.cy - 68);
+          return (
+            <g>
+              <line x1={tip.cx} y1={PT} x2={tip.cx} y2={PT + iH} stroke="rgba(255,255,255,0.12)" strokeWidth="1" strokeDasharray="3 2" />
+              <rect x={tx} y={ty} width={130} height={66} rx="6"
+                fill="#0f172a" stroke="rgba(148,163,184,0.18)" strokeWidth="1" />
+              <text x={tx + 9} y={ty + 16} fill="#e2e8f0" fontSize="11" fontWeight="700">{tip.symbol}</text>
+              <text x={tx + 9} y={ty + 28} fill="#94a3b8" fontSize="9">{tip.date}</text>
+              <text x={tx + 9} y={ty + 42}
+                fill={tip.pnl >= 0 ? "#10b981" : "#ef4444"} fontSize="11" fontWeight="700">
+                {tip.pnl >= 0 ? "+" : ""}₹{Math.abs(tip.pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })} ({tip.pct >= 0 ? "+" : ""}{tip.pct.toFixed(1)}%)
+              </text>
+              <text x={tx + 9} y={ty + 56} fill="#64748b" fontSize="9">
+                Cum: {tip.cum >= 0 ? "+" : ""}₹{Math.abs(tip.cum).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+              </text>
+            </g>
+          );
+        })()}
+      </svg>
+
+      {/* Stats strip */}
+      <div style={{ display: "flex", gap: 8, margin: "12px 0 18px", flexWrap: "wrap" }}>
+        {[
+          { label: "Best Trade",    value: fmtTick(Math.max(...pnls)),  color: "#10b981" },
+          { label: "Worst Trade",   value: fmtTick(Math.min(...pnls)),  color: "#ef4444" },
+          { label: "Avg Win",       value: fmtTick(avgWin),            color: "#10b981" },
+          { label: "Avg Loss",      value: fmtTick(-avgLoss),          color: "#ef4444" },
+          { label: "Profit Factor", value: pf >= 99 ? "∞" : pf.toFixed(2), color: pf >= 2 ? "#10b981" : pf >= 1 ? "#f59e0b" : "#ef4444" },
+          { label: "Expectancy",   value: fmtTick(expectancy),         color: expectancy >= 0 ? "#10b981" : "#ef4444" },
+        ].map(s => (
+          <div key={s.label} style={{
+            flex: "1 1 120px", background: "var(--surface-2)",
+            border: "1px solid var(--border)", borderRadius: 8, padding: "8px 12px",
+          }}>
+            <div style={{ fontSize: 9, color: "var(--text-4)", fontWeight: 700, letterSpacing: "0.08em", marginBottom: 3 }}>
+              {s.label.toUpperCase()}
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: s.color, fontFamily: "var(--font-mono)" }}>
+              {s.value}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Monthly P&L bar chart */}
+      {monthly.length > 0 && (
+        <>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-2)", marginBottom: 6 }}>Monthly P&L</div>
+          <svg viewBox={`0 0 ${mW} ${mH}`} style={{ width: "100%", height: "auto", display: "block" }}>
+            {/* Baseline */}
+            <line x1={mPL} y1={mY0} x2={mW - mPR} y2={mY0} stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+
+            {monthly.map((m, i) => {
+              const bx = mPL + (i / monthly.length) * miW + (miW / monthly.length - mBarW) / 2;
+              const bh = Math.max(2, (Math.abs(m.pnl) / maxAbsM) * (miH - 14));
+              const by = m.pnl >= 0 ? mY0 - bh : mY0;
+              const barColor = m.pnl >= 0 ? "rgba(16,185,129,0.7)" : "rgba(239,68,68,0.7)";
+              const labelY = m.pnl >= 0 ? by - 5 : by + bh + 13;
+              return (
+                <g key={m.key}>
+                  <rect x={bx} y={by} width={mBarW} height={bh} fill={barColor} rx="3" />
+                  <text x={bx + mBarW / 2} y={labelY} textAnchor="middle"
+                    fill={m.pnl >= 0 ? "#10b981" : "#ef4444"} fontSize="9.5" fontWeight="700">
+                    {fmtTick(m.pnl)}
+                  </text>
+                  <text x={bx + mBarW / 2} y={mY0 + 16} textAnchor="middle"
+                    fill="rgba(255,255,255,0.35)" fontSize="10">{m.label}</text>
+                </g>
+              );
+            })}
+          </svg>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export function TradingJournalPage() {
   const [trades, setTrades]             = useState<Trade[]>(loadTrades);
-  const [activeTab, setActiveTab]       = useState<"log" | "coach">("log");
+  const [activeTab, setActiveTab]       = useState<"log" | "equity" | "coach">("log");
   const [modalOpen, setModalOpen]       = useState(false);
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
   const [deleteId, setDeleteId]         = useState<string | null>(null);
@@ -829,7 +1118,7 @@ export function TradingJournalPage() {
         padding: "16px 24px 0",
       }}>
         <div style={{ display: "flex", gap: 6 }}>
-          {(["log", "coach"] as const).map(tab => (
+          {(["log", "equity", "coach"] as const).map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)} style={{
               padding: "7px 18px", borderRadius: 9999, border: "none", cursor: "pointer",
               background: activeTab === tab ? "var(--accent)" : "var(--surface-2)",
@@ -837,7 +1126,7 @@ export function TradingJournalPage() {
               fontSize: 12, fontWeight: activeTab === tab ? 700 : 500,
               fontFamily: "var(--font-body)", transition: "all 150ms",
             }}>
-              {tab === "log" ? "📒 Trade Log" : "🧠 AI Coach"}
+              {tab === "log" ? "📒 Trade Log" : tab === "equity" ? "📈 Equity Curve" : "🧠 AI Coach"}
             </button>
           ))}
         </div>
@@ -1037,6 +1326,14 @@ export function TradingJournalPage() {
                 </tbody>
               </table>
             )}
+          </motion.div>
+        )}
+
+        {/* EQUITY CURVE */}
+        {activeTab === "equity" && (
+          <motion.div key="equity" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+            style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+            <EquityCurve trades={trades} />
           </motion.div>
         )}
 
