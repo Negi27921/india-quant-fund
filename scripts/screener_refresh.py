@@ -348,7 +348,7 @@ def _expand_universe(sb, dry_run: bool) -> int:
     added = 0
     for i in range(0, len(new_rows), BATCH):
         chunk = new_rows[i : i + BATCH]
-        sb.table("dim_company").upsert(chunk, on_conflict="ticker", ignore_duplicates=True).execute()
+        sb.table("dim_company").upsert(chunk, on_conflict="company_id", ignore_duplicates=True).execute()
         added += len(chunk)
         log.info("  inserted batch %d/%d (%d rows)", i // BATCH + 1, -(-len(new_rows) // BATCH), len(chunk))
     return added

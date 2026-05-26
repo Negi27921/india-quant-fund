@@ -106,6 +106,6 @@ jobs:
               print("Universe already complete.")
           else:
               for i in range(0, len(new_rows), 200):
-                  sb.table("dim_company").upsert(new_rows[i:i+200], on_conflict="ticker", ignore_duplicates=True).execute()
+                  sb.table("dim_company").upsert(new_rows[i:i+200], on_conflict="company_id", ignore_duplicates=True).execute()
               print(f"Universe expanded by {len(new_rows)} stocks.")
           EOF

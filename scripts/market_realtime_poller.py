@@ -367,30 +367,9 @@ def run_eod(sb, dry_run: bool) -> None:
 
     log.info("EOD: writing %d rows to fact_market_realtime", len(all_rows))
     _upsert(sb, list(all_rows.values()), dry_run)
-
-    # Also patch dim_company with fresh price/cap
-    if not dry_run:
-        dim_updates = [
-            {
-                "ticker":             sym,
-                "market_cap_inr_cr":  r.get("market_cap_live_cr"),
-                "current_price_inr":  r.get("ltp"),
-                "high_52w_inr":       r.get("week_high_52"),
-                "low_52w_inr":        r.get("week_low_52"),
-                "prices_as_of":       datetime.now(timezone.utc).isoformat(),
-                "updated_at":         datetime.now(timezone.utc).isoformat(),
-            }
-            for sym, r in all_rows.items()
-            if r.get("ltp")
-        ]
-        for i in range(0, len(dim_updates), 200):
-            try:
-                sb.table("dim_company").upsert(
-                    dim_updates[i : i + 200], on_conflict="ticker"
-                ).execute()
-            except Exception as exc:
-                log.warning("dim_company patch error: %s", exc)
-        log.info("dim_company patched for %d stocks", len(dim_updates))
+    # dim_company price patch removed: vw_stock_snapshot reads live price from
+    # fact_market_realtime.ltp directly; dim_company.current_price_inr is updated
+    # by the Postgres trigger (022) whenever screener data is upserted (tiered refresh).
 
     _detect_and_emit_events(sb)
     log.info("EOD run complete: %d rows written", len(all_rows))
