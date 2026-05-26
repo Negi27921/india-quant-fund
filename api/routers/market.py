@@ -2431,10 +2431,9 @@ async def universe_sync(dry_run: bool = Query(False)):
             "company_id":         t,
             "ticker":             t,
             "company_name":       t,
-            "exchange":           "NSE",
             "market_cap_inr_cr":  r.get("market_cap_cr"),
             "current_price_inr":  r.get("current_price"),
-            "is_active":          True,
+            "source":             "screener",
         })
 
     if not new_rows:

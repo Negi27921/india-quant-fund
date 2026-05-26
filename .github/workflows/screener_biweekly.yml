@@ -97,9 +97,9 @@ jobs:
           scr_map  = {r["ticker"]: r for r in scr}
 
           new_rows = [
-            {"company_id": t, "ticker": t, "company_name": t, "exchange": "NSE",
+            {"company_id": t, "ticker": t, "company_name": t,
              "market_cap_inr_cr": scr_map[t].get("market_cap_cr"),
-             "current_price_inr": scr_map[t].get("current_price"), "is_active": True}
+             "current_price_inr": scr_map[t].get("current_price"), "source": "screener"}
             for t in sorted(set(scr_map) - existing)
           ]
           if not new_rows:

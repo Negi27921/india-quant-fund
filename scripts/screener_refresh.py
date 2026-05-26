@@ -333,11 +333,10 @@ def _expand_universe(sb, dry_run: bool) -> int:
         new_rows.append({
             "company_id":        t,
             "ticker":            t,
-            "company_name":      t,
-            "exchange":          "NSE",
+            "company_name":      t,           # bootstrapped; enriched by SI.ai later
             "market_cap_inr_cr": r.get("market_cap_cr"),
             "current_price_inr": r.get("current_price"),
-            "is_active":         True,
+            "source":            "screener",  # required NOT NULL
         })
 
     log.info("Expanding universe by %d new tickers", len(new_rows))
