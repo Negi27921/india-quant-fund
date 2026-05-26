@@ -1178,7 +1178,7 @@ function IndustryFilterBar({
         value={activeFilter ?? ""}
         onChange={e => onFilter(e.target.value || null)}
         style={{
-          flex: 1, padding: "5px 8px", borderRadius: 7, fontSize: 11, fontWeight: 600,
+          flex: 1, minWidth: 0, padding: "5px 8px", borderRadius: 7, fontSize: 11, fontWeight: 600,
           background: "var(--surface-2)", border: `1px solid ${activeFilter ? "var(--accent-border)" : "var(--border)"}`,
           color: activeFilter ? "var(--accent)" : "var(--text-2)",
           outline: "none", cursor: "pointer", fontFamily: "var(--font-body)",
@@ -1249,8 +1249,12 @@ function StockListPane({
   );
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
 
-  // Batch CMP — only for the current page
-  const priceSymbols = useMemo(() => paginated.map(i => i.symbol), [paginated]);
+  // Universe items already carry current_price from dim_company — skip live fetch entirely.
+  // For manual/auto watchlists, batch-fetch live CMP for the current page only.
+  const priceSymbols = useMemo(
+    () => isUniverse ? [] : paginated.map(i => i.symbol),
+    [paginated, isUniverse],
+  );
   const { data: prices = {} } = useBatchPrices(priceSymbols);
 
   if (!watchlist) {
@@ -1269,7 +1273,7 @@ function StockListPane({
   return (
     <div style={{
       width: 280, flexShrink: 0, borderRight: "1px solid var(--border)",
-      display: "flex", flexDirection: "column",
+      display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0,
     }}>
       {/* List header */}
       <div style={{

@@ -1507,7 +1507,10 @@ async def get_live_price(symbol: str):
 @router.get("/prices")
 async def get_prices_batch(symbols: str = Query(..., description="Comma-separated NSE symbols")):
     """
-    Batch CMP fetch for multiple symbols via yfinance download (fast, ~1-2s for 50 stocks).
+    Batch CMP fetch. Priority:
+      1. In-process cache (90s TTL) — instant
+      2. fact_market_realtime in Supabase (~100ms, populated by EOD poller)
+      3. yFinance batch download — fallback for cache/DB misses (~2-4s)
     Returns {SYMBOL: {cmp, change, pct_change, prev_close}} dict.
     """
     raw = [s.strip().upper().replace(".NS", "").replace(".BO", "") for s in symbols.split(",") if s.strip()]
@@ -1516,7 +1519,7 @@ async def get_prices_batch(symbols: str = Query(..., description="Comma-separate
 
     now_mono = time.monotonic()
 
-    # Return cached entries immediately; only fetch what's stale/missing
+    # 1. In-process cache
     cached_result: dict[str, dict] = {}
     to_fetch: list[str] = []
     for sym in raw:
@@ -1529,6 +1532,46 @@ async def get_prices_batch(symbols: str = Query(..., description="Comma-separate
     if not to_fetch:
         return cached_result
 
+    # 2. fact_market_realtime — near-instant Supabase lookup
+    if _SB_URL and _SB_KEY:
+        try:
+            sym_filter = ",".join(to_fetch)
+            req = _ur.Request(
+                f"{_SB_URL}/rest/v1/fact_market_realtime"
+                f"?symbol=in.({sym_filter})"
+                f"&select=symbol,ltp,pct_change,prev_close",
+                headers={
+                    "apikey": _SB_KEY,
+                    "Authorization": f"Bearer {_SB_KEY}",
+                },
+            )
+            with _ur.urlopen(req, timeout=5) as r:
+                rows = json.loads(r.read())
+            ts = time.monotonic()
+            found: set[str] = set()
+            for row in (rows if isinstance(rows, list) else []):
+                sym  = row.get("symbol", "")
+                ltp  = row.get("ltp")
+                prev = row.get("prev_close")
+                pct  = row.get("pct_change")
+                if sym and ltp is not None:
+                    entry = {
+                        "cmp":        round(float(ltp), 2),
+                        "change":     round(float(ltp) - float(prev or ltp), 2),
+                        "pct_change": round(float(pct or 0), 2),
+                        "prev_close": round(float(prev or ltp), 2),
+                    }
+                    cached_result[sym] = entry
+                    _PRICE_CACHE[sym] = (ts, entry)
+                    found.add(sym)
+            to_fetch = [s for s in to_fetch if s not in found]
+        except Exception:
+            pass  # fall through to yFinance
+
+    if not to_fetch:
+        return cached_result
+
+    # 3. yFinance fallback for symbols not in realtime table
     def _batch_fetch(syms: list[str]) -> dict:
         import yfinance as yf
         tickers = [f"{s}.NS" for s in syms]
@@ -1550,7 +1593,7 @@ async def get_prices_batch(symbols: str = Query(..., description="Comma-separate
                     closes = closes.dropna()
                     if len(closes) == 0:
                         continue
-                    cmp = float(closes.iloc[-1])
+                    cmp  = float(closes.iloc[-1])
                     prev = float(closes.iloc[-2]) if len(closes) >= 2 else cmp
                     chg  = cmp - prev
                     pct  = (chg / prev * 100) if prev else 0
