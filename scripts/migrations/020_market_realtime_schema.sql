@@ -45,5 +45,6 @@ CREATE INDEX IF NOT EXISTS fmr_52w_high_idx        ON fact_market_realtime (pct_
 
 -- RLS: anon read only
 ALTER TABLE fact_market_realtime ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "anon_read_market_realtime" ON fact_market_realtime;
 CREATE POLICY "anon_read_market_realtime"
     ON fact_market_realtime FOR SELECT TO anon USING (true);
