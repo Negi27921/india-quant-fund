@@ -590,44 +590,88 @@ async def get_watchlist_items(watchlist_id: str) -> list[dict]:
     """
     Get all stocks in a watchlist.
 
-    Uses Range-header pagination to bypass Supabase's 1000-row default cap
-    so the Universe watchlist (2137 stocks) is returned in full.
+    Universe watchlist (type='universe'): returns ALL stocks from dim_company
+    (5,400+ rows) — bypasses watchlist_items table entirely.
 
-    For items with blank sector/industry, enriches from stock_universe table
-    so the industry filter chips work on the dashboard.
+    Manual/auto watchlists: reads from watchlist_items with Range pagination.
     """
     try:
+        # Detect watchlist type first
+        wl_type = "manual"
+        try:
+            wl_rows = _sb_get(f"watchlists?id=eq.{watchlist_id}&select=type&limit=1")
+            if isinstance(wl_rows, list) and wl_rows:
+                wl_type = wl_rows[0].get("type", "manual")
+        except Exception:
+            pass
+
+        # ── Universe watchlist: stream all dim_company rows ───────────────────
+        if wl_type == "universe":
+            dc_rows = _sb_get_all(
+                "dim_company?select=ticker,company_name,sector,industry,"
+                "basic_industry,macro_sector,marketcap_category,"
+                "market_cap_inr_cr,current_price_inr,high_52w_inr,low_52w_inr"
+                "&order=market_cap_inr_cr.desc.nullslast"
+            )
+            now_iso = __import__("datetime").datetime.utcnow().isoformat() + "Z"
+            items = []
+            for r in (dc_rows if isinstance(dc_rows, list) else []):
+                t = (r.get("ticker") or "").strip()
+                if not t:
+                    continue
+                items.append({
+                    "id":                   f"universe-{t}",
+                    "watchlist_id":         watchlist_id,
+                    "symbol":               t,
+                    "ticker":               t,
+                    "company":              r.get("company_name") or t,
+                    "sector":               r.get("sector") or r.get("macro_sector") or "",
+                    "industry":             r.get("industry") or r.get("basic_industry") or "",
+                    "marketcap_category":   r.get("marketcap_category") or "",
+                    "market_cap_cr":        r.get("market_cap_inr_cr"),
+                    "current_price":        r.get("current_price_inr"),
+                    "high_52w":             r.get("high_52w_inr"),
+                    "low_52w":              r.get("low_52w_inr"),
+                    "added_at":             now_iso,
+                    "added_reason":         "universe",
+                    "result_date":          None,
+                    "result_high":          None,
+                    "result_volume_avg":    None,
+                    "result_rating":        None,
+                    "breakout_alerted":     False,
+                    "breakout_date":        None,
+                    "notes":                "",
+                })
+            return items
+
+        # ── Manual / auto watchlist: read from watchlist_items ────────────────
         rows = _sb_get_all(
             f"watchlist_items?watchlist_id=eq.{watchlist_id}&order=added_at.desc&select=*"
         )
         if not isinstance(rows, list):
             return []
 
-        # Enrich sector/industry for items that have empty values
+        # Enrich sector/industry from dim_company for items that have empty values
         missing_sector = [r["symbol"] for r in rows
                           if not r.get("sector") and not r.get("industry")
                           and r.get("symbol")]
-
         if missing_sector:
-            # Fetch universe data for these symbols in one shot (chunked for large lists)
             sector_map: dict[str, dict] = {}
-            chunk_size = 200
-            for i in range(0, len(missing_sector), chunk_size):
-                chunk = missing_sector[i: i + chunk_size]
+            for i in range(0, len(missing_sector), 200):
+                chunk = missing_sector[i: i + 200]
                 sym_filter = ",".join(chunk)
                 try:
-                    univ = _sb_get(
-                        f"stock_universe?symbol=in.({sym_filter})"
-                        f"&select=symbol,sector,industry&limit={chunk_size}"
+                    dc = _sb_get(
+                        f"dim_company?ticker=in.({sym_filter})"
+                        f"&select=ticker,sector,industry&limit=200"
                     )
-                    for u in (univ if isinstance(univ, list) else []):
-                        sector_map[u["symbol"]] = u
+                    for u in (dc if isinstance(dc, list) else []):
+                        sector_map[u["ticker"]] = u
                 except Exception:
                     pass
-
             for r in rows:
                 sym = r.get("symbol", "")
-                if sym in sector_map and not r.get("sector") and not r.get("industry"):
+                if sym in sector_map and not r.get("sector"):
                     r["sector"]   = sector_map[sym].get("sector") or ""
                     r["industry"] = sector_map[sym].get("industry") or ""
 
