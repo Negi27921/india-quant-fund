@@ -1084,6 +1084,17 @@ function StockRow({
               {sectorLabel}
             </span>
           )}
+          {item.marketcap_category && (
+            <span style={{
+              fontSize: 8, color: item.marketcap_category === "Large Cap" ? "#60a5fa"
+                : item.marketcap_category === "Mid Cap" ? "#fb923c" : "#a78bfa",
+              background: "var(--surface-2)", borderRadius: 3, padding: "1px 4px",
+              whiteSpace: "nowrap", border: "1px solid var(--border)", flexShrink: 0,
+              fontWeight: 700,
+            }}>
+              {item.marketcap_category}
+            </span>
+          )}
         </div>
       </div>
 
@@ -1100,6 +1111,17 @@ function StockRow({
             }}>
               {cmp.pct_change >= 0 ? "▲" : "▼"}{Math.abs(cmp.pct_change).toFixed(1)}%
             </div>
+          </>
+        ) : item.current_price ? (
+          <>
+            <div style={{ fontSize: 12, fontWeight: 700, fontFamily: "var(--font-mono)", color: "var(--text-2)" }}>
+              ₹{item.current_price.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            </div>
+            {item.market_cap_cr != null && (
+              <div style={{ fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>
+                {item.market_cap_cr >= 1000 ? `${(item.market_cap_cr / 1000).toFixed(1)}K Cr` : `${item.market_cap_cr.toFixed(0)} Cr`}
+              </div>
+            )}
           </>
         ) : (
           <div style={{ fontSize: 10, color: "var(--text-4)" }}>—</div>
@@ -1206,8 +1228,12 @@ function StockListPane({
   // Reset page when any filter changes
   useEffect(() => { setPage(1); }, [search, industryFilter, letterFilter]);
 
+  const isUniverse = watchlist?.type === "universe";
+
   const filtered = useMemo(() => {
-    let r = [...items].sort((a, b) => a.symbol.localeCompare(b.symbol));
+    let r = [...items];
+    // Universe: backend returns market_cap desc — preserve that order; others sort A-Z
+    if (!isUniverse) r.sort((a, b) => a.symbol.localeCompare(b.symbol));
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       r = r.filter(i => i.symbol.toLowerCase().includes(q) || (i.company || "").toLowerCase().includes(q));
@@ -1215,7 +1241,7 @@ function StockListPane({
     if (industryFilter) r = r.filter(i => i.industry === industryFilter || i.sector === industryFilter);
     if (letterFilter) r = r.filter(i => i.symbol.startsWith(letterFilter));
     return r;
-  }, [items, search, industryFilter, letterFilter]);
+  }, [items, search, industryFilter, letterFilter, isUniverse]);
 
   const paginated = useMemo(
     () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),

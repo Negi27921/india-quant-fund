@@ -30,6 +30,12 @@ export interface WatchlistItem {
   breakout_alerted: boolean;
   breakout_date: string | null;
   notes: string;
+  // Universe-only fields (populated when watchlist type === "universe")
+  market_cap_cr?: number | null;
+  current_price?: number | null;
+  marketcap_category?: string;
+  high_52w?: number | null;
+  low_52w?: number | null;
 }
 
 export interface AnalyseResponse {
