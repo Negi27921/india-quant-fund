@@ -82,9 +82,7 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: |
           python3 - <<'EOF'
-          import os, sys
-          sys.path.insert(0, ".")
-          from dotenv import load_dotenv; load_dotenv()
+          import os
           from supabase import create_client
 
           url = os.getenv("SUPABASE_URL","").strip().rstrip("/")
