@@ -187,23 +187,50 @@ def _get_sb():
     return create_client(url, key)
 
 
-def _load_stale(sb, stale_cutoff: datetime, reset: bool) -> list[dict]:
-    """Return rows older than stale_cutoff (or all rows if reset)."""
+TIERS = {
+    "top200":   (200,  1),    # rank 1-200,   re-scrape if >1 day stale
+    "midcap":   (1000, 7),    # rank 201-1000, re-scrape if >7 days stale
+    "smallcap": (None, 14),   # rank 1001+,   re-scrape if >14 days stale
+}
+
+
+def _load_stale(sb, stale_cutoff: datetime, reset: bool, tier: str = "all") -> list[dict]:
+    """
+    Return rows to refresh based on tier and staleness.
+
+    Tiers:
+      top200   — rank 1-200 by market cap (re-scraped daily, stale >1d)
+      midcap   — rank 201-1000 (weekly, stale >7d)
+      smallcap — rank 1001+ (biweekly, stale >14d)
+      all      — everything stale per --days threshold
+    """
+    fields = "ticker,market_cap_cr,pe_ratio,roe_pct,roce_pct,promoter_pct,promoter_pledge_pct,scraped_at"
+
     if reset:
-        log.info("--reset: fetching all rows from fact_screener_fundamentals")
-        resp = sb.table("fact_screener_fundamentals").select(
-            "ticker,market_cap_cr,pe_ratio,roe_pct,roce_pct,promoter_pct,"
-            "promoter_pledge_pct,scraped_at"
-        ).order("market_cap_cr", desc=True).execute()
-    else:
+        log.info("--reset: fetching ALL rows from fact_screener_fundamentals")
+        resp = sb.table("fact_screener_fundamentals").select(fields).order("market_cap_cr", desc=True).execute()
+        return resp.data or []
+
+    all_rows = (
+        sb.table("fact_screener_fundamentals").select(fields).order("market_cap_cr", desc=True).execute().data or []
+    )
+
+    if tier == "all":
         cutoff_iso = stale_cutoff.isoformat()
-        log.info("Fetching rows scraped before %s", cutoff_iso[:10])
-        resp = sb.table("fact_screener_fundamentals").select(
-            "ticker,market_cap_cr,pe_ratio,roe_pct,roce_pct,promoter_pct,"
-            "promoter_pledge_pct,scraped_at"
-        ).lt("scraped_at", cutoff_iso).order("market_cap_cr", desc=True).execute()
-    rows = resp.data or []
-    log.info("Stale rows to refresh: %d", len(rows))
+        rows = [r for r in all_rows if str(r.get("scraped_at", "")) < cutoff_iso]
+        log.info("Tier=all: %d stale rows (cutoff %s)", len(rows), cutoff_iso[:10])
+        return rows
+
+    max_rank, stale_days = TIERS[tier]
+    tier_cutoff = (datetime.now(timezone.utc) - timedelta(days=stale_days)).isoformat()
+
+    if max_rank:
+        tier_rows = all_rows[:max_rank] if tier == "top200" else all_rows[200:max_rank]
+    else:
+        tier_rows = all_rows[1000:]
+
+    rows = [r for r in tier_rows if str(r.get("scraped_at", "")) < tier_cutoff]
+    log.info("Tier=%s: %d/%d rows stale (>%dd)", tier, len(rows), len(tier_rows), stale_days)
     return rows
 
 
@@ -346,11 +373,11 @@ def _patch_dim_company(sb, rows: list[dict], dry_run: bool) -> None:
 
 # ── Main refresh loop ──────────────────────────────────────────────────────────
 
-def run(days: int, dry_run: bool, priority_only: bool, reset: bool) -> None:
+def run(days: int, dry_run: bool, priority_only: bool, reset: bool, tier: str = "all") -> None:
     sb = _get_sb()
     stale_cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
-    stale_rows = _load_stale(sb, stale_cutoff, reset)
+    stale_rows = _load_stale(sb, stale_cutoff, reset, tier=tier)
     if not stale_rows:
         log.info("Nothing stale — all data is fresh. Checking universe expansion.")
         _expand_universe(sb, dry_run)
@@ -422,9 +449,11 @@ def run(days: int, dry_run: bool, priority_only: bool, reset: bool) -> None:
 # ── CLI ────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Screener.in biweekly refresh")
+    parser = argparse.ArgumentParser(description="Screener.in tiered refresh")
     parser.add_argument("--days",          type=int, default=STALE_DAYS,
-                        help=f"Re-scrape rows older than N days (default: {STALE_DAYS})")
+                        help=f"Re-scrape rows older than N days (default: {STALE_DAYS}). Ignored when --tier is set.")
+    parser.add_argument("--tier",          choices=["all", "top200", "midcap", "smallcap"], default="all",
+                        help="Refresh tier: top200 (daily), midcap (weekly), smallcap (biweekly), all (--days threshold)")
     parser.add_argument("--dry-run",       action="store_true",
                         help="Scrape but skip Supabase writes")
     parser.add_argument("--priority-only", action="store_true",
@@ -437,4 +466,5 @@ if __name__ == "__main__":
         dry_run       = args.dry_run,
         priority_only = args.priority_only,
         reset         = args.reset,
+        tier          = args.tier,
     )

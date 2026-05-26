@@ -2358,6 +2358,32 @@ async def get_fundamentals(symbol: str):
     return result
 
 
+@router.get("/snapshot/{symbol}")
+async def get_snapshot(symbol: str):
+    """
+    Unified stock snapshot from vw_stock_snapshot.
+    Single truth source for AI agents, scanners, and alert engine.
+    Combines: dim_company (identity) + fact_market_realtime (live price) +
+              fact_screener_fundamentals (slow fundamentals).
+    Requires migrations 020–022 to be applied in Supabase.
+    """
+    clean = symbol.upper().replace(".NS", "").replace(".BO", "").strip()
+    if not (_SB_URL and _SB_KEY):
+        raise HTTPException(503, "Supabase not configured")
+    url = f"{_SB_URL}/rest/v1/vw_stock_snapshot?symbol=eq.{clean}&limit=1"
+    try:
+        req  = _ur.Request(url, headers=_sb_headers_mkt())
+        with _ur.urlopen(req, timeout=8) as resp:
+            rows = json.loads(resp.read())
+        if not rows:
+            raise HTTPException(404, f"No snapshot for {clean}")
+        return rows[0]
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(503, f"Snapshot unavailable: {exc}")
+
+
 async def _get_screener_row(clean_symbol: str) -> dict | None:
     """Fetch one row from fact_screener_fundamentals (anon key read is fine)."""
     if not (_SB_URL and _SB_KEY):

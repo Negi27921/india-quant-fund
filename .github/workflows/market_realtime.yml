@@ -1,0 +1,55 @@
+name: Market Realtime Poller
+
+on:
+  schedule:
+    # Intraday: every 15 min, 4:00–9:45 UTC (9:30 AM–3:15 PM IST), Mon–Fri
+    - cron: "*/15 4-9 * * 1-5"
+    # EOD: 10:10 UTC = 3:40 PM IST (just after market close), Mon–Fri
+    - cron: "10 10 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Poller mode"
+        type: choice
+        options: [intraday, eod, events]
+        default: eod
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-realtime-${{ hashFiles('requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-realtime-
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Detect run mode
+        id: mode
+        run: |
+          # Manual dispatch uses the input; scheduled runs choose by time
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=${{ github.event.inputs.mode }}" >> $GITHUB_OUTPUT
+          elif [ "$(date -u +%H)" = "10" ]; then
+            echo "mode=eod" >> $GITHUB_OUTPUT
+          else
+            echo "mode=intraday" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run market realtime poller
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python3 scripts/market_realtime_poller.py --mode ${{ steps.mode.outputs.mode }}

@@ -322,76 +322,96 @@ def _screener_quick(symbol: str) -> dict[str, str]:
 
 
 def _build_stock_context(symbol: str) -> str:
-    """Build rich LLM context from NEO tables + screener.in for a given ticker."""
+    """
+    Build LLM context from vw_stock_snapshot (unified read model) + technicals + news.
+    vw_stock_snapshot = dim_company + fact_market_realtime + fact_screener_fundamentals.
+    AI agents must consume ONLY this unified view — never query underlying tables directly.
+    """
     lines: list[str] = [f"=== STOCK: {symbol} ==="]
     sym = symbol.upper()
 
-    # 1. screener.in fundamentals — live scrape first, cached DB fallback
+    # 1. vw_stock_snapshot — single truth source (identity + live price + fundamentals + shareholding)
     try:
-        sc = _screener_quick(sym)
-        if sc:
-            lines.append("\n--- FUNDAMENTALS (screener.in live) ---")
-            for k, v in sc.items():
-                lines.append(f"{k}: {v}")
-        else:
-            # Fall back to fact_screener_fundamentals if scrape timed out / failed
-            sdb_rows = _sb_get(
-                f"fact_screener_fundamentals?ticker=eq.{sym}&select=market_cap_cr,current_price,"
-                f"pe_ratio,book_value,eps_ttm,dividend_yield_pct,roce_pct,roe_pct,"
-                f"debt_to_equity,current_ratio,sales_ttm_cr,profit_ttm_cr,"
-                f"promoter_pct,promoter_pledge_pct,fii_pct,dii_pct,public_pct,scraped_at&limit=1"
-            )
-            if isinstance(sdb_rows, list) and sdb_rows:
-                sf = sdb_rows[0]
-                lines.append(f"\n--- FUNDAMENTALS (cached {str(sf.get('scraped_at',''))[:10]}) ---")
-                for label, key, unit in [
-                    ("Market Cap",      "market_cap_cr",      "Cr"),
-                    ("Price",           "current_price",      "₹"),
-                    ("P/E",             "pe_ratio",           "x"),
-                    ("Book Value",      "book_value",         "₹"),
-                    ("EPS TTM",         "eps_ttm",            "₹"),
-                    ("Dividend Yield",  "dividend_yield_pct", "%"),
-                    ("ROCE",            "roce_pct",           "%"),
-                    ("ROE",             "roe_pct",            "%"),
-                    ("Debt/Equity",     "debt_to_equity",     "x"),
-                    ("Current Ratio",   "current_ratio",      "x"),
-                    ("Sales TTM",       "sales_ttm_cr",       "Cr"),
-                    ("Profit TTM",      "profit_ttm_cr",      "Cr"),
-                    ("Promoter %",      "promoter_pct",       "%"),
-                    ("Promoter Pledge", "promoter_pledge_pct","%"),
-                    ("FII %",           "fii_pct",            "%"),
-                    ("DII %",           "dii_pct",            "%"),
-                ]:
-                    val = sf.get(key)
-                    if val is not None:
-                        lines.append(f"{label}: {val} {unit}")
-    except Exception:
-        pass
-
-    # 2. Company master (dim_company)
-    try:
-        co_rows = _sb_get(
-            f"dim_company?ticker=eq.{sym}&select=company_name,sector,industry,"
-            f"marketcap_category,market_cap_inr_cr,current_price_inr,high_52w_inr,low_52w_inr&limit=1"
-        )
-        if isinstance(co_rows, list) and co_rows:
-            co = co_rows[0]
-            lines.append("\n--- COMPANY MASTER ---")
+        snap_rows = _sb_get(f"vw_stock_snapshot?symbol=eq.{sym}&limit=1")
+        if isinstance(snap_rows, list) and snap_rows:
+            s = snap_rows[0]
+            # Identity
+            lines.append("\n--- COMPANY ---")
             lines.append(
-                f"Name: {co.get('company_name','—')} | Sector: {co.get('sector','—')} | "
-                f"Industry: {co.get('industry','—')} | Cap tier: {co.get('marketcap_category','—')}"
+                f"Name: {s.get('company_name','—')} | Sector: {s.get('sector','—')} | "
+                f"Industry: {s.get('industry','—')} | Cap tier: {s.get('marketcap_category','—')}"
             )
-            if co.get("market_cap_inr_cr"):
-                lines.append(f"Market Cap: ₹{float(co['market_cap_inr_cr']):,.0f} Cr")
-            if co.get("current_price_inr"):
+            # Live market state
+            cmp = s.get("ltp") or s.get("cmp")
+            pct = s.get("pct_change")
+            mc  = s.get("market_cap_cr")
+            lines.append(f"\n--- MARKET STATE (price freshness: {s.get('price_freshness','unknown')}) ---")
+            if cmp:
+                chg_str = f"  Change: {float(pct):+.2f}%" if pct is not None else ""
+                lines.append(f"CMP: ₹{float(cmp):,.2f}{chg_str}")
+            if s.get("vwap"):
+                lines.append(f"VWAP: ₹{float(s['vwap']):,.2f}  Volume: {s.get('volume','—')}")
+            if s.get("day_open"):
                 lines.append(
-                    f"Ref price: ₹{co['current_price_inr']} | "
-                    f"52W High: ₹{co.get('high_52w_inr','—')} | 52W Low: ₹{co.get('low_52w_inr','—')}"
+                    f"Open: ₹{s['day_open']}  High: ₹{s.get('day_high','—')}  Low: ₹{s.get('day_low','—')}"
                 )
+            if mc:
+                lines.append(f"Live Market Cap: ₹{float(mc):,.0f} Cr")
+            h52 = s.get("best_52w_high")
+            l52 = s.get("best_52w_low")
+            if h52 or l52:
+                lines.append(
+                    f"52W High: ₹{h52 or '—'}  52W Low: ₹{l52 or '—'}  "
+                    f"From 52W High: {s.get('pct_from_52w_high','—')}%"
+                )
+            # Fundamentals
+            lines.append(f"\n--- FUNDAMENTALS (freshness: {s.get('fundamentals_freshness','unknown')}) ---")
+            for label, key, unit in [
+                ("P/E (live)",    "live_pe",           "x"),
+                ("ROCE",          "roce_pct",          "%"),
+                ("ROE",           "roe_pct",           "%"),
+                ("Debt/Equity",   "debt_to_equity",    "x"),
+                ("Current Ratio", "current_ratio",     "x"),
+                ("Book Value",    "book_value",        "₹"),
+                ("EPS TTM",       "eps_ttm",           "₹"),
+                ("Sales TTM",     "sales_ttm_cr",      "Cr"),
+                ("Profit TTM",    "profit_ttm_cr",     "Cr"),
+                ("Div Yield",     "dividend_yield_pct","%"),
+            ]:
+                val = s.get(key)
+                if val is not None:
+                    lines.append(f"{label}: {val} {unit}")
+            # Shareholding
+            promoter = s.get("promoter_pct")
+            pledge   = s.get("promoter_pledge_pct")
+            if promoter is not None:
+                lines.append("\n--- SHAREHOLDING ---")
+                pledge_str = f" (pledged: {pledge}% ⚠)" if pledge and float(pledge) > 5 else ""
+                lines.append(f"Promoter: {promoter}%{pledge_str}")
+                for lbl, k in [("FII", "fii_pct"), ("DII", "dii_pct"), ("Public", "public_pct")]:
+                    if s.get(k) is not None:
+                        lines.append(f"{lbl}: {s[k]}%")
+                if pledge and float(pledge) > 20:
+                    lines.append("⚠ HIGH PROMOTER PLEDGE — elevated balance-sheet risk")
+        else:
+            # vw_stock_snapshot miss — fallback to dim_company only
+            co_rows = _sb_get(
+                f"dim_company?ticker=eq.{sym}&select=company_name,sector,industry,"
+                f"marketcap_category,market_cap_inr_cr,current_price_inr,high_52w_inr,low_52w_inr&limit=1"
+            )
+            if isinstance(co_rows, list) and co_rows:
+                co = co_rows[0]
+                lines.append(f"\n--- COMPANY (dim_company fallback) ---")
+                lines.append(
+                    f"Name: {co.get('company_name','—')} | Sector: {co.get('sector','—')} | "
+                    f"Industry: {co.get('industry','—')}"
+                )
+                if co.get("market_cap_inr_cr"):
+                    lines.append(f"Market Cap: ₹{float(co['market_cap_inr_cr']):,.0f} Cr")
     except Exception:
         pass
 
-    # 3. Technicals (fact_technicals — latest row)
+    # 2. Technicals (fact_technicals — latest row)
     try:
         t_rows = _sb_get(
             f"fact_technicals?ticker=eq.{sym}&select=date,close,open,high,low,volume,"
@@ -459,31 +479,8 @@ def _build_stock_context(symbol: str) -> str:
     except Exception:
         pass
 
-    # 6. Live NSE price (best-effort, may fail outside market hours)
-    try:
-        import requests as _rq
-        ns = _rq.Session()
-        ns.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Referer": "https://www.nseindia.com/",
-            "Accept": "application/json",
-        })
-        ns.get("https://www.nseindia.com/", timeout=4)
-        r = ns.get(f"https://www.nseindia.com/api/quote-equity?symbol={sym}", timeout=6)
-        if r.status_code == 200:
-            pi = r.json().get("priceInfo", {})
-            md = r.json().get("metadata", {})
-            cmp = pi.get("lastPrice") or pi.get("close")
-            chg = pi.get("pChange")
-            if cmp:
-                lines.append(
-                    f"\n--- LIVE NSE PRICE ---\n"
-                    f"CMP: ₹{cmp:,.2f}  Change: {chg:+.2f}%  VWAP: ₹{pi.get('vwap','—')}\n"
-                    f"Open: ₹{pi.get('open','—')}  Prev Close: ₹{pi.get('previousClose','—')}\n"
-                    f"Volume: {md.get('totalTradedVolume','—')}  Delivery%: {md.get('deliveryToTradedQuantity','—')}%"
-                )
-    except Exception:
-        pass
+    # Note: live NSE price removed — vw_stock_snapshot (step 1) already provides
+    # ltp, pct_change, volume, vwap from fact_market_realtime. No external call needed.
 
     return "\n".join(lines) if len(lines) > 1 else f"No data found for {symbol}."
 

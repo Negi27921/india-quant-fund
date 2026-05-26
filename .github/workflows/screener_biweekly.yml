@@ -1,21 +1,26 @@
-name: Screener.in Biweekly Refresh
+name: Screener.in Tiered Refresh
 
 on:
   schedule:
-    # 1st and 15th of each month at 03:00 UTC (8:30 AM IST) — before market open
+    # Top 200 (large caps): daily at 23:30 UTC = 5:00 AM IST (pre-market)
+    - cron: "30 23 * * 1-5"
+    # Midcap (201-1000): every Monday at 02:00 UTC
+    - cron: "0 2 * * 1"
+    # Smallcap (1001+): 1st and 15th of each month at 03:00 UTC
     - cron: "0 3 1,15 * *"
   workflow_dispatch:
     inputs:
-      days:
-        description: "Re-scrape rows older than N days"
-        default: "14"
-        required: false
+      tier:
+        description: "Refresh tier"
+        type: choice
+        options: [top200, midcap, smallcap, all]
+        default: top200
       priority_only:
         description: "Only re-scrape LLM-flagged priority stocks"
         type: boolean
         default: false
       reset:
-        description: "Re-scrape ALL stocks (full refresh)"
+        description: "Re-scrape ALL stocks in tier (ignore staleness)"
         type: boolean
         default: false
 
@@ -41,16 +46,35 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run LLM-guided screener refresh
+      - name: Detect tier from schedule
+        id: tier
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tier=${{ github.event.inputs.tier || 'top200' }}" >> $GITHUB_OUTPUT
+          else
+            HOUR=$(date -u +%H)
+            DOM=$(date -u +%d)
+            DOW=$(date -u +%u)  # 1=Mon
+            if [ "$DOW" = "1" ] && [ "$HOUR" = "02" ]; then
+              echo "tier=midcap" >> $GITHUB_OUTPUT
+            elif [ "$DOM" = "01" ] || [ "$DOM" = "15" ]; then
+              echo "tier=smallcap" >> $GITHUB_OUTPUT
+            else
+              echo "tier=top200" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Run LLM-guided tiered screener refresh
         env:
           SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           ANTHROPIC_API_KEY:    ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          DAYS="${{ github.event.inputs.days || '14' }}"
+          TIER="${{ steps.tier.outputs.tier }}"
           PRIORITY_FLAG="${{ github.event.inputs.priority_only == 'true' && '--priority-only' || '' }}"
           RESET_FLAG="${{ github.event.inputs.reset == 'true' && '--reset' || '' }}"
-          python3 scripts/screener_refresh.py --days "$DAYS" $PRIORITY_FLAG $RESET_FLAG
+          echo "Running tier=$TIER"
+          python3 scripts/screener_refresh.py --tier "$TIER" $PRIORITY_FLAG $RESET_FLAG
 
       - name: Sync universe (expand dim_company)
         env:
