@@ -36,7 +36,8 @@ jobs:
           SUPABASE_SERVICE_KEY:  ${{ secrets.SUPABASE_SERVICE_KEY }}
           NVIDIA_API_KEY:        ${{ secrets.NVIDIA_API_KEY }}    # primary: NIM
           NVIDIA_MODEL:          ${{ secrets.NVIDIA_MODEL }}
-          GROQ_API_KEY:          ${{ secrets.GROQ_API_KEY }}      # fallback 1: Groq
+          # Groq is blocked by Cloudflare from GitHub Actions IPs — NIM handles extraction
+          GROQ_API_KEY:          ""
           GROQ_MODEL:            ${{ secrets.GROQ_MODEL }}
           GEMINI_API_KEY:        ${{ secrets.GEMINI_API_KEY }}    # fallback 2: Gemini
           GEMINI_MODEL:          ${{ secrets.GEMINI_MODEL }}
