@@ -1057,7 +1057,7 @@ def _llm_post(endpoint: str, api_key: str, model: str,
         },
         method="POST",
     )
-    with _ur.urlopen(req, timeout=45) as resp:
+    with _ur.urlopen(req, timeout=20) as resp:
         return json.loads(resp.read())["choices"][0]["message"]["content"]
 
 
@@ -1124,23 +1124,7 @@ def _call_nim_deepseek(company: str, scrip_code: str, dt: str,
     # Multiple model IDs per provider so a 404/403 auto-advances to the next.
     providers: list[tuple[str, str, str, str]] = []
 
-    if NVIDIA_API_KEY:
-        nim_models = []
-        if NIM_MODEL:
-            nim_models.append(NIM_MODEL)
-        # Fallback chain — Nemotron first (best structured extraction), then Llama
-        for m in [
-            "nvidia/llama-3.1-nemotron-70b-instruct",
-            "nvidia/nemotron-4-340b-instruct",
-            "nvidia/llama-3.3-70b-instruct",
-            "meta/llama-3.1-70b-instruct",
-            "meta/llama-3.1-8b-instruct",
-        ]:
-            if m not in nim_models:
-                nim_models.append(m)
-        for m in nim_models:
-            providers.append(("NIM", NIM_ENDPOINT, NVIDIA_API_KEY, m))
-
+    # Groq first — confirmed working, low latency on the fallback chain
     if GROQ_API_KEY:
         groq_models = []
         if GROQ_MODEL:
@@ -1155,6 +1139,21 @@ def _call_nim_deepseek(company: str, scrip_code: str, dt: str,
                 groq_models.append(m)
         for m in groq_models:
             providers.append(("Groq", GROQ_ENDPOINT, GROQ_API_KEY, m))
+
+    # NIM second — only models confirmed available (20s timeout in _llm_post)
+    if NVIDIA_API_KEY:
+        nim_models = []
+        if NIM_MODEL:
+            nim_models.append(NIM_MODEL)
+        for m in [
+            "meta/llama-3.1-8b-instruct",          # confirmed available
+            "nvidia/llama-3.3-nemotron-super-49b-v1",
+            "deepseek-ai/deepseek-r1-distill-llama-70b",
+        ]:
+            if m not in nim_models:
+                nim_models.append(m)
+        for m in nim_models:
+            providers.append(("NIM", NIM_ENDPOINT, NVIDIA_API_KEY, m))
 
     if GEMINI_API_KEY:
         for m in [GEMINI_MODEL, "gemini-2.0-flash", "gemini-1.5-flash"]:
