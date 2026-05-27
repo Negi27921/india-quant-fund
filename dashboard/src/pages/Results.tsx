@@ -1,13 +1,14 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Trophy, Star, ThumbsUp, Minus, TrendingDown as WeakIcon,
   ExternalLink, FileText, RefreshCw, Search,
   Clock, BarChart3, TrendingUp, TrendingDown, Filter,
-  Loader2, LayoutGrid, List,
+  Loader2, LayoutGrid, List, Play, CheckCircle2,
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
-import { useQuarterlyResults, type QuarterlyResult, type Rating } from "@/api/market-queries";
+import { useQuarterlyResults, usePipelineStatus, type QuarterlyResult, type Rating } from "@/api/market-queries";
+import { api } from "@/api/client";
 
 // ── Rating config ─────────────────────────────────────────────────────────────
 const RATING_CONFIG: Record<Rating, {
@@ -335,8 +336,31 @@ export function ResultsPage() {
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortBy, setSortBy] = useState<"time" | "rating" | "sales" | "pat">("time");
+  const [pipelineMsg, setPipelineMsg] = useState<string | null>(null);
 
   const { data: apiResults, isLoading, isFetching, refetch } = useQuarterlyResults();
+  const { data: pipelineStatus, refetch: refetchStatus } = usePipelineStatus();
+
+  const isPipelineRunning = pipelineStatus?.running ?? false;
+
+  // When pipeline finishes running, refresh results
+  useEffect(() => {
+    if (!isPipelineRunning && pipelineMsg === "running") {
+      setPipelineMsg("done");
+      refetch();
+      setTimeout(() => setPipelineMsg(null), 4000);
+    }
+  }, [isPipelineRunning, pipelineMsg, refetch]);
+
+  const triggerPipeline = async () => {
+    try {
+      setPipelineMsg("running");
+      await api.post("/market/pipeline/trigger", {});
+      refetchStatus();
+    } catch {
+      setPipelineMsg(null);
+    }
+  };
   const results = useMemo(() => apiResults ?? [], [apiResults]);
 
   const dateRange = useMemo(() => {
@@ -404,6 +428,23 @@ export function ResultsPage() {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {/* Pipeline status badge */}
+            {(isPipelineRunning || pipelineMsg) && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "5px 10px", borderRadius: 8,
+                background: pipelineMsg === "done" ? "rgba(16,185,129,0.12)" : "rgba(245,158,11,0.10)",
+                border: `1px solid ${pipelineMsg === "done" ? "rgba(16,185,129,0.3)" : "rgba(245,158,11,0.3)"}`,
+                fontSize: 11, fontWeight: 600,
+                color: pipelineMsg === "done" ? "#10b981" : "#f59e0b",
+              }}>
+                {pipelineMsg === "done"
+                  ? <><CheckCircle2 style={{ width: 11, height: 11 }} /> Results updated</>
+                  : <><Loader2 style={{ width: 11, height: 11, animation: "spin 1s linear infinite" }} /> Analysing filings…</>
+                }
+              </div>
+            )}
+
             {/* View toggle */}
             <div style={{ display: "flex", gap: 2, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 9, padding: 3 }}>
               {([
@@ -423,16 +464,34 @@ export function ResultsPage() {
               ))}
             </div>
 
-            <button onClick={() => refetch()}
+            {/* Fetch latest — triggers pipeline */}
+            <button
+              onClick={triggerPipeline}
+              disabled={isPipelineRunning || pipelineMsg === "running"}
               style={{
                 display: "flex", alignItems: "center", gap: 6,
                 padding: "8px 14px", borderRadius: 9,
+                background: "var(--accent)", border: "none",
+                color: "#fff", cursor: isPipelineRunning ? "not-allowed" : "pointer",
+                fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 700,
+                opacity: isPipelineRunning ? 0.6 : 1,
+                boxShadow: "0 2px 8px rgba(106,98,86,0.3)",
+              }}>
+              {isPipelineRunning
+                ? <><Loader2 style={{ width: 12, height: 12, animation: "spin 1s linear infinite" }} /> Fetching…</>
+                : <><Play style={{ width: 12, height: 12 }} /> Fetch Latest</>
+              }
+            </button>
+
+            <button onClick={() => refetch()}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "8px 12px", borderRadius: 9,
                 background: "var(--surface)", border: "1px solid var(--border)",
                 color: "var(--text-2)", cursor: "pointer",
                 fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 600,
               }}>
               <RefreshCw style={{ width: 13, height: 13, animation: isFetching ? "spin 1s linear infinite" : "none" }} />
-              Refresh
             </button>
           </div>
         </div>
@@ -564,18 +623,32 @@ export function ResultsPage() {
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 24px", gap: 14, textAlign: "center" }}>
             <div style={{ fontSize: 44 }}>📊</div>
             <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-heading)" }}>
-              No results yet
+              No results in database yet
             </div>
-            <div style={{ fontSize: 12, color: "var(--text-3)", fontFamily: "var(--font-body)", maxWidth: 420, lineHeight: 1.8 }}>
-              The pipeline processes earnings filings every 20 minutes during market hours.<br />
-              Results appear here automatically as companies report.
+            <div style={{ fontSize: 12, color: "var(--text-3)", fontFamily: "var(--font-body)", maxWidth: 440, lineHeight: 1.8 }}>
+              Click <strong style={{ color: "var(--accent)" }}>Fetch Latest</strong> to pull today's BSE &amp; NSE earnings filings, extract numbers from the PDFs using AI, and rate each result.
+              This takes ~1–3 minutes depending on how many companies reported today.
             </div>
-            <button onClick={() => refetch()} style={{
-              padding: "9px 22px", borderRadius: 10, background: "var(--accent)", color: "#fff",
-              border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "var(--font-body)",
-            }}>
-              Refresh
+            <button
+              onClick={triggerPipeline}
+              disabled={isPipelineRunning}
+              style={{
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "11px 28px", borderRadius: 10, background: "var(--accent)", color: "#fff",
+                border: "none", cursor: isPipelineRunning ? "not-allowed" : "pointer",
+                fontSize: 13, fontWeight: 700, fontFamily: "var(--font-body)",
+                boxShadow: "0 4px 14px rgba(106,98,86,0.3)", opacity: isPipelineRunning ? 0.7 : 1,
+              }}>
+              {isPipelineRunning
+                ? <><Loader2 style={{ width: 14, height: 14, animation: "spin 1s linear infinite" }} /> Fetching &amp; Analysing…</>
+                : <><Play style={{ width: 14, height: 14 }} /> Fetch Latest BSE/NSE Results</>
+              }
             </button>
+            {isPipelineRunning && (
+              <div style={{ fontSize: 11, color: "var(--text-4)", fontFamily: "var(--font-body)" }}>
+                Downloading PDFs, extracting financials, rating results…
+              </div>
+            )}
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 80, gap: 12 }}>

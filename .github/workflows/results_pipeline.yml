@@ -23,22 +23,25 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-results-v2-${{ hashFiles('**/requirements*.txt') }}
-          restore-keys: ${{ runner.os }}-pip-results-v2-
+          key: ${{ runner.os }}-pip-results-v3-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: ${{ runner.os }}-pip-results-v3-
 
       - name: Install dependencies
-        run: pip install yfinance pdfminer.six requests
+        run: pip install yfinance pdfminer.six pdfplumber pypdf requests curl_cffi
 
       - name: Run results pipeline
         env:
-          SUPABASE_URL:        ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY:        ${{ secrets.SUPABASE_KEY }}
-          NVIDIA_API_KEY:      ${{ secrets.NVIDIA_API_KEY }}    # primary: NIM
-          NVIDIA_MODEL:        ${{ secrets.NVIDIA_MODEL }}
-          GROQ_API_KEY:        ${{ secrets.GROQ_API_KEY }}      # fallback 1: Groq
-          GROQ_MODEL:          ${{ secrets.GROQ_MODEL }}
-          GEMINI_API_KEY:      ${{ secrets.GEMINI_API_KEY }}    # fallback 2: Gemini
-          GEMINI_MODEL:        ${{ secrets.GEMINI_MODEL }}
-          TELEGRAM_BOT_TOKEN:  ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID:    ${{ secrets.TELEGRAM_CHAT_ID }}
+          SUPABASE_URL:          ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:          ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SERVICE_KEY:  ${{ secrets.SUPABASE_SERVICE_KEY }}
+          NVIDIA_API_KEY:        ${{ secrets.NVIDIA_API_KEY }}    # primary: NIM
+          NVIDIA_MODEL:          ${{ secrets.NVIDIA_MODEL }}
+          GROQ_API_KEY:          ${{ secrets.GROQ_API_KEY }}      # fallback 1: Groq
+          GROQ_MODEL:            ${{ secrets.GROQ_MODEL }}
+          GEMINI_API_KEY:        ${{ secrets.GEMINI_API_KEY }}    # fallback 2: Gemini
+          GEMINI_MODEL:          ${{ secrets.GEMINI_MODEL }}
+          TELEGRAM_BOT_TOKEN:    ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:      ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Dynamic window: last 7 days. Override via workflow_dispatch inputs if needed.
+          PIPELINE_FROM_DATE:    ""
         run: python scripts/results_pipeline.py

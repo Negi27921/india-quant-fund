@@ -1920,8 +1920,10 @@ def main() -> None:
     print(f"Results Pipeline  {datetime.now(timezone.utc).isoformat()}")
     print("=" * 60)
 
+    from datetime import timedelta
     today     = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    FROM_DATE = "2026-05-22"
+    _env_from = os.getenv("PIPELINE_FROM_DATE", "").strip()
+    FROM_DATE = _env_from if _env_from else (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
 
     if not NVIDIA_API_KEY and not GROQ_API_KEY and not GEMINI_API_KEY:
         print("WARNING: No AI key set — AI extraction will fail for every filing.")

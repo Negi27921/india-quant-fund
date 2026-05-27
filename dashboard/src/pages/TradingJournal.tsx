@@ -20,19 +20,30 @@ export interface Trade {
   quantity: number;
   entryDate: string;
   capitalUsed: number;
-  tradeType: "Swing" | "Investment";
+  tradeType: "Swing" | "Investment" | "Intraday";
   status: "Open" | "Closed";
-  sellPrice?: number;
-  exitDate?: string;
-  strategy?: string;
-  notes?: string;
-  plannedStopLoss?: number;
-  plannedTarget?: number;
-  emotionEntry?: string;
-  emotionExit?: string;
-  marketCondition?: string;
-  ruleFollowed?: "Yes" | "No" | "Partial";
+  sellPrice?: number | null;
+  exitDate?: string | null;
+  strategy?: string | null;
+  notes?: string | null;
+  plannedStopLoss?: number | null;
+  plannedTarget?: number | null;
+  emotionEntry?: string | null;
+  emotionExit?: string | null;
+  marketCondition?: string | null;
+  ruleFollowed?: "Yes" | "No" | "Partial" | null;
   createdAt: string;
+  // broker-sourced (v024)
+  sellAmt?: number | null;
+  brokerPl?: number | null;
+  daysHeld?: number | null;
+  shortTermPl?: number | null;
+  longTermPl?: number | null;
+  speculationPl?: number | null;
+  turnover?: number | null;
+  isin?: string | null;
+  scripCode?: string | null;
+  scripName?: string | null;
 }
 
 interface Message { role: "user" | "assistant"; content: string; }
@@ -266,7 +277,7 @@ const MARKET_CONDITIONS = ["", "Bullish", "Bearish", "Sideways", "Volatile", "Tr
 
 function AddTradeModal({ open, onClose, onSave, editing }: ModalProps) {
   const [stockName, setStockName]       = useState("");
-  const [tradeType, setTradeType]       = useState<"Swing" | "Investment">("Swing");
+  const [tradeType, setTradeType]       = useState<"Swing" | "Investment" | "Intraday">("Swing");
   const [buyPrice, setBuyPrice]         = useState("");
   const [quantity, setQuantity]         = useState("");
   const [entryDate, setEntryDate]       = useState(() => new Date().toISOString().slice(0, 10));
@@ -285,7 +296,9 @@ function AddTradeModal({ open, onClose, onSave, editing }: ModalProps) {
   const [ruleFollowed, setRuleFollowed] = useState<"Yes" | "No" | "Partial" | "">("");
   const [error, setError]               = useState("");
   const [showStockSuggestions, setShowStockSuggestions] = useState(false);
+  const [suggPos, setSuggPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const firstRef = useRef<HTMLInputElement>(null);
+  const stockWrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -389,7 +402,7 @@ function AddTradeModal({ open, onClose, onSave, editing }: ModalProps) {
         <div style={{ marginBottom: 16 }}>
           <label style={LABEL}>Trade Type</label>
           <div style={{ display: "flex", gap: 8 }}>
-            {(["Swing", "Investment"] as const).map(t => (
+            {(["Swing", "Investment", "Intraday"] as const).map(t => (
               <button key={t} onClick={() => setTradeType(t)} style={pillBtnStyle(tradeType === t)}>{t}</button>
             ))}
           </div>
@@ -399,50 +412,59 @@ function AddTradeModal({ open, onClose, onSave, editing }: ModalProps) {
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
           <div>
             <label style={LABEL}>Stock Name *</label>
-            <div style={{ position: "relative" }}>
+            <div ref={stockWrapRef} style={{ position: "relative" }}>
               <input
                 ref={firstRef}
                 type="text"
                 placeholder="Search stock (e.g. RELIANCE, INFY)..."
                 value={stockName}
-                onChange={e => { setStockName(e.target.value.toUpperCase()); setShowStockSuggestions(true); }}
-                onFocus={() => setShowStockSuggestions(true)}
+                onChange={e => {
+                  setStockName(e.target.value.toUpperCase());
+                  const r = stockWrapRef.current?.getBoundingClientRect();
+                  if (r) setSuggPos({ top: r.bottom + 2, left: r.left, width: r.width });
+                  setShowStockSuggestions(true);
+                }}
+                onFocus={() => {
+                  const r = stockWrapRef.current?.getBoundingClientRect();
+                  if (r) setSuggPos({ top: r.bottom + 2, left: r.left, width: r.width });
+                  setShowStockSuggestions(true);
+                }}
                 onBlur={() => setTimeout(() => setShowStockSuggestions(false), 200)}
                 style={FIELD}
               />
-              {showStockSuggestions && stockName.length >= 1 && (() => {
-                const q = stockName.toUpperCase();
-                const matches = NSE_STOCKS.filter(s =>
-                  s.symbol.includes(q) || s.name.toUpperCase().includes(q)
-                ).slice(0, 10);
-                if (!matches.length) return null;
-                return (
-                  <div style={{
-                    position: "absolute", top: "100%", left: 0, right: 0, zIndex: 100,
-                    background: "var(--surface)", border: "1px solid var(--border)",
-                    borderRadius: 8, boxShadow: "var(--shadow-lg)", maxHeight: 220, overflowY: "auto",
-                    marginTop: 2,
-                  }}>
-                    {matches.map(s => (
-                      <div
-                        key={s.symbol}
-                        onMouseDown={() => { setStockName(s.symbol); setShowStockSuggestions(false); }}
-                        style={{
-                          padding: "8px 12px", cursor: "pointer", display: "flex", gap: 8, alignItems: "center",
-                          borderBottom: "1px solid var(--border-2)",
-                          transition: "background 100ms",
-                        }}
-                        onMouseEnter={e => (e.currentTarget.style.background = "var(--surface-2)")}
-                        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                      >
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "var(--accent)", minWidth: 80 }}>{s.symbol}</span>
-                        <span style={{ fontSize: 11, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>{s.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
             </div>
+            {showStockSuggestions && stockName.length >= 1 && suggPos && (() => {
+              const q = stockName.toUpperCase();
+              const matches = NSE_STOCKS.filter(s =>
+                s.symbol.includes(q) || s.name.toUpperCase().includes(q)
+              ).slice(0, 10);
+              if (!matches.length) return null;
+              return (
+                <div style={{
+                  position: "fixed", top: suggPos.top, left: suggPos.left, width: suggPos.width,
+                  zIndex: 9999,
+                  background: "var(--surface)", border: "1px solid var(--border)",
+                  borderRadius: 8, boxShadow: "0 8px 32px rgba(0,0,0,0.45)", maxHeight: 220, overflowY: "auto",
+                }}>
+                  {matches.map(s => (
+                    <div
+                      key={s.symbol}
+                      onMouseDown={() => { setStockName(s.symbol); setShowStockSuggestions(false); }}
+                      style={{
+                        padding: "8px 12px", cursor: "pointer", display: "flex", gap: 8, alignItems: "center",
+                        borderBottom: "1px solid var(--border-2)",
+                        transition: "background 100ms",
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "var(--surface-2)")}
+                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "var(--accent)", minWidth: 80 }}>{s.symbol}</span>
+                      <span style={{ fontSize: 11, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>{s.name}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
           <div>
             <label style={LABEL}>Buy Price *</label>
@@ -1201,7 +1223,7 @@ export function TradingJournalPage() {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                 <thead>
                   <tr style={{ background: "var(--surface-2)" }}>
-                    {["Date ↕", "Stock", "Type", "Status", "Buy ₹", "CMP ₹", "Sell ₹", "Qty", "Capital", "P&L", "P&L%", "Strategy", "Rule", ""].map((h, i) => (
+                    {["Date ↕", "Exit", "Stock", "Scrip Name", "Type", "Buy ₹", "Sell ₹", "Qty", "Invested", "Received", "Days", "P&L (Broker)", "P&L %", "ST/LT/Spec", "Strategy", "Rule", ""].map((h, i) => (
                       <th key={i} onClick={h === "Date ↕" ? () => setSortDesc(v => !v) : undefined}
                         style={{
                           padding: "9px 12px", textAlign: "left",
@@ -1224,10 +1246,21 @@ export function TradingJournalPage() {
                     const unrealized = cmp != null
                       ? { pnl: (cmp - t.buyPrice) * t.quantity, pct: ((cmp - t.buyPrice) / t.buyPrice) * 100 }
                       : null;
-                    const result = t.status === "Closed" ? tradePnL(t) : unrealized;
-                    const emoji = t.status === "Open"
-                      ? (unrealized ? (unrealized.pnl >= 0 ? "🟢" : "🔴") : "⚪")
-                      : (tradePnL(t) ? (tradePnL(t)!.pnl > 0 ? "🟢" : "🔴") : "⚪");
+                    // Prefer broker-reported P&L over computed
+                    const brokerPl = t.brokerPl ?? null;
+                    const computedPl = tradePnL(t);
+                    const displayPl = t.status === "Closed"
+                      ? (brokerPl != null
+                          ? { pnl: brokerPl, pct: computedPl?.pct ?? 0 }
+                          : computedPl)
+                      : unrealized;
+                    const emoji = displayPl ? (displayPl.pnl >= 0 ? "🟢" : "🔴") : "⚪";
+                    // Received = actual sell_amt from broker, else computed
+                    const received = t.sellAmt ?? (t.sellPrice ? t.sellPrice * t.quantity : null);
+                    // Tax category label
+                    const taxLabel = t.shortTermPl != null ? "ST"
+                      : t.longTermPl != null ? "LT"
+                      : t.speculationPl != null ? "SPEC" : null;
                     return (
                       <tr key={t.id} style={{
                         background: idx % 2 === 0 ? "transparent" : "var(--surface-2)",
@@ -1239,52 +1272,61 @@ export function TradingJournalPage() {
                         <td style={{ padding: "8px 12px", color: "var(--text-3)", whiteSpace: "nowrap", fontFamily: "var(--font-mono)", fontSize: 11 }}>
                           {t.entryDate}
                         </td>
+                        <td style={{ padding: "8px 12px", color: "var(--text-4)", whiteSpace: "nowrap", fontFamily: "var(--font-mono)", fontSize: 10 }}>
+                          {t.exitDate ?? "—"}
+                        </td>
                         <td style={{ padding: "8px 12px", fontWeight: 700, color: "var(--text-1)", whiteSpace: "nowrap" }}>
                           {emoji} {t.stockName}
                         </td>
+                        <td style={{ padding: "8px 12px", fontSize: 10, color: "var(--text-3)", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {t.scripName ?? "—"}
+                        </td>
                         <td style={{ padding: "8px 12px" }}>
                           <span style={{
-                            padding: "3px 8px", borderRadius: 9999, fontSize: 9, fontWeight: 700,
-                            background: t.tradeType === "Swing" ? "rgba(106,98,86,0.1)" : "rgba(39,174,96,0.1)",
-                            color: t.tradeType === "Swing" ? "var(--accent)" : "var(--green)",
+                            padding: "2px 7px", borderRadius: 9999, fontSize: 9, fontWeight: 700,
+                            background: t.tradeType === "Swing" ? "rgba(106,98,86,0.15)"
+                              : t.tradeType === "Intraday" ? "rgba(139,92,246,0.15)" : "rgba(39,174,96,0.12)",
+                            color: t.tradeType === "Swing" ? "var(--accent)"
+                              : t.tradeType === "Intraday" ? "#a78bfa" : "var(--green)",
                           }}>{t.tradeType}</span>
                         </td>
-                        <td style={{ padding: "8px 12px" }}>
-                          <span style={{
-                            padding: "3px 8px", borderRadius: 9999, fontSize: 9, fontWeight: 700,
-                            background: t.status === "Open" ? "rgba(255,176,23,0.1)" : "rgba(100,100,100,0.1)",
-                            color: t.status === "Open" ? "var(--amber)" : "var(--text-3)",
-                          }}>{t.status}</span>
+                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)", whiteSpace: "nowrap" }}>
+                          ₹{t.buyPrice.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
                         </td>
-                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)" }}>
-                          ₹{t.buyPrice.toLocaleString("en-IN")}
+                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)", whiteSpace: "nowrap" }}>
+                          {t.sellPrice ? `₹${t.sellPrice.toLocaleString("en-IN", { maximumFractionDigits: 2 })}` : cmp != null ? <span style={{ color: "var(--green)", fontWeight: 700 }}>₹{cmp.toLocaleString("en-IN")}</span> : "—"}
                         </td>
-                        {/* CMP — live price for open, dash for closed */}
-                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, whiteSpace: "nowrap" }}>
-                          {t.status === "Open"
-                            ? cmp != null
-                              ? <span style={{ color: cmp >= t.buyPrice ? "var(--green)" : "var(--red)", fontWeight: 700 }}>
-                                  ₹{cmp.toLocaleString("en-IN")}
-                                </span>
-                              : <span style={{ color: "var(--text-4)", fontSize: 9 }}>loading…</span>
-                            : <span style={{ color: "var(--text-4)" }}>—</span>}
-                        </td>
-                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)" }}>
-                          {t.sellPrice ? `₹${t.sellPrice.toLocaleString("en-IN")}` : "—"}
-                        </td>
-                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)" }}>
+                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)", textAlign: "right" }}>
                           {t.quantity.toLocaleString("en-IN")}
                         </td>
-                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)" }}>
-                          {rupees(t.capitalUsed).replace("+", "")}
+                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)", whiteSpace: "nowrap" }}>
+                          ₹{t.capitalUsed.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                        </td>
+                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)", whiteSpace: "nowrap" }}>
+                          {received != null ? `₹${received.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—"}
+                        </td>
+                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-3)", textAlign: "center" }}>
+                          {t.daysHeld != null ? t.daysHeld : "—"}
                         </td>
                         <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700,
-                          color: result ? pnlColor(result.pnl) : "var(--text-4)" }}>
-                          {result ? rupees(result.pnl) : "—"}
+                          color: displayPl ? pnlColor(displayPl.pnl) : "var(--text-4)", whiteSpace: "nowrap" }}>
+                          {displayPl ? rupees(displayPl.pnl) : "—"}
+                          {brokerPl != null && computedPl && Math.abs(brokerPl - computedPl.pnl) > 1 && (
+                            <span style={{ fontSize: 8, color: "var(--text-4)", marginLeft: 3 }}>★</span>
+                          )}
                         </td>
                         <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700,
-                          color: result ? pnlColor(result.pct) : "var(--text-4)" }}>
-                          {result ? `${result.pct >= 0 ? "+" : ""}${result.pct.toFixed(2)}%` : "—"}
+                          color: displayPl ? pnlColor(displayPl.pct) : "var(--text-4)" }}>
+                          {displayPl ? `${displayPl.pct >= 0 ? "+" : ""}${displayPl.pct.toFixed(2)}%` : "—"}
+                        </td>
+                        <td style={{ padding: "8px 12px" }}>
+                          {taxLabel && (
+                            <span style={{
+                              padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700,
+                              background: taxLabel === "ST" ? "rgba(251,191,36,0.12)" : taxLabel === "LT" ? "rgba(16,185,129,0.12)" : "rgba(139,92,246,0.12)",
+                              color: taxLabel === "ST" ? "#fbbf24" : taxLabel === "LT" ? "#10b981" : "#a78bfa",
+                            }}>{taxLabel}</span>
+                          )}
                         </td>
                         <td style={{ padding: "8px 12px", color: "var(--text-3)", fontSize: 11, maxWidth: 120,
                           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

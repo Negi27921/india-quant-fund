@@ -19,7 +19,7 @@ from functools import wraps
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 
 warnings.filterwarnings("ignore")
 import yfinance as yf  # noqa: E402
@@ -2226,12 +2226,15 @@ def _qr_fallback() -> list[dict]:
 
 
 @router.get("/quarterly-results")
-async def get_quarterly_results(limit: int = Query(200, le=500)):
+async def get_quarterly_results(limit: int = Query(500, le=2000)):
     """Quarterly earnings results from the quarterly_results Supabase table."""
-    import urllib.request as _ur
-    import os as _os
     sb_url = _os.getenv("SUPABASE_URL", "").strip().rstrip("/")
-    sb_key = _os.getenv("SUPABASE_KEY", "").strip()
+    # Prefer service key (bypasses RLS) — fall back to anon key
+    sb_key = (
+        _os.getenv("SUPABASE_SERVICE_KEY") or
+        _os.getenv("SUPABASE_SERVICE_ROLE_KEY") or
+        _os.getenv("SUPABASE_KEY") or ""
+    ).strip()
     if not sb_url or not sb_key:
         return []
     headers = {
@@ -2241,9 +2244,10 @@ async def get_quarterly_results(limit: int = Query(200, le=500)):
         "Range-Unit":    "items",
         "Range":         f"0-{limit - 1}",
     }
+    # No hard date cutoff — return all results, newest first
     url = (
         f"{sb_url}/rest/v1/quarterly_results"
-        f"?select=*&report_date=gte.2026-05-01&order=report_date.desc,created_at.desc"
+        f"?select=*&order=report_date.desc,created_at.desc"
     )
     try:
         req = _ur.Request(url, headers=headers)
@@ -2267,6 +2271,56 @@ async def get_quarterly_results(limit: int = Query(200, le=500)):
     except Exception as exc:
         print(f"[quarterly-results] {exc}")
         return []
+
+
+# ── Results Pipeline Trigger ──────────────────────────────────────────────────
+
+_pipeline_running = False
+_pipeline_lock    = _threading.Lock()
+_pipeline_last_run: str | None = None
+
+
+def _run_pipeline_bg() -> None:
+    """Run results_pipeline.main() in a background thread. One run at a time."""
+    global _pipeline_running, _pipeline_last_run
+    if not _pipeline_lock.acquire(blocking=False):
+        return  # already running
+    _pipeline_running = True
+    try:
+        import sys
+        import os as _os2
+        proj_root = _os2.path.normpath(
+            _os2.path.join(_os2.path.dirname(__file__), "..", "..")
+        )
+        if proj_root not in sys.path:
+            sys.path.insert(0, proj_root)
+        from scripts.results_pipeline import main as _pipeline_main  # type: ignore
+        _pipeline_main()
+        _pipeline_last_run = datetime.now().isoformat()
+    except Exception as exc:
+        print(f"[pipeline-bg] {exc}")
+    finally:
+        _pipeline_running = False
+        _pipeline_lock.release()
+
+
+@router.post("/pipeline/trigger")
+async def trigger_pipeline(background_tasks: BackgroundTasks):
+    """
+    Kick off the BSE/NSE earnings pipeline in the background.
+    Fetches today's filings, runs AI extraction, rates them, saves to quarterly_results.
+    Returns immediately — results appear in /quarterly-results within ~2 minutes.
+    """
+    if _pipeline_running:
+        return {"status": "already_running", "message": "Pipeline is already processing filings."}
+    background_tasks.add_task(_run_pipeline_bg)
+    return {"status": "started", "message": "Fetching BSE/NSE filings and analysing..."}
+
+
+@router.get("/pipeline/status")
+async def pipeline_status():
+    """Check whether the results pipeline is currently running."""
+    return {"running": _pipeline_running, "last_run": _pipeline_last_run}
 
 
 # ── Stock Fundamentals (yfinance .info — 6h cache) ───────────────────────────

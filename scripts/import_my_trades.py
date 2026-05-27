@@ -94,25 +94,27 @@ def _parse_xlsx(xlsx_path: str) -> list[dict]:
             continue
 
         r = dict(zip(header_row, row))
-        symbol    = (r.get("Symbol") or "").strip()
-        scrip     = (r.get("Scrip Name ") or "").strip()
-        isin      = (r.get("ISIN") or "").strip()
-        qty       = r.get("Qty")
-        buy_rate  = r.get("Buy Rate")
-        buy_amt   = r.get("Buy Amt")
-        sell_rate = r.get("Sell Rate")
-        sell_amt  = r.get("Sell Amt")
-        buy_date  = r.get("Buy Date")
-        sell_date = r.get("Sell Date")
-        total_pl  = r.get("Total PL")
-        days      = r.get("Days")
-        spec      = r.get("Speculation")
-        st        = r.get("Short Term")
+        symbol      = (r.get("Symbol") or "").strip()
+        scrip       = (r.get("Scrip Name ") or "").strip()
+        scrip_code  = str(r.get("Scrip Code") or "").strip()
+        isin        = (r.get("ISIN") or "").strip()
+        qty         = r.get("Qty")
+        buy_rate    = r.get("Buy Rate")
+        buy_amt     = r.get("Buy Amt")
+        sell_rate   = r.get("Sell Rate")
+        sell_amt_v  = r.get("Sell Amt")
+        buy_date    = r.get("Buy Date")
+        sell_date   = r.get("Sell Date")
+        total_pl    = r.get("Total PL")
+        days        = r.get("Days")
+        short_term  = r.get("Short Term")
+        long_term   = r.get("Long Term")
+        spec        = r.get("Speculation")
+        turnover    = r.get("Turn Over")
 
         if not symbol or qty is None or buy_rate is None:
             continue
 
-        # Normalise dates
         def _dt(v) -> str:
             if isinstance(v, datetime):
                 return v.date().isoformat()
@@ -123,35 +125,51 @@ def _parse_xlsx(xlsx_path: str) -> list[dict]:
         buy_date_str  = _dt(buy_date)
         sell_date_str = _dt(sell_date) if sell_date else None
 
-        # Determine trade type: Speculation = intraday, else Swing
-        trade_type = "Intraday" if (spec and float(spec or 0) != 0 and days == 0) else "Swing"
+        # Determine trade type from broker categorisation
+        spec_v = float(spec or 0)
+        trade_type = "Intraday" if (spec_v != 0 and int(days or 0) == 0) else "Swing"
 
-        # Unique deterministic ID
-        uid_src = f"{symbol}|{buy_date_str}|{int(qty)}|{float(buy_rate):.4f}|{sell_date_str}"
+        # Deterministic ID (unchanged — keeps existing rows stable)
+        uid_src  = f"{symbol}|{buy_date_str}|{int(qty)}|{float(buy_rate):.4f}|{sell_date_str}"
         trade_id = "imp_" + hashlib.md5(uid_src.encode()).hexdigest()[:16]
 
-        pl_val = float(total_pl or 0)
+        pl_val       = float(total_pl or 0)
+        buy_amt_v    = float(buy_amt or 0)
+        sell_amt_flt = float(sell_amt_v or 0)
+
         notes = (
             f"Upstox Import · {scrip} · ISIN: {isin} · "
             f"Days held: {int(days or 0)} · "
-            f"P&L: ₹{pl_val:+,.2f} · "
-            f"Buy ₹{float(buy_amt or 0):,.2f} → Sell ₹{float(sell_amt or 0):,.2f}"
+            f"Broker P&L: ₹{pl_val:+,.2f} · "
+            f"Invested ₹{buy_amt_v:,.2f} → Received ₹{sell_amt_flt:,.2f}"
         )
 
         trades.append({
-            "id":          trade_id,
-            "stock_name":  symbol,
-            "buy_price":   round(float(buy_rate), 4),
-            "quantity":    int(qty),
-            "entry_date":  buy_date_str,
-            "capital_used": round(float(buy_amt or 0), 2),
-            "trade_type":  trade_type,
-            "status":      "Closed",
-            "sell_price":  round(float(sell_rate), 4) if sell_rate else None,
-            "exit_date":   sell_date_str,
-            "strategy":    "FY2026-27 Upstox",
-            "notes":       notes,
+            # ── Core fields (schema v004) ──────────────────────────────
+            "id":           trade_id,
+            "stock_name":   symbol,
+            "buy_price":    round(float(buy_rate), 4),
+            "quantity":     int(qty),
+            "entry_date":   buy_date_str,
+            "capital_used": round(buy_amt_v, 2),
+            "trade_type":   trade_type,
+            "status":       "Closed",
+            "sell_price":   round(float(sell_rate), 4) if sell_rate else None,
+            "exit_date":    sell_date_str,
+            "strategy":     "FY2026-27 Upstox",
+            "notes":        notes,
             "rule_followed": "Yes",
+            # ── Broker-sourced fields (schema v024) ────────────────────
+            "sell_amt":       round(sell_amt_flt, 2) if sell_amt_v else None,
+            "broker_pl":      round(pl_val, 2),
+            "days_held":      int(days or 0),
+            "short_term_pl":  round(float(short_term), 2) if short_term is not None else None,
+            "long_term_pl":   round(float(long_term), 2) if long_term is not None else None,
+            "speculation_pl": round(float(spec or 0), 2) if spec is not None else None,
+            "turnover":       round(float(turnover), 2) if turnover else None,
+            "isin":           isin or None,
+            "scrip_code":     scrip_code or None,
+            "scrip_name":     scrip or None,
         })
 
     return trades
@@ -163,19 +181,23 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--xlsx", default=str(_ROOT.parent / "My Trades.xlsx"))
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--force", action="store_true", help="Upsert all rows (use after adding new columns)")
     args = ap.parse_args()
 
     print(f"Reading {args.xlsx} ...")
     trades = _parse_xlsx(args.xlsx)
     print(f"  → Parsed {len(trades)} trades")
 
-    # Fetch existing IDs to show what's new vs already imported
-    print("Checking existing journal_trades ...")
-    existing = {r["id"] for r in _get("journal_trades?select=id&strategy=eq.FY2026-27%20Upstox")}
-    new_trades = [t for t in trades if t["id"] not in existing]
-    already   = len(trades) - len(new_trades)
-
-    print(f"  → {already} already imported, {len(new_trades)} new")
+    if args.force:
+        new_trades = trades
+        print(f"  → Force mode: upserting all {len(trades)} trades")
+    else:
+        # Fetch existing IDs to show what's new vs already imported
+        print("Checking existing journal_trades ...")
+        existing = {r["id"] for r in _get("journal_trades?select=id&strategy=eq.FY2026-27%20Upstox")}
+        new_trades = [t for t in trades if t["id"] not in existing]
+        already   = len(trades) - len(new_trades)
+        print(f"  → {already} already imported, {len(new_trades)} new")
 
     if not new_trades:
         print("Nothing to import. Done.")

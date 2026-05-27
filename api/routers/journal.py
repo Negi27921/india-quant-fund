@@ -23,6 +23,7 @@ _TABLE = "journal_trades"
 # ── Supabase storage helpers ───────────────────────────────────────────────────
 
 def _row_to_dict(d: dict) -> dict:
+    def _f(k): return float(d[k]) if d.get(k) is not None else None
     return {
         "id":              d.get("id"),
         "stockName":       d.get("stock_name"),
@@ -32,18 +33,29 @@ def _row_to_dict(d: dict) -> dict:
         "capitalUsed":     float(d.get("capital_used") or 0),
         "tradeType":       d.get("trade_type"),
         "status":          d.get("status"),
-        "sellPrice":       float(d["sell_price"]) if d.get("sell_price") is not None else None,
+        "sellPrice":       _f("sell_price"),
         "exitDate":        d.get("exit_date"),
         "strategy":        d.get("strategy"),
         "notes":           d.get("notes"),
-        "plannedStopLoss": float(d["planned_sl"]) if d.get("planned_sl") is not None else None,
-        "plannedTarget":   float(d["planned_tp"]) if d.get("planned_tp") is not None else None,
+        "plannedStopLoss": _f("planned_sl"),
+        "plannedTarget":   _f("planned_tp"),
         "emotionEntry":    d.get("emotion_entry"),
         "emotionExit":     d.get("emotion_exit"),
         "marketCondition": d.get("market_cond"),
         "ruleFollowed":    d.get("rule_followed"),
         "createdAt":       d.get("created_at"),
         "updatedAt":       d.get("updated_at"),
+        # broker-sourced fields (v024)
+        "sellAmt":         _f("sell_amt"),
+        "brokerPl":        _f("broker_pl"),
+        "daysHeld":        d.get("days_held"),
+        "shortTermPl":     _f("short_term_pl"),
+        "longTermPl":      _f("long_term_pl"),
+        "speculationPl":   _f("speculation_pl"),
+        "turnover":        _f("turnover"),
+        "isin":            d.get("isin"),
+        "scripCode":       d.get("scrip_code"),
+        "scripName":       d.get("scrip_name"),
     }
 
 

@@ -370,8 +370,16 @@ export const useQuarterlyResults = () =>
     queryKey: ["market", "quarterly-results"],
     queryFn: () =>
       api.get<QuarterlyResult[]>("/market/quarterly-results").catch(() => [] as QuarterlyResult[]),
-    staleTime: 5 * 60_000,
-    refetchInterval: 10 * 60_000,
+    staleTime: 60_000,          // 1 min — re-fetch quickly after pipeline runs
+    refetchInterval: 5 * 60_000,
+  });
+
+export const usePipelineStatus = () =>
+  useQuery<{ running: boolean; last_run: string | null }>({
+    queryKey: ["market", "pipeline-status"],
+    queryFn: () => api.get("/market/pipeline/status"),
+    staleTime: 0,
+    refetchInterval: (data) => ((data as any)?.running ? 4_000 : false),
   });
 
 export const useLivePrice = (symbol: string) =>
