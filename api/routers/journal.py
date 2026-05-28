@@ -206,7 +206,7 @@ async def journal_positions(_: None = Depends(require_internal_key)):
     """Open journal trades as portfolio positions with live CMPs."""
     def _compute():
         trades = _all_trades()
-        open_trades = [t for t in trades if t.get("status") == "Open"]
+        open_trades = [t for t in trades if (t.get("status") or "").lower() == "open"]
         if not open_trades:
             return []
         symbols = list({t["stockName"] for t in open_trades})
@@ -260,10 +260,10 @@ async def journal_summary(_: None = Depends(require_internal_key)):
                 "unrealized_pnl": 0, "day_pnl": 0, "day_pnl_pct": 0,
                 "drawdown": 0, "open_positions": 0, "total_trades": 0,
             }
-        open_trades = [t for t in trades if t.get("status") == "Open"]
+        open_trades = [t for t in trades if (t.get("status") or "").lower() == "open"]
         closed_trades = [
             t for t in trades
-            if t.get("status") == "Closed" and t.get("sellPrice") is not None
+            if (t.get("status") or "").lower() == "closed" and t.get("sellPrice") is not None
         ]
         realized_pnl = sum(
             (float(t["sellPrice"]) - float(t["buyPrice"])) * int(t["quantity"])
@@ -318,32 +318,44 @@ async def journal_summary(_: None = Depends(require_internal_key)):
 
 
 @router.get("/pnl-calendar")
-async def journal_pnl_calendar(year: int | None = None, _: None = Depends(require_internal_key)):
+async def journal_pnl_calendar(
+    year: int | None = None,
+    month: int | None = None,
+    _: None = Depends(require_internal_key),
+):
     """Daily P&L from closed journal trades grouped by exit date."""
     def _compute():
         trades = _all_trades()
         closed = [
             t for t in trades
-            if t.get("status") == "Closed"
+            if (t.get("status") or "").lower() == "closed"
             and t.get("sellPrice") is not None
             and t.get("exitDate")
         ]
-        daily: dict[str, float] = defaultdict(float)
+        daily_pnl: dict[str, float] = defaultdict(float)
+        daily_cap: dict[str, float] = defaultdict(float)
         for t in closed:
             ed = (t["exitDate"] or "")[:10]
             if not ed:
                 continue
             if year and not ed.startswith(str(year)):
                 continue
-            daily[ed] += (float(t["sellPrice"]) - float(t["buyPrice"])) * int(t["quantity"])
+            if month and not ed.startswith(f"{year}-{str(month).zfill(2)}"):
+                continue
+            pnl = (float(t["sellPrice"]) - float(t["buyPrice"])) * int(t["quantity"])
+            cap = float(t["buyPrice"]) * int(t["quantity"])
+            daily_pnl[ed] += pnl
+            daily_cap[ed] += cap
         result, running = [], 0.0
-        for d in sorted(daily.keys()):
-            pnl = daily[d]
+        for d in sorted(daily_pnl.keys()):
+            pnl = daily_pnl[d]
+            cap = daily_cap[d]
             running += pnl
+            pnl_pct = round(pnl / cap * 100, 4) if cap > 0 else 0.0
             result.append({
                 "date":            d,
                 "pnl":             round(pnl, 2),
-                "pnl_pct":         0.0,
+                "pnl_pct":         pnl_pct,
                 "portfolio_value": round(running, 2),
             })
         return result
@@ -528,7 +540,7 @@ def _nvidia(system: str, user_msg: str, history: list[dict] | None = None) -> st
     key = os.getenv("NVIDIA_API_KEY", "").strip()
     if not key:
         raise ValueError("NVIDIA_API_KEY not set")
-    model = os.getenv("NVIDIA_MODEL", "deepseek-ai/deepseek-r1").strip()
+    model = os.getenv("NVIDIA_MODEL", "nvidia/llama-3.3-nemotron-super-49b-v1").strip()
     messages = [{"role": "system", "content": system}]
     for t in (history or []):
         messages.append({"role": t.get("role", "user"), "content": t.get("content", "")})
@@ -547,11 +559,11 @@ def _nvidia(system: str, user_msg: str, history: list[dict] | None = None) -> st
 
 
 def _llm(system: str, user_msg: str, history: list[dict] | None = None) -> tuple[str, str, int]:
-    # NVIDIA/DeepSeek R1 → Groq → Gemini → OpenRouter
+    # Groq (fast, ~1s) → Gemini → NVIDIA NIM → OpenRouter
     chain = [
-        ("nvidia",     _nvidia),
         ("groq",       _groq),
         ("gemini",     _gemini),
+        ("nvidia",     _nvidia),
         ("openrouter", _openrouter),
     ]
     errors: list[str] = []

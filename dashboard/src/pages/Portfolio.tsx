@@ -116,7 +116,7 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
   openChart: (sym: string, name: string) => void;
 }) {
   const [addOpen, setAddOpen] = useState(false);
-  const [tab, setTab] = useState<HoldingsTabValue>("paper");
+  const [tab, setTab] = useState<HoldingsTabValue>("live");
   const [exitTarget, setExitTarget] = useState<PaperPosition | null>(null);
   const [exitOpen, setExitOpen] = useState(false);
 
@@ -563,8 +563,20 @@ function PnLTab() {
       .map(([key, v]) => ({ month: MONTHS[parseInt(key.slice(5)) - 1], ...v }));
   }, [allData]);
 
-  const prevMonth = () => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); };
-  const nextMonth = () => { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); };
+  const prevMonth = () => {
+    const newYear  = month === 1  ? year - 1 : year;
+    const newMonth = month === 1  ? 12       : month - 1;
+    setYear(newYear); setMonth(newMonth);
+    setRangeStart(monthStart(newYear, newMonth));
+    setRangeEnd(monthEnd(newYear, newMonth));
+  };
+  const nextMonth = () => {
+    const newYear  = month === 12 ? year + 1 : year;
+    const newMonth = month === 12 ? 1        : month + 1;
+    setYear(newYear); setMonth(newMonth);
+    setRangeStart(monthStart(newYear, newMonth));
+    setRangeEnd(monthEnd(newYear, newMonth));
+  };
 
   const filteredCalData = calData.filter(d => {
     const date = d.date.slice(0, 10);

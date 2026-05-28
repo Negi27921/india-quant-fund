@@ -1232,8 +1232,11 @@ function StockListPane({
 
   const filtered = useMemo(() => {
     let r = [...items];
-    // Universe: backend returns market_cap desc — preserve that order; others sort A-Z
-    if (!isUniverse) r.sort((a, b) => a.symbol.localeCompare(b.symbol));
+    // Universe: preserve market_cap desc order unless letter/search filter is active
+    // (random-looking market_cap order within a single letter is confusing)
+    if (!isUniverse || letterFilter || search.trim()) {
+      r.sort((a, b) => a.symbol.localeCompare(b.symbol));
+    }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       r = r.filter(i => i.symbol.toLowerCase().includes(q) || (i.company || "").toLowerCase().includes(q));

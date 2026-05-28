@@ -209,6 +209,7 @@ export const useJournalPnLCalendar = (year?: number, month?: number) =>
     queryFn: () => {
       const params = new URLSearchParams();
       if (year) params.set("year", String(year));
+      if (month) params.set("month", String(month));
       return api.get<DayPnL[]>(`/journal/pnl-calendar?${params}`);
     },
     refetchInterval: 60_000,

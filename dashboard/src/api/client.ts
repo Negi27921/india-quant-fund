@@ -7,8 +7,9 @@
  */
 import { API_BASE, API_KEY } from "@/lib/constants";
 
-const TIMEOUT_MS      = 10_000;
-const TIMEOUT_CHAT_MS = 35_000;
+const TIMEOUT_MS         = 10_000;
+const TIMEOUT_CHAT_MS    = 35_000;
+const TIMEOUT_ANALYSE_MS = 50_000;
 
 export class ApiError extends Error {
   constructor(
@@ -74,7 +75,9 @@ export const api = {
     request<T>(
       path,
       { method: "POST", body: body != null ? JSON.stringify(body) : undefined },
-      path.includes("/chat/") || path.includes("/scan/chunk") ? TIMEOUT_CHAT_MS : TIMEOUT_MS,
+      path.includes("/watchlists/analyse") ? TIMEOUT_ANALYSE_MS
+        : path.includes("/chat/") || path.includes("/scan/chunk") ? TIMEOUT_CHAT_MS
+        : TIMEOUT_MS,
     ),
   put: <T>(path: string, body?: unknown) =>
     request<T>(path, {
