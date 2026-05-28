@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ScanSearch, RefreshCw, CheckCircle2, XCircle, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Filter, Loader2, Rocket, Layers, Zap, ArrowUpRight, GitMerge, BarChart3, Globe, ExternalLink, Star, BookOpen, TrendingUp as PnlIcon, Calendar } from "lucide-react";
+import { ScanSearch, RefreshCw, CheckCircle2, XCircle, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Filter, Loader2, Rocket, Layers, Zap, ArrowUpRight, GitMerge, BarChart3, Globe, ExternalLink, Star, BookOpen, TrendingUp as PnlIcon, Calendar, Send, Bot, Clock, Award, Trash2 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
-import { useScreener, useScanChunk, type ScreenerResult } from "@/api/market-queries";
+import { useScreener, useScanChunk, useBatchPrices, type ScreenerResult } from "@/api/market-queries";
+import { useAnalyseStock } from "@/api/watchlist-queries";
 import { useQueryClient } from "@tanstack/react-query";
 
 // ── Paper Trade Types ─────────────────────────────────────────────────────────
@@ -20,7 +21,7 @@ interface PaperTrade {
   confidence: number;
   current_price: number;
   last_updated: string;
-  status: "open" | "sl_hit" | "tp1_hit" | "tp2_hit";
+  status: "open" | "sl_hit" | "tp1_hit" | "tp2_hit" | "expired";
   exit_price?: number;
   exit_time?: string;
   pnl_pct?: number;
@@ -67,6 +68,19 @@ function autoRecordTrade(r: ScreenerResult, strategy: Strategy): PaperTrade | nu
   return trade;
 }
 
+function checkExitsForPrice(t: PaperTrade, price: number): Partial<PaperTrade> {
+  if (price <= t.sl) return {
+    status: "sl_hit", exit_price: t.sl, exit_time: new Date().toISOString(),
+    pnl_pct: ((t.sl - t.entry_price) / t.entry_price) * 100,
+  };
+  if (price >= t.tp2) return {
+    status: "tp2_hit", exit_price: t.tp2, exit_time: new Date().toISOString(),
+    pnl_pct: ((t.tp2 - t.entry_price) / t.entry_price) * 100,
+  };
+  if (price >= t.tp1) return { status: "tp1_hit" };
+  return {};
+}
+
 function updatePaperPrices(results: ScreenerResult[]) {
   const trades = loadPaperTrades();
   let changed = false;
@@ -77,20 +91,7 @@ function updatePaperPrices(results: ScreenerResult[]) {
     const price = priceMap[t.symbol];
     if (!price || price === t.current_price) return t;
     changed = true;
-    let status: PaperTrade["status"] = "open";
-    let exit_price: number | undefined;
-    let exit_time: string | undefined;
-    let pnl_pct: number | undefined;
-    if (price <= t.sl) {
-      status = "sl_hit"; exit_price = t.sl; exit_time = new Date().toISOString();
-      pnl_pct = ((t.sl - t.entry_price) / t.entry_price) * 100;
-    } else if (price >= t.tp2) {
-      status = "tp2_hit"; exit_price = t.tp2; exit_time = new Date().toISOString();
-      pnl_pct = ((t.tp2 - t.entry_price) / t.entry_price) * 100;
-    } else if (price >= t.tp1) {
-      status = "tp1_hit";
-    }
-    return { ...t, current_price: price, last_updated: new Date().toISOString(), status, exit_price, exit_time, pnl_pct };
+    return { ...t, current_price: price, last_updated: new Date().toISOString(), ...checkExitsForPrice(t, price) };
   });
   if (changed) savePaperTrades(updated);
   return updated;
@@ -463,12 +464,13 @@ function PaperTradeRow({ trade }: { trade: PaperTrade }) {
     : (trade.pnl_pct ?? 0);
   const pnlColor = pnlPct > 0 ? "var(--green)" : pnlPct < 0 ? "var(--red)" : "var(--text-3)";
 
-  const statusBadge = {
+  const statusBadge = ({
     open:    { label: "OPEN",    color: "var(--accent)",  bg: "var(--accent-dim)", border: "var(--accent-border)" },
     sl_hit:  { label: "SL HIT",  color: "var(--red)",    bg: "var(--red-dim)",    border: "rgba(248,113,113,0.3)" },
     tp1_hit: { label: "TP1 ✓",   color: "var(--green)",  bg: "var(--green-dim)",  border: "rgba(52,211,153,0.3)" },
     tp2_hit: { label: "TP2 ✓✓",  color: "var(--green)",  bg: "var(--green-dim)",  border: "rgba(52,211,153,0.3)" },
-  }[trade.status];
+    expired: { label: "EXPIRED", color: "var(--text-3)", bg: "var(--surface-3)",  border: "var(--border)" },
+  } as Record<string, { label: string; color: string; bg: string; border: string }>)[trade.status] ?? { label: trade.status, color: "var(--text-3)", bg: "var(--surface-3)", border: "var(--border)" };
 
   const meta = STRATEGY_META[trade.strategy];
 
@@ -531,6 +533,210 @@ function PaperTradeRow({ trade }: { trade: PaperTrade }) {
   );
 }
 
+// ── Strategy Analysis Table ───────────────────────────────────────────────────
+function StrategyAnalysisTable({ trades }: { trades: PaperTrade[] }) {
+  const rows = (Object.keys(STRATEGY_META) as Strategy[]).map(s => {
+    const st = trades.filter(t => t.strategy === s);
+    const closed = st.filter(t => t.status !== "open" && t.pnl_pct != null);
+    const open = st.filter(t => t.status === "open");
+    const won = closed.filter(t => (t.pnl_pct ?? 0) > 0);
+    const winRate = closed.length > 0 ? (won.length / closed.length) * 100 : null;
+    const avgPnl = closed.length > 0 ? closed.reduce((acc, t) => acc + (t.pnl_pct ?? 0), 0) / closed.length : null;
+    const avgHoldDays = closed.length > 0
+      ? closed.reduce((acc, t) => acc + (new Date(t.exit_time!).getTime() - new Date(t.entry_time).getTime()) / 86_400_000, 0) / closed.length
+      : null;
+    const best  = closed.length > 0 ? closed.reduce((a, b) => (b.pnl_pct ?? -Infinity) > (a.pnl_pct ?? -Infinity) ? b : a) : null;
+    const worst = closed.length > 0 ? closed.reduce((a, b) => (b.pnl_pct ?? Infinity)  < (a.pnl_pct ?? Infinity)  ? b : a) : null;
+    return { strategy: s, total: st.length, open: open.length, closed: closed.length, winRate, avgPnl, avgHoldDays, best, worst };
+  }).filter(r => r.total > 0);
+
+  if (!rows.length) return null;
+
+  return (
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", marginBottom: 16 }}>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
+        <Award style={{ width: 14, height: 14, color: "var(--accent)" }} />
+        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-body)" }}>STRATEGY PERFORMANCE</span>
+        <span style={{ fontSize: 9.5, color: "var(--text-4)", marginLeft: 4 }}>closed trades only</span>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
+              {["Strategy", "Open / Closed", "Win Rate", "Avg P&L", "Avg Hold", "Best Trade", "Worst Trade"].map(h => (
+                <th key={h} style={{ padding: "7px 12px", textAlign: "left", fontSize: 9, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.08em", fontFamily: "var(--font-body)", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => {
+              const m = STRATEGY_META[r.strategy as Strategy];
+              return (
+                <tr key={r.strategy} style={{ borderBottom: "1px solid var(--border)" }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "var(--card-hover)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                >
+                  <td style={{ padding: "8px 12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <span style={{ color: m?.color ?? "var(--accent)", fontSize: 11 }}>{m?.icon}</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-body)" }}>{m?.label}</span>
+                    </div>
+                  </td>
+                  <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)" }}>
+                    {r.open}✦ / {r.closed}✓
+                  </td>
+                  <td style={{ padding: "8px 12px" }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, fontFamily: "var(--font-mono)", color: r.winRate == null ? "var(--text-4)" : r.winRate >= 50 ? "var(--green)" : "var(--red)" }}>
+                      {r.winRate != null ? `${r.winRate.toFixed(0)}%` : "—"}
+                    </span>
+                  </td>
+                  <td style={{ padding: "8px 12px" }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, fontFamily: "var(--font-mono)", color: r.avgPnl == null ? "var(--text-4)" : r.avgPnl >= 0 ? "var(--green)" : "var(--red)" }}>
+                      {r.avgPnl != null ? `${r.avgPnl >= 0 ? "+" : ""}${r.avgPnl.toFixed(1)}%` : "—"}
+                    </span>
+                  </td>
+                  <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)" }}>
+                    {r.avgHoldDays != null ? `${r.avgHoldDays.toFixed(1)}d` : "—"}
+                  </td>
+                  <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--green)" }}>
+                    {r.best ? `${(r.best.pnl_pct ?? 0) >= 0 ? "+" : ""}${(r.best.pnl_pct ?? 0).toFixed(1)}% ${r.best.symbol}` : "—"}
+                  </td>
+                  <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--red)" }}>
+                    {r.worst ? `${(r.worst.pnl_pct ?? 0).toFixed(1)}% ${r.worst.symbol}` : "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── AI Trades Chat Panel ──────────────────────────────────────────────────────
+type ChatMsg = { role: "user" | "assistant"; content: string };
+
+function TradesChatPanel({ trades, messages, onMessages }: {
+  trades: PaperTrade[];
+  messages: ChatMsg[];
+  onMessages: (msgs: ChatMsg[]) => void;
+}) {
+  const analyse = useAnalyseStock();
+  const [input, setInput] = useState("");
+  const endRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  const buildContext = () => {
+    const closed = trades.filter(t => t.status !== "open" && t.pnl_pct != null);
+    const open   = trades.filter(t => t.status === "open");
+    const won    = closed.filter(t => (t.pnl_pct ?? 0) > 0);
+    const winRate  = closed.length > 0 ? ((won.length / closed.length) * 100).toFixed(0) : "n/a";
+    const totalPnl = closed.reduce((s, t) => s + (t.pnl_pct ?? 0), 0);
+    const byStrat  = (Object.keys(STRATEGY_META) as Strategy[]).map(s => {
+      const sc = trades.filter(t => t.strategy === s && t.status !== "open" && t.pnl_pct != null);
+      if (!sc.length) return null;
+      const sw = sc.filter(t => (t.pnl_pct ?? 0) > 0).length;
+      const avgP = sc.reduce((a, t) => a + (t.pnl_pct ?? 0), 0) / sc.length;
+      return `  ${STRATEGY_META[s].label}: ${sc.length} closed, ${((sw / sc.length) * 100).toFixed(0)}% win, avg ${avgP >= 0 ? "+" : ""}${avgP.toFixed(1)}%`;
+    }).filter(Boolean).join("\n");
+    return `Paper Trade Portfolio:
+Total: ${trades.length} (${open.length} open, ${closed.length} closed)
+Overall win rate: ${winRate}% | Total closed P&L: ${totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(1)}%
+Strategy breakdown:\n${byStrat || "  No closed trades yet"}
+Recent 5 trades:\n${trades.slice(0, 5).map(t => `  ${t.symbol} [${t.strategy}] entry ₹${t.entry_price.toFixed(0)}, ${t.status}, P&L ${t.pnl_pct != null ? (t.pnl_pct >= 0 ? "+" : "") + t.pnl_pct.toFixed(1) + "%" : "open"}`).join("\n")}`;
+  };
+
+  const handleSend = async () => {
+    if (!input.trim() || analyse.isPending) return;
+    const q = input.trim();
+    setInput("");
+    const next: ChatMsg[] = [...messages, { role: "user", content: q }];
+    onMessages(next);
+    try {
+      const res = await analyse.mutateAsync({
+        symbol: "PORTFOLIO",
+        question: `${buildContext()}\n\nUser question: ${q}`,
+        history: messages.map(m => ({ role: m.role, content: m.content })),
+      });
+      onMessages([...next, { role: "assistant", content: res.response }]);
+    } catch {
+      onMessages([...next, { role: "assistant", content: "Could not get a response. Please try again." }]);
+    }
+  };
+
+  const SUGGESTIONS = ["Which strategy has the best win rate?", "Which open trades should I close?", "What patterns lead to losses?"];
+
+  return (
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", marginBottom: 16 }}>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8 }}>
+        <Bot style={{ width: 14, height: 14, color: "var(--accent)" }} />
+        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-body)" }}>AI TRADE ANALYSER</span>
+        <span style={{ fontSize: 9.5, color: "var(--text-4)", marginLeft: 4 }}>Ask about strategies, P&L, or what's working</span>
+      </div>
+
+      <div style={{ height: 260, overflowY: "auto", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+        {messages.length === 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ fontSize: 11, color: "var(--text-3)", fontFamily: "var(--font-body)" }}>Try asking:</div>
+            {SUGGESTIONS.map(s => (
+              <button key={s} onClick={() => setInput(s)}
+                style={{ fontSize: 11, padding: "4px 10px", borderRadius: 6, cursor: "pointer", background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text-2)", fontFamily: "var(--font-body)", textAlign: "left" }}>
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+        {messages.map((m, i) => (
+          <div key={i} style={{ display: "flex", gap: 8, justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+            {m.role === "assistant" && (
+              <div style={{ width: 24, height: 24, borderRadius: 6, background: "var(--accent-dim)", border: "1px solid var(--accent-border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
+                <Bot style={{ width: 12, height: 12, color: "var(--accent)" }} />
+              </div>
+            )}
+            <div style={{
+              maxWidth: "75%", padding: "8px 12px",
+              borderRadius: m.role === "user" ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
+              background: m.role === "user" ? "var(--accent-dim)" : "var(--surface-2)",
+              border: `1px solid ${m.role === "user" ? "var(--accent-border)" : "var(--border)"}`,
+              fontSize: 12, color: "var(--text-1)", fontFamily: "var(--font-body)", lineHeight: 1.6, whiteSpace: "pre-wrap",
+            }}>
+              {m.content}
+            </div>
+          </div>
+        ))}
+        {analyse.isPending && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ width: 24, height: 24, borderRadius: 6, background: "var(--accent-dim)", border: "1px solid var(--accent-border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <Loader2 style={{ width: 12, height: 12, color: "var(--accent)", animation: "spin 1s linear infinite" }} />
+            </div>
+            <div style={{ padding: "8px 12px", borderRadius: "12px 12px 12px 4px", background: "var(--surface-2)", border: "1px solid var(--border)", fontSize: 12, color: "var(--text-3)" }}>
+              Analysing your portfolio…
+            </div>
+          </div>
+        )}
+        <div ref={endRef} />
+      </div>
+
+      <div style={{ padding: "10px 12px", borderTop: "1px solid var(--border)", display: "flex", gap: 8 }}>
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && !e.shiftKey && handleSend()}
+          placeholder="Ask about your trades…"
+          style={{ flex: 1, background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, padding: "7px 12px", color: "var(--text-1)", fontFamily: "var(--font-body)", fontSize: 12, outline: "none" }}
+        />
+        <button onClick={handleSend} disabled={!input.trim() || analyse.isPending}
+          style={{ padding: "7px 14px", borderRadius: 8, cursor: "pointer", background: "var(--accent)", color: "#fff", border: "none", display: "flex", alignItems: "center", gap: 5, opacity: !input.trim() || analyse.isPending ? 0.5 : 1, fontFamily: "var(--font-body)", fontSize: 12, fontWeight: 600 }}>
+          <Send style={{ width: 12, height: 12 }} />
+          Send
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export function ScreenerPage() {
   const [strategy, setStrategy] = useState<Strategy>("vcp");
@@ -550,6 +756,16 @@ export function ScreenerPage() {
   const [ptFromDate, setPtFromDate] = useState("");
   const [ptToDate, setPtToDate] = useState("");
   const [ptStatusFilter, setPtStatusFilter] = useState<"all" | "open" | "closed">("all");
+
+  // Live price tracking for open paper trades (independent of screener results)
+  const openSymbols = useMemo(
+    () => [...new Set(paperTrades.filter(t => t.status === "open").map(t => t.symbol))].slice(0, 100),
+    [paperTrades],
+  );
+  const { data: livePrices = {} } = useBatchPrices(openSymbols);
+
+  // AI Chat state for trades tab
+  const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
 
   const scanChunk = useScanChunk();
   const qc = useQueryClient();
@@ -644,6 +860,42 @@ export function ScreenerPage() {
   }, [results, strategy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { autoRecord(); }, [autoRecord]);
+
+  // Apply live batch prices → check SL/TP exits independently of screener results
+  useEffect(() => {
+    const entries = Object.entries(livePrices as Record<string, import("@/api/market-queries").PriceEntry>);
+    if (!entries.length) return;
+    const trades = loadPaperTrades();
+    let changed = false;
+    const updated = trades.map(t => {
+      if (t.status !== "open") return t;
+      const entry = (livePrices as Record<string, import("@/api/market-queries").PriceEntry>)[t.symbol];
+      if (!entry?.cmp || entry.cmp === t.current_price) return t;
+      changed = true;
+      return { ...t, current_price: entry.cmp, last_updated: new Date().toISOString(), ...checkExitsForPrice(t, entry.cmp) };
+    });
+    if (changed) { savePaperTrades(updated); setPaperTrades(updated); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [livePrices]);
+
+  // Auto-close stale trades: open >30 days OR open >10 days with |P&L| <3%
+  const handleAutoCloseStale = useCallback(() => {
+    const now = new Date();
+    const trades = loadPaperTrades();
+    let count = 0;
+    const updated = trades.map(t => {
+      if (t.status !== "open") return t;
+      const daysHeld = (now.getTime() - new Date(t.entry_time).getTime()) / 86_400_000;
+      const pnlPct = ((t.current_price - t.entry_price) / t.entry_price) * 100;
+      const isStale = daysHeld > 30 || (daysHeld > 10 && Math.abs(pnlPct) < 3);
+      if (!isStale) return t;
+      count++;
+      return { ...t, status: "expired" as const, exit_price: t.current_price, exit_time: now.toISOString(), pnl_pct: pnlPct };
+    });
+    savePaperTrades(updated);
+    setPaperTrades(updated);
+    alert(count > 0 ? `Auto-closed ${count} stale trade${count !== 1 ? "s" : ""}.` : "No stale trades to close.");
+  }, []);
 
   // Group paper trades by strategy for P&L breakdown
   const tradesByStrategy = (Object.keys(STRATEGY_META) as Strategy[]).reduce<Record<string, PaperTrade[]>>((acc, s) => {
@@ -1152,14 +1404,31 @@ export function ScreenerPage() {
                   ))}
                 </div>
 
-                {paperTrades.length > 0 && (
-                  <button
-                    onClick={() => { savePaperTrades([]); setPaperTrades([]); }}
-                    style={{ marginLeft: "auto", fontSize: 10, color: "var(--red)", background: "none", border: "none", cursor: "pointer" }}
-                  >
-                    Clear All
-                  </button>
-                )}
+                <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+                  {paperTrades.some(t => t.status === "open") && (
+                    <button
+                      onClick={handleAutoCloseStale}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 5,
+                        fontSize: 10, padding: "4px 10px", borderRadius: 6, cursor: "pointer",
+                        background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.35)",
+                        color: "var(--amber)", fontFamily: "var(--font-body)", fontWeight: 600,
+                      }}
+                      title="Close trades open >30 days OR >10 days with |P&L| <3%"
+                    >
+                      <Clock style={{ width: 10, height: 10 }} />
+                      Auto-Close Stale
+                    </button>
+                  )}
+                  {paperTrades.length > 0 && (
+                    <button
+                      onClick={() => { savePaperTrades([]); setPaperTrades([]); }}
+                      style={{ fontSize: 10, color: "var(--red)", background: "none", border: "none", cursor: "pointer" }}
+                    >
+                      Clear All
+                    </button>
+                  )}
+                </div>
               </div>
 
               {filteredPaperTrades.length === 0 ? (
@@ -1216,6 +1485,16 @@ export function ScreenerPage() {
                 })()}
               </div>
             </div>
+
+            {/* Per-strategy performance table */}
+            <StrategyAnalysisTable trades={paperTrades} />
+
+            {/* AI chat for trade analysis */}
+            <TradesChatPanel
+              trades={paperTrades}
+              messages={chatMessages}
+              onMessages={setChatMessages}
+            />
           </motion.div>
         )}
       </div>
