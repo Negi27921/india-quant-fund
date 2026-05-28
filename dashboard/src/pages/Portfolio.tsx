@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -6,6 +6,7 @@ import {
   Plus, Trash2, LogOut, BarChart3,
   CalendarDays, BarChart2, Target, Flame,
   ChevronLeft, ChevronRight, Wifi, WifiOff, X,
+  Loader2, RefreshCw,
 } from "lucide-react";
 import {
   AreaChart, Area, ResponsiveContainer, Tooltip as ReTip,
@@ -29,11 +30,11 @@ import {
 } from "@/api/queries";
 import {
   usePaperPositions, useDeletePaperPosition, useLivePositions, useDeleteLivePosition,
-  usePaperTrades, useStrategyPnl,
+  usePaperTrades, useStrategyPnl, useCheckPaperTradeExits,
   useJournalSummary, useJournalPnLCalendar, useJournalPositions,
   type PaperPosition,
 } from "@/api/pnl-queries";
-import { useEnvSummary, useAgentConfig } from "@/api/settings-queries";
+import { useEnvSummary, useAgentConfig, usePaperConfig } from "@/api/settings-queries";
 import { api } from "@/api/client";
 import { formatCurrency, formatPct, pctColor, formatDateTime } from "@/lib/utils";
 import { useUIStore } from "@/store/ui";
@@ -852,6 +853,16 @@ function TradesTab() {
 
   const { data: trades, isLoading } = usePaperTrades(statusFilter);
   const { data: strategyStats }     = useStrategyPnl();
+  const checkExits                  = useCheckPaperTradeExits();
+  const { data: paperCfg }          = usePaperConfig();
+
+  useEffect(() => {
+    const intervalMs = (paperCfg?.check_exits_every ?? 30) * 60_000;
+    const initial = setTimeout(() => { checkExits.mutate(); }, 4_000);
+    const timer   = setInterval(() => { checkExits.mutate(); }, intervalMs);
+    return () => { clearTimeout(initial); clearInterval(timer); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paperCfg?.check_exits_every]);
 
   const allTrades = trades ?? [];
 
@@ -973,6 +984,29 @@ function TradesTab() {
                 color: statusFilter === s ? "var(--accent)" : "var(--text-3)", fontFamily: "var(--font-body)", fontWeight: 600,
               }}>{s === "all" ? "ALL" : s}</button>
             ))}
+            <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.08)" }} />
+            <button
+              onClick={() => checkExits.mutate()}
+              disabled={checkExits.isPending}
+              title={`Auto-check OPEN trades vs CMP (every ${paperCfg?.check_exits_every ?? 30}m)`}
+              style={{
+                display: "flex", alignItems: "center", gap: 5,
+                padding: "3px 10px", borderRadius: 6, fontSize: 10, cursor: "pointer", transition: "all 120ms",
+                background: "rgba(39,174,96,0.06)", border: "1px solid var(--accent-border)",
+                color: "var(--accent)", fontFamily: "var(--font-body)", fontWeight: 600,
+                opacity: checkExits.isPending ? 0.7 : 1,
+              }}
+            >
+              {checkExits.isPending
+                ? <Loader2 style={{ width: 10, height: 10 }} className="animate-spin" />
+                : <RefreshCw style={{ width: 10, height: 10 }} />}
+              {checkExits.isPending ? "Checking…" : "Check Exits"}
+            </button>
+            {(checkExits.data as { closed?: number } | undefined)?.closed! > 0 && (
+              <span style={{ fontSize: 10, color: "var(--green)", fontFamily: "var(--font-mono)", fontWeight: 600 }}>
+                ✓ {(checkExits.data as { closed: number }).closed} closed
+              </span>
+            )}
           </div>
         </div>
         <div style={{ overflowX: "auto" }}>

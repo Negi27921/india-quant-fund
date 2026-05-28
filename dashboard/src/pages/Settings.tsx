@@ -18,6 +18,9 @@ import {
   RefreshCw as RefreshIcon,
   Save,
   Shield,
+  BookOpen,
+  Zap,
+  Cpu,
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { KillSwitchBanner } from "@/components/ui/KillSwitchBanner";
@@ -33,8 +36,14 @@ import {
   useAgentConfig,
   useUpdateAgentConfig,
   useSystemInfo,
+  usePaperConfig,
+  useUpdatePaperConfig,
+  useLiveConfig,
+  useUpdateLiveConfig,
   type ProbeResult,
   type AgentConfig,
+  type PaperConfig,
+  type LiveConfig,
 } from "@/api/settings-queries";
 import { useRiskMetrics, useRiskLimits, useDrawdownHistory, useKillSwitchStatus } from "@/api/queries";
 import { DrawdownChart } from "@/components/charts/DrawdownChart";
@@ -566,7 +575,7 @@ function SystemInfoSection() {
           </div>
           <div className="card p-4">
             <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-3">Credentials</p>
-            {boolRow("NVIDIA / DeepSeek R1", data.has_nvidia)}
+            {boolRow("NVIDIA / Nemotron 49B", data.has_nvidia)}
             {boolRow("Groq (Fallback 1)", data.has_groq)}
             {boolRow("Gemini (Fallback 2)", data.has_gemini)}
             {boolRow("Redis", data.has_redis)}
@@ -577,6 +586,302 @@ function SystemInfoSection() {
           </div>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+// ── Paper Engine section ──────────────────────────────────────────────────────
+function PaperEngineSection() {
+  const { data: cfg, isLoading } = usePaperConfig();
+  const update = useUpdatePaperConfig();
+  const [draft, setDraft] = useState<Partial<PaperConfig> | null>(null);
+  const current = draft ?? cfg;
+
+  const field = (key: keyof PaperConfig, label: string, min: number, max: number, step: number, unit: string) => (
+    <div key={key} className="space-y-1.5">
+      <div className="flex justify-between items-center">
+        <span className="text-xs text-text-muted">{label}</span>
+        <span className="text-xs font-mono text-text-primary font-semibold">
+          {(current?.[key] as number)?.toLocaleString("en-IN")}{unit}
+        </span>
+      </div>
+      <input
+        type="range" min={min} max={max} step={step}
+        value={(current?.[key] as number) ?? min}
+        onChange={e => setDraft(d => ({ ...(d ?? cfg ?? {}), [key]: parseFloat(e.target.value) }))}
+        className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
+        style={{ accentColor: "var(--accent)" }}
+      />
+      <div className="flex justify-between text-[10px] text-text-muted">
+        <span>{min}{unit}</span><span>{max}{unit}</span>
+      </div>
+    </div>
+  );
+
+  const strategyLabels: Record<string, string> = {
+    vcp: "VCP", ipo_base: "IPO Base", rocket_base: "Rocket Base",
+    breakout: "Breakout", rsi_reversal: "RSI Reversal",
+    golden_cross: "Golden Cross", multibagger: "Multibagger",
+  };
+  const allStrategies = Object.keys(strategyLabels);
+
+  const handleSave = async () => {
+    if (!draft) return;
+    await update.mutateAsync(draft);
+    setDraft(null);
+  };
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center gap-2">
+        <BookOpen className="w-4 h-4 text-primary" />
+        <h2 className="text-sm font-semibold text-text-primary">Paper Engine</h2>
+        <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 9999, background: "var(--accent-dim)", color: "var(--accent)", border: "1px solid var(--accent-border)", fontWeight: 600 }}>Isolated · Safe</span>
+      </div>
+
+      {isLoading ? (
+        <div className="card p-4 space-y-3">
+          {[1,2,3,4].map(i => <div key={i} className="h-8 bg-bg-elevated rounded animate-pulse" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="card p-4 space-y-4">
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Capital & Sizing</p>
+            {field("capital",           "Capital (₹)",           100_000,  5_000_000, 100_000, "")}
+            {field("trade_amount",      "Trade Amount (₹)",        5_000,    200_000,   5_000, "")}
+            {field("max_open_trades",   "Max Open Trades",              5,         50,       1, "")}
+            {field("min_confidence",    "Min Confidence",              50,        100,       1, "%")}
+            {field("check_exits_every", "Check Exits Every",            5,        120,       5, "m")}
+          </div>
+          <div className="card p-4 space-y-3">
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Auto-Exit & Strategies</p>
+            {[
+              { key: "auto_exit_target", label: "Auto-exit on Target" },
+              { key: "auto_exit_sl",     label: "Auto-exit on Stop-Loss" },
+            ].map(({ key, label }) => (
+              <label key={key} className="flex items-center justify-between cursor-pointer">
+                <span className="text-xs text-text-muted">{label}</span>
+                <div
+                  onClick={() => setDraft(d => ({ ...(d ?? cfg ?? {}), [key]: !current?.[key as keyof PaperConfig] }))}
+                  style={{
+                    width: 36, height: 20, borderRadius: 10, cursor: "pointer", transition: "background 200ms",
+                    background: current?.[key as keyof PaperConfig] ? "var(--accent)" : "var(--surface-3)",
+                    position: "relative",
+                  }}
+                >
+                  <div style={{
+                    position: "absolute", top: 3,
+                    left: current?.[key as keyof PaperConfig] ? 19 : 3,
+                    width: 14, height: 14, borderRadius: "50%", background: "#fff",
+                    transition: "left 200ms",
+                  }} />
+                </div>
+              </label>
+            ))}
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              {allStrategies.map(s => {
+                const active = (current?.strategies ?? allStrategies).includes(s);
+                return (
+                  <button
+                    key={s}
+                    onClick={() => {
+                      const curr = current?.strategies ?? allStrategies;
+                      const next = curr.includes(s) ? curr.filter(x => x !== s) : [...curr, s];
+                      setDraft(d => ({ ...(d ?? cfg ?? {}), strategies: next }));
+                    }}
+                    style={{
+                      textAlign: "left", padding: "8px 10px", borderRadius: 8, fontSize: 11, transition: "all 150ms",
+                      border: `1px solid ${active ? "var(--accent-border)" : "var(--border)"}`,
+                      background: active ? "var(--accent-dim)" : "var(--surface-2)",
+                      color: active ? "var(--text-1)" : "var(--text-3)",
+                      cursor: "pointer", fontFamily: "var(--font-body)", fontWeight: 600,
+                    }}
+                  >
+                    {strategyLabels[s]}
+                  </button>
+                );
+              })}
+            </div>
+            {draft && (
+              <button
+                onClick={handleSave}
+                disabled={update.isPending}
+                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all"
+                style={{ background: "var(--accent)", color: "#fff" }}
+              >
+                {update.isPending ? <RefreshIcon className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                {update.isPending ? "Saving…" : "Save Paper Config"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ── Live Engine section ───────────────────────────────────────────────────────
+function LiveEngineSection() {
+  const { data: cfg, isLoading } = useLiveConfig();
+  const update = useUpdateLiveConfig();
+  const [draft, setDraft] = useState<Partial<LiveConfig> | null>(null);
+  const current = draft ?? cfg;
+  const liveEnabled = cfg?.enabled ?? false;
+
+  const field = (key: keyof LiveConfig, label: string, min: number, max: number, step: number, unit: string) => (
+    <div key={key} className="space-y-1.5">
+      <div className="flex justify-between items-center">
+        <span className="text-xs text-text-muted">{label}</span>
+        <span className="text-xs font-mono text-text-primary font-semibold">
+          {(current?.[key] as number)?.toLocaleString?.("en-IN") ?? (current?.[key] as number)}{unit}
+        </span>
+      </div>
+      <input
+        type="range" min={min} max={max} step={step}
+        value={(current?.[key] as number) ?? min}
+        disabled={!liveEnabled}
+        onChange={e => setDraft(d => ({ ...(d ?? cfg ?? {}), [key]: parseFloat(e.target.value) }))}
+        className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
+        style={{ accentColor: liveEnabled ? "var(--red)" : "var(--surface-3)", opacity: liveEnabled ? 1 : 0.5 }}
+      />
+      <div className="flex justify-between text-[10px] text-text-muted">
+        <span>{min}{unit}</span><span>{max}{unit}</span>
+      </div>
+    </div>
+  );
+
+  const handleSave = async () => {
+    if (!draft || !liveEnabled) return;
+    await update.mutateAsync(draft);
+    setDraft(null);
+  };
+
+  const brokers = ["dhan", "kite", "shoonya"] as const;
+  const liveStrategies: Record<string, string> = { vcp: "VCP", breakout: "Breakout" };
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <Zap className="w-4 h-4" style={{ color: liveEnabled ? "var(--red)" : "var(--text-3)" }} />
+        <h2 className="text-sm font-semibold text-text-primary">Live Engine</h2>
+        {liveEnabled ? (
+          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 9999, background: "rgba(231,76,60,0.12)", color: "var(--red)", border: "1px solid rgba(231,76,60,0.3)", fontWeight: 700 }}>LIVE ENABLED</span>
+        ) : (
+          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 9999, background: "var(--surface-3)", color: "var(--text-3)", border: "1px solid var(--border)", fontWeight: 600 }}>Disabled</span>
+        )}
+        <span style={{ fontSize: 10, color: "var(--text-4)", marginLeft: "auto" }}>Toggle via <code style={{ fontFamily: "var(--font-mono)", color: "var(--text-3)" }}>ENABLE_LIVE_TRADING</code> env var</span>
+      </div>
+
+      {liveEnabled && (
+        <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(231,76,60,0.07)", border: "1px solid rgba(231,76,60,0.25)", fontSize: 12, color: "var(--red)", display: "flex", alignItems: "center", gap: 8 }}>
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          Live trading is ENABLED. Real money is at risk. Configure conservatively and verify broker credentials.
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="card p-4 space-y-3">
+          {[1,2,3,4].map(i => <div key={i} className="h-8 bg-bg-elevated rounded animate-pulse" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" style={{ opacity: liveEnabled ? 1 : 0.55 }}>
+          <div className="card p-4 space-y-4">
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Capital & Sizing</p>
+            {/* Broker selector */}
+            <div className="space-y-1.5">
+              <span className="text-xs text-text-muted">Broker</span>
+              <div className="flex gap-2 mt-1">
+                {brokers.map(b => (
+                  <button
+                    key={b}
+                    disabled={!liveEnabled}
+                    onClick={() => setDraft(d => ({ ...(d ?? cfg ?? {}), broker: b }))}
+                    style={{
+                      padding: "4px 14px", borderRadius: 6, fontSize: 11, fontWeight: 600,
+                      cursor: liveEnabled ? "pointer" : "not-allowed",
+                      border: `1px solid ${current?.broker === b ? "rgba(231,76,60,0.4)" : "var(--border)"}`,
+                      background: current?.broker === b ? "rgba(231,76,60,0.1)" : "var(--surface-2)",
+                      color: current?.broker === b ? "var(--red)" : "var(--text-3)",
+                      fontFamily: "var(--font-body)", transition: "all 150ms",
+                    }}
+                  >
+                    {b.charAt(0).toUpperCase() + b.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {field("capital",            "Capital (₹)",              100_000, 10_000_000, 100_000, "")}
+            {field("trade_amount",       "Trade Amount (₹)",           5_000,    500_000,   5_000, "")}
+            {field("max_open_trades",    "Max Open Trades",                2,         20,       1, "")}
+            {field("min_confidence",     "Min Confidence",               70,        100,       1, "%")}
+            {field("risk_pct_per_trade", "Risk % Per Trade",             0.5,          5,     0.5, "%")}
+            {field("kill_drawdown",      "Kill Switch Drawdown",           5,         25,       1, "%")}
+          </div>
+          <div className="card p-4 space-y-3">
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Strategies & Safety</p>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(liveStrategies).map(([s, label]) => {
+                const active = (current?.strategies ?? Object.keys(liveStrategies)).includes(s);
+                return (
+                  <button
+                    key={s}
+                    disabled={!liveEnabled}
+                    onClick={() => {
+                      if (!liveEnabled) return;
+                      const curr = current?.strategies ?? Object.keys(liveStrategies);
+                      const next = curr.includes(s) ? curr.filter(x => x !== s) : [...curr, s];
+                      setDraft(d => ({ ...(d ?? cfg ?? {}), strategies: next }));
+                    }}
+                    style={{
+                      textAlign: "left", padding: "8px 10px", borderRadius: 8, fontSize: 11,
+                      border: `1px solid ${active ? "rgba(231,76,60,0.3)" : "var(--border)"}`,
+                      background: active ? "rgba(231,76,60,0.08)" : "var(--surface-2)",
+                      color: active ? "var(--red)" : "var(--text-3)",
+                      cursor: liveEnabled ? "pointer" : "not-allowed",
+                      fontFamily: "var(--font-body)", fontWeight: 600, transition: "all 150ms",
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <label className="flex items-center justify-between cursor-pointer mt-2">
+              <span className="text-xs text-text-muted">Require Confirmation Before Order</span>
+              <div
+                onClick={() => {
+                  if (!liveEnabled) return;
+                  setDraft(d => ({ ...(d ?? cfg ?? {}), require_confirmation: !current?.require_confirmation }));
+                }}
+                style={{
+                  width: 36, height: 20, borderRadius: 10,
+                  cursor: liveEnabled ? "pointer" : "not-allowed", transition: "background 200ms",
+                  background: current?.require_confirmation ? "var(--accent)" : "var(--surface-3)",
+                  position: "relative",
+                }}
+              >
+                <div style={{
+                  position: "absolute", top: 3,
+                  left: current?.require_confirmation ? 19 : 3,
+                  width: 14, height: 14, borderRadius: "50%", background: "#fff",
+                  transition: "left 200ms",
+                }} />
+              </div>
+            </label>
+            {draft && liveEnabled && (
+              <button
+                onClick={handleSave}
+                disabled={update.isPending}
+                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all mt-2"
+                style={{ background: "rgba(231,76,60,0.9)", color: "#fff" }}
+              >
+                {update.isPending ? <RefreshIcon className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                {update.isPending ? "Saving…" : "Save Live Config"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -831,15 +1136,16 @@ function RiskSection() {
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-type SettingsTab = "agent" | "connections" | "risk";
+type SettingsTab = "agent" | "execution" | "connections" | "risk";
 
 export function SettingsPage() {
   const [tab, setTab] = useState<SettingsTab>("agent");
 
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
-    { id: "agent",       label: "Trading Agent Config", icon: <Bot style={{ width: 13, height: 13 }} /> },
-    { id: "connections", label: "Connections & Alerts",  icon: <Wifi style={{ width: 13, height: 13 }} /> },
-    { id: "risk",        label: "Risk Monitor",          icon: <Shield style={{ width: 13, height: 13 }} /> },
+    { id: "agent",       label: "Trading Agent",   icon: <Bot    style={{ width: 13, height: 13 }} /> },
+    { id: "execution",   label: "Execution",        icon: <Cpu    style={{ width: 13, height: 13 }} /> },
+    { id: "connections", label: "Connections",       icon: <Wifi   style={{ width: 13, height: 13 }} /> },
+    { id: "risk",        label: "Risk Monitor",      icon: <Shield style={{ width: 13, height: 13 }} /> },
   ];
 
   return (
@@ -875,6 +1181,17 @@ export function SettingsPage() {
               </motion.div>
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }}>
                 <LLMSection />
+              </motion.div>
+            </div>
+          )}
+
+          {tab === "execution" && (
+            <div className="space-y-8">
+              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+                <PaperEngineSection />
+              </motion.div>
+              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
+                <LiveEngineSection />
               </motion.div>
             </div>
           )}
