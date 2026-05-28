@@ -17,7 +17,7 @@ from loguru import logger
 from api._config import API_TITLE, API_VERSION, CORS_CONFIG, get_allowed_origins
 from api.middleware.security import SecurityHeadersMiddleware
 from api.routers import (
-    chat, journal, market, portfolio, risk,
+    chat, earnings, journal, market, portfolio, risk,
     screener, settings, strategies, system, trades,
 )
 
@@ -57,6 +57,7 @@ app.include_router(strategies.router,   prefix="/api/strategies", tags=["Strateg
 app.include_router(system.router,       prefix="/api/system",     tags=["System"])
 app.include_router(settings.router,     prefix="/api/settings",   tags=["Settings"])
 app.include_router(journal.router,      prefix="/api/journal",    tags=["Journal"])
+app.include_router(earnings.router,     prefix="/api/earnings",   tags=["Earnings"])
 
 
 # ── WebSocket (local only — Vercel doesn't support persistent connections) ────
