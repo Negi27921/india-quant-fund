@@ -84,7 +84,7 @@ TG_TOKEN        = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TG_CHAT_ID      = os.getenv("TELEGRAM_CHAT_ID",   "").strip()
 
 # LLM providers — fallback chain: NIM → Groq → Gemini
-NIM_MODEL       = os.getenv("NVIDIA_MODEL", "meta/llama-3.3-70b-instruct").strip()
+NIM_MODEL       = os.getenv("NVIDIA_MODEL", "nvidia/llama-3.3-nemotron-super-49b-v1").strip()
 NIM_ENDPOINT    = "https://integrate.api.nvidia.com/v1/chat/completions"
 GROQ_MODEL      = os.getenv("GROQ_MODEL",   "llama-3.3-70b-versatile").strip()
 GROQ_ENDPOINT   = "https://api.groq.com/openai/v1/chat/completions"

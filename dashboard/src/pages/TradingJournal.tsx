@@ -941,6 +941,11 @@ function EquityCurve({ trades }: { trades: Trade[] }) {
   );
 }
 
+// ── Sort types ─────────────────────────────────────────────────────────────────
+
+type SortCol = "entryDate" | "exitDate" | "stockName" | "tradeType" | "buyPrice" | "sellPrice"
+  | "quantity" | "capitalUsed" | "received" | "daysHeld" | "pnl" | "pnlPct" | "strategy" | "ruleFollowed";
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export function TradingJournalPage() {
@@ -952,7 +957,8 @@ export function TradingJournalPage() {
   const [messages, setMessages]         = useState<Message[]>([]);
   const [input, setInput]               = useState("");
   const [loading, setLoading]           = useState(false);
-  const [sortDesc, setSortDesc]         = useState(true);
+  const [sort, setSort]                 = useState<{ col: SortCol; dir: "asc" | "desc" }>({ col: "entryDate", dir: "desc" });
+  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "closed">("all");
   const [syncStatus, setSyncStatus]     = useState<"idle" | "syncing" | "synced" | "error">("idle");
   const [livePrices, setLivePrices]     = useState<Record<string, number | null>>({});
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -1065,13 +1071,84 @@ export function TradingJournalPage() {
     setLoading(false);
   };
 
-  const displayedTrades = [...trades].sort((a, b) =>
-    sortDesc
-      ? new Date(b.entryDate).getTime() - new Date(a.entryDate).getTime()
-      : new Date(a.entryDate).getTime() - new Date(b.entryDate).getTime()
-  );
+  // ── Sorting helper ──
+  const handleSort = (col: SortCol) => {
+    setSort(prev => prev.col === col
+      ? { col, dir: prev.dir === "asc" ? "desc" : "asc" }
+      : { col, dir: "desc" }
+    );
+  };
+
+  const sortArrow = (col: SortCol) => sort.col === col ? (sort.dir === "asc" ? " ↑" : " ↓") : "";
+
+  // ── Build displayed trade list ──
+  const openCount   = trades.filter(t => t.status === "Open").length;
+  const closedCount = trades.filter(t => t.status === "Closed").length;
+
+  const displayedTrades = useMemo(() => {
+    const filtered = trades.filter(t => {
+      if (statusFilter === "open")   return t.status === "Open";
+      if (statusFilter === "closed") return t.status === "Closed";
+      return true;
+    });
+
+    return [...filtered].sort((a, b) => {
+      const dir = sort.dir === "asc" ? 1 : -1;
+      const getLivePnl = (t: Trade) => {
+        const cmp = t.status === "Open" ? (livePrices[t.stockName.trim().toUpperCase()] ?? null) : null;
+        if (cmp != null) return (cmp - t.buyPrice) * t.quantity;
+        return null;
+      };
+      const getPnl = (t: Trade) => {
+        if (t.status === "Closed") return t.brokerPl ?? tradePnL(t)?.pnl ?? 0;
+        return getLivePnl(t) ?? 0;
+      };
+      const getPnlPct = (t: Trade) => {
+        if (t.status === "Closed") return tradePnL(t)?.pct ?? 0;
+        const cmp = t.status === "Open" ? (livePrices[t.stockName.trim().toUpperCase()] ?? null) : null;
+        if (cmp != null) return ((cmp - t.buyPrice) / t.buyPrice) * 100;
+        return 0;
+      };
+      const getReceived = (t: Trade) => t.sellAmt ?? (t.sellPrice ? t.sellPrice * t.quantity : 0);
+
+      switch (sort.col) {
+        case "entryDate":    return (new Date(a.entryDate).getTime() - new Date(b.entryDate).getTime()) * dir;
+        case "exitDate":     return ((a.exitDate ?? "").localeCompare(b.exitDate ?? "")) * dir;
+        case "stockName":    return a.stockName.localeCompare(b.stockName) * dir;
+        case "tradeType":    return a.tradeType.localeCompare(b.tradeType) * dir;
+        case "buyPrice":     return (a.buyPrice - b.buyPrice) * dir;
+        case "sellPrice":    return ((a.sellPrice ?? 0) - (b.sellPrice ?? 0)) * dir;
+        case "quantity":     return (a.quantity - b.quantity) * dir;
+        case "capitalUsed":  return (a.capitalUsed - b.capitalUsed) * dir;
+        case "received":     return (getReceived(a) - getReceived(b)) * dir;
+        case "daysHeld":     return ((a.daysHeld ?? 0) - (b.daysHeld ?? 0)) * dir;
+        case "pnl":          return (getPnl(a) - getPnl(b)) * dir;
+        case "pnlPct":       return (getPnlPct(a) - getPnlPct(b)) * dir;
+        case "strategy":     return ((a.strategy ?? "").localeCompare(b.strategy ?? "")) * dir;
+        case "ruleFollowed": return ((a.ruleFollowed ?? "").localeCompare(b.ruleFollowed ?? "")) * dir;
+        default:             return 0;
+      }
+    });
+  }, [trades, statusFilter, sort, livePrices]);
 
   const pnlColor = (v: number) => v > 0 ? "var(--green)" : v < 0 ? "var(--red)" : "var(--text-3)";
+
+  // Th helper for sortable columns
+  const Th = ({ col, children, right }: { col: SortCol; children: React.ReactNode; right?: boolean }) => (
+    <th
+      onClick={() => handleSort(col)}
+      style={{
+        padding: "9px 12px", textAlign: right ? "right" : "left",
+        fontSize: 9, fontWeight: 700, letterSpacing: "0.1em",
+        color: sort.col === col ? "var(--accent)" : "var(--text-3)",
+        borderBottom: "1px solid var(--border)",
+        cursor: "pointer", whiteSpace: "nowrap", userSelect: "none",
+        fontFamily: "var(--font-body)",
+      }}
+    >
+      {children}{sortArrow(col)}
+    </th>
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
@@ -1199,7 +1276,40 @@ export function TradingJournalPage() {
         {/* TRADE LOG */}
         {activeTab === "log" && (
           <motion.div key="log" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-            style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+            style={{ flex: 1, minHeight: 0, overflow: "auto", display: "flex", flexDirection: "column" }}>
+
+            {/* ── Status filter tab bar ── */}
+            {trades.length > 0 && (
+              <div style={{ display: "flex", gap: 4, marginBottom: 12, flexShrink: 0 }}>
+                {([
+                  { key: "all",    label: `All (${trades.length})` },
+                  { key: "open",   label: `Open (${openCount})` },
+                  { key: "closed", label: `Closed (${closedCount})` },
+                ] as const).map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => setStatusFilter(key)}
+                    style={{
+                      padding: "5px 14px", borderRadius: 9999, cursor: "pointer",
+                      background: statusFilter === key
+                        ? (key === "open" ? "rgba(16,185,129,0.15)" : key === "closed" ? "var(--surface-3, var(--surface-2))" : "var(--accent)")
+                        : "var(--surface-2)",
+                      color: statusFilter === key
+                        ? (key === "open" ? "var(--green)" : key === "closed" ? "var(--text-2)" : "#fff")
+                        : "var(--text-3)",
+                      fontSize: 11, fontWeight: statusFilter === key ? 700 : 500,
+                      fontFamily: "var(--font-body)", transition: "all 150ms",
+                      border: statusFilter === key
+                        ? (key === "open" ? "1px solid rgba(16,185,129,0.3)" : "1px solid transparent")
+                        : "1px solid transparent",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {trades.length === 0 ? (
               <div style={{
                 display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
@@ -1220,153 +1330,270 @@ export function TradingJournalPage() {
                 </button>
               </div>
             ) : (
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                <thead>
-                  <tr style={{ background: "var(--surface-2)" }}>
-                    {["Date ↕", "Exit", "Stock", "Scrip Name", "Type", "Buy ₹", "Sell ₹", "Qty", "Invested", "Received", "Days", "P&L (Broker)", "P&L %", "ST/LT/Spec", "Strategy", "Rule", ""].map((h, i) => (
-                      <th key={i} onClick={h === "Date ↕" ? () => setSortDesc(v => !v) : undefined}
-                        style={{
-                          padding: "9px 12px", textAlign: "left",
-                          fontSize: 9, fontWeight: 700, letterSpacing: "0.1em",
-                          color: "var(--text-3)", borderBottom: "1px solid var(--border)",
-                          cursor: h === "Date ↕" ? "pointer" : "default",
-                          whiteSpace: "nowrap", userSelect: "none",
-                          fontFamily: "var(--font-body)",
-                        }}>
-                        {h.toUpperCase()}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayedTrades.map((t, idx) => {
-                    const cmp = t.status === "Open"
-                      ? (livePrices[t.stockName.trim().toUpperCase()] ?? null)
-                      : null;
-                    const unrealized = cmp != null
-                      ? { pnl: (cmp - t.buyPrice) * t.quantity, pct: ((cmp - t.buyPrice) / t.buyPrice) * 100 }
-                      : null;
-                    // Prefer broker-reported P&L over computed
-                    const brokerPl = t.brokerPl ?? null;
-                    const computedPl = tradePnL(t);
-                    const displayPl = t.status === "Closed"
-                      ? (brokerPl != null
-                          ? { pnl: brokerPl, pct: computedPl?.pct ?? 0 }
-                          : computedPl)
-                      : unrealized;
-                    const emoji = displayPl ? (displayPl.pnl >= 0 ? "🟢" : "🔴") : "⚪";
-                    // Received = actual sell_amt from broker, else computed
-                    const received = t.sellAmt ?? (t.sellPrice ? t.sellPrice * t.quantity : null);
-                    // Tax category label
-                    const taxLabel = t.shortTermPl != null ? "ST"
-                      : t.longTermPl != null ? "LT"
-                      : t.speculationPl != null ? "SPEC" : null;
-                    return (
-                      <tr key={t.id} style={{
-                        background: idx % 2 === 0 ? "transparent" : "var(--surface-2)",
-                        transition: "background 120ms",
-                      }}
-                        onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = "var(--accent-dim)"}
-                        onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = idx % 2 === 0 ? "transparent" : "var(--surface-2)"}
-                      >
-                        <td style={{ padding: "8px 12px", color: "var(--text-3)", whiteSpace: "nowrap", fontFamily: "var(--font-mono)", fontSize: 11 }}>
-                          {t.entryDate}
-                        </td>
-                        <td style={{ padding: "8px 12px", color: "var(--text-4)", whiteSpace: "nowrap", fontFamily: "var(--font-mono)", fontSize: 10 }}>
-                          {t.exitDate ?? "—"}
-                        </td>
-                        <td style={{ padding: "8px 12px", fontWeight: 700, color: "var(--text-1)", whiteSpace: "nowrap" }}>
-                          {emoji} {t.stockName}
-                        </td>
-                        <td style={{ padding: "8px 12px", fontSize: 10, color: "var(--text-3)", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {t.scripName ?? "—"}
-                        </td>
-                        <td style={{ padding: "8px 12px" }}>
-                          <span style={{
-                            padding: "2px 7px", borderRadius: 9999, fontSize: 9, fontWeight: 700,
-                            background: t.tradeType === "Swing" ? "rgba(106,98,86,0.15)"
-                              : t.tradeType === "Intraday" ? "rgba(139,92,246,0.15)" : "rgba(39,174,96,0.12)",
-                            color: t.tradeType === "Swing" ? "var(--accent)"
-                              : t.tradeType === "Intraday" ? "#a78bfa" : "var(--green)",
-                          }}>{t.tradeType}</span>
-                        </td>
-                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)", whiteSpace: "nowrap" }}>
-                          ₹{t.buyPrice.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
-                        </td>
-                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)", whiteSpace: "nowrap" }}>
-                          {t.sellPrice ? `₹${t.sellPrice.toLocaleString("en-IN", { maximumFractionDigits: 2 })}` : cmp != null ? <span style={{ color: "var(--green)", fontWeight: 700 }}>₹{cmp.toLocaleString("en-IN")}</span> : "—"}
-                        </td>
-                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)", textAlign: "right" }}>
-                          {t.quantity.toLocaleString("en-IN")}
-                        </td>
-                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)", whiteSpace: "nowrap" }}>
-                          ₹{t.capitalUsed.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                        </td>
-                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)", whiteSpace: "nowrap" }}>
-                          {received != null ? `₹${received.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—"}
-                        </td>
-                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-3)", textAlign: "center" }}>
-                          {t.daysHeld != null ? t.daysHeld : "—"}
-                        </td>
-                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700,
-                          color: displayPl ? pnlColor(displayPl.pnl) : "var(--text-4)", whiteSpace: "nowrap" }}>
-                          {displayPl ? rupees(displayPl.pnl) : "—"}
-                          {brokerPl != null && computedPl && Math.abs(brokerPl - computedPl.pnl) > 1 && (
-                            <span style={{ fontSize: 8, color: "var(--text-4)", marginLeft: 3 }}>★</span>
-                          )}
-                        </td>
-                        <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700,
-                          color: displayPl ? pnlColor(displayPl.pct) : "var(--text-4)" }}>
-                          {displayPl ? `${displayPl.pct >= 0 ? "+" : ""}${displayPl.pct.toFixed(2)}%` : "—"}
-                        </td>
-                        <td style={{ padding: "8px 12px" }}>
-                          {taxLabel && (
-                            <span style={{
-                              padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700,
-                              background: taxLabel === "ST" ? "rgba(251,191,36,0.12)" : taxLabel === "LT" ? "rgba(16,185,129,0.12)" : "rgba(139,92,246,0.12)",
-                              color: taxLabel === "ST" ? "#fbbf24" : taxLabel === "LT" ? "#10b981" : "#a78bfa",
-                            }}>{taxLabel}</span>
-                          )}
-                        </td>
-                        <td style={{ padding: "8px 12px", color: "var(--text-3)", fontSize: 11, maxWidth: 120,
-                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {t.strategy ?? "—"}
-                        </td>
-                        <td style={{ padding: "8px 12px" }}>
-                          {t.ruleFollowed ? (
+              <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: "var(--surface-2)" }}>
+                      {/* Non-sortable: STATUS */}
+                      <th style={{
+                        padding: "9px 12px", textAlign: "left",
+                        fontSize: 9, fontWeight: 700, letterSpacing: "0.1em",
+                        color: "var(--text-3)", borderBottom: "1px solid var(--border)",
+                        whiteSpace: "nowrap", userSelect: "none",
+                        fontFamily: "var(--font-body)", cursor: "default",
+                      }}>STATUS</th>
+
+                      <Th col="stockName">STOCK</Th>
+
+                      {/* Non-sortable: ACTIONS */}
+                      <th style={{
+                        padding: "9px 12px", textAlign: "left",
+                        fontSize: 9, fontWeight: 700, letterSpacing: "0.1em",
+                        color: "var(--text-3)", borderBottom: "1px solid var(--border)",
+                        whiteSpace: "nowrap", userSelect: "none",
+                        fontFamily: "var(--font-body)", cursor: "default",
+                      }}>ACTIONS</th>
+
+                      <Th col="entryDate">DATE IN</Th>
+                      <Th col="exitDate">DATE OUT</Th>
+                      <Th col="tradeType">TYPE</Th>
+                      <Th col="buyPrice">BUY ₹</Th>
+                      <Th col="sellPrice">SELL ₹</Th>
+                      <Th col="quantity" right>QTY</Th>
+                      <Th col="capitalUsed">INVESTED</Th>
+                      <Th col="received">RECV</Th>
+                      <Th col="daysHeld" right>DAYS</Th>
+                      <Th col="pnl">P&amp;L</Th>
+                      <Th col="pnlPct">P&amp;L%</Th>
+                      {/* Non-sortable: TAX */}
+                      <th style={{
+                        padding: "9px 12px", textAlign: "left",
+                        fontSize: 9, fontWeight: 700, letterSpacing: "0.1em",
+                        color: "var(--text-3)", borderBottom: "1px solid var(--border)",
+                        whiteSpace: "nowrap", userSelect: "none",
+                        fontFamily: "var(--font-body)", cursor: "default",
+                      }}>TAX</th>
+                      <Th col="ruleFollowed">RULE</Th>
+                      <Th col="strategy">STRATEGY</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayedTrades.map((t, idx) => {
+                      const isOpen = t.status === "Open";
+                      const cmp = isOpen
+                        ? (livePrices[t.stockName.trim().toUpperCase()] ?? null)
+                        : null;
+                      const unrealized = cmp != null
+                        ? { pnl: (cmp - t.buyPrice) * t.quantity, pct: ((cmp - t.buyPrice) / t.buyPrice) * 100 }
+                        : null;
+                      // Prefer broker-reported P&L over computed
+                      const brokerPl = t.brokerPl ?? null;
+                      const computedPl = tradePnL(t);
+                      const displayPl = t.status === "Closed"
+                        ? (brokerPl != null
+                            ? { pnl: brokerPl, pct: computedPl?.pct ?? 0 }
+                            : computedPl)
+                        : unrealized;
+                      // Received = actual sell_amt from broker, else computed
+                      const received = t.sellAmt ?? (t.sellPrice ? t.sellPrice * t.quantity : null);
+                      // Tax category label
+                      const taxLabel = t.shortTermPl != null ? "ST"
+                        : t.longTermPl != null ? "LT"
+                        : t.speculationPl != null ? "SPEC" : null;
+
+                      const rowBg = isOpen
+                        ? (idx % 2 === 0 ? "rgba(16,185,129,0.04)" : "rgba(16,185,129,0.07)")
+                        : (idx % 2 === 0 ? "transparent" : "var(--surface-2)");
+
+                      const rowStyle: React.CSSProperties = isOpen
+                        ? { borderLeft: "4px solid var(--green)", transition: "background 120ms", background: rowBg }
+                        : { transition: "background 120ms", background: rowBg };
+
+                      return (
+                        <tr
+                          key={t.id}
+                          style={rowStyle}
+                          onMouseEnter={e => (e.currentTarget as HTMLTableRowElement).style.background = "var(--accent-dim)"}
+                          onMouseLeave={e => (e.currentTarget as HTMLTableRowElement).style.background = rowBg}
+                        >
+                          {/* STATUS */}
+                          <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
+                            {isOpen ? (
+                              <span style={{
+                                display: "inline-flex", alignItems: "center", gap: 5,
+                                padding: "2px 8px", borderRadius: 9999, fontSize: 9, fontWeight: 700,
+                                background: "rgba(16,185,129,0.12)", color: "var(--green)",
+                                border: "1px solid rgba(16,185,129,0.25)",
+                              }}>
+                                <span style={{
+                                  width: 5, height: 5, borderRadius: "50%",
+                                  background: "var(--green)",
+                                  animation: "pulse-dot 1.5s ease-in-out infinite",
+                                  flexShrink: 0,
+                                }} />
+                                OPEN
+                              </span>
+                            ) : (
+                              <span style={{
+                                display: "inline-flex", alignItems: "center",
+                                padding: "2px 8px", borderRadius: 9999, fontSize: 9, fontWeight: 700,
+                                background: "rgba(255,255,255,0.05)", color: "var(--text-4)",
+                                border: "1px solid rgba(255,255,255,0.08)",
+                              }}>
+                                CLOSED
+                              </span>
+                            )}
+                          </td>
+
+                          {/* STOCK */}
+                          <td style={{ padding: "8px 12px", whiteSpace: "nowrap" }}>
+                            <div style={{ fontWeight: 700, color: "var(--text-1)", fontSize: 12, fontFamily: "var(--font-mono)" }}>
+                              {t.stockName}
+                            </div>
+                            {t.scripName && (
+                              <div style={{ fontSize: 9, color: "var(--text-4)", marginTop: 1, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {t.scripName}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* ACTIONS */}
+                          <td style={{ padding: "8px 12px" }}>
+                            <div style={{ display: "flex", gap: 4, position: "relative", alignItems: "center" }}>
+                              {isOpen ? (
+                                <>
+                                  <button
+                                    onClick={() => { setEditingTrade(t); setModalOpen(true); }}
+                                    style={{
+                                      padding: "4px 10px", borderRadius: 6, border: "none",
+                                      background: "var(--green)", color: "#fff",
+                                      fontSize: 10, fontWeight: 700, cursor: "pointer",
+                                      fontFamily: "var(--font-body)", whiteSpace: "nowrap",
+                                    }}
+                                    title="Close trade"
+                                  >
+                                    ✓ Close
+                                  </button>
+                                  <button onClick={() => { setEditingTrade(t); setModalOpen(true); }} style={{
+                                    width: 24, height: 24, borderRadius: 6, border: "1px solid var(--border)",
+                                    background: "transparent", color: "var(--text-3)", cursor: "pointer",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    fontSize: 12,
+                                  }} title="Edit">
+                                    ✎
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button onClick={() => { setEditingTrade(t); setModalOpen(true); }} style={{
+                                    width: 24, height: 24, borderRadius: 6, border: "1px solid var(--border)",
+                                    background: "transparent", color: "var(--text-3)", cursor: "pointer",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    fontSize: 12,
+                                  }} title="Edit">
+                                    ✎
+                                  </button>
+                                  <button onClick={() => setDeleteId(deleteId === t.id ? null : t.id)} style={{
+                                    width: 24, height: 24, borderRadius: 6, border: "1px solid var(--border)",
+                                    background: "transparent", color: "var(--text-3)", cursor: "pointer",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                  }} title="Delete">
+                                    <Trash2 size={11} />
+                                  </button>
+                                </>
+                              )}
+                              {deleteId === t.id && (
+                                <DeleteConfirm onConfirm={() => onDelete(t.id)} onCancel={() => setDeleteId(null)} />
+                              )}
+                            </div>
+                          </td>
+
+                          {/* DATE IN */}
+                          <td style={{ padding: "8px 12px", color: "var(--text-3)", whiteSpace: "nowrap", fontFamily: "var(--font-mono)", fontSize: 11 }}>
+                            {t.entryDate}
+                          </td>
+                          {/* DATE OUT */}
+                          <td style={{ padding: "8px 12px", color: "var(--text-4)", whiteSpace: "nowrap", fontFamily: "var(--font-mono)", fontSize: 10 }}>
+                            {t.exitDate ?? "—"}
+                          </td>
+                          {/* TYPE */}
+                          <td style={{ padding: "8px 12px" }}>
                             <span style={{
                               padding: "2px 7px", borderRadius: 9999, fontSize: 9, fontWeight: 700,
-                              background: t.ruleFollowed === "Yes" ? "rgba(39,174,96,0.12)" : t.ruleFollowed === "No" ? "rgba(231,76,60,0.12)" : "rgba(255,176,23,0.12)",
-                              color: t.ruleFollowed === "Yes" ? "var(--green)" : t.ruleFollowed === "No" ? "var(--red)" : "var(--amber)",
-                            }}>{t.ruleFollowed}</span>
-                          ) : "—"}
-                        </td>
-                        <td style={{ padding: "8px 12px" }}>
-                          <div style={{ display: "flex", gap: 4, position: "relative" }}>
-                            <button onClick={() => { setEditingTrade(t); setModalOpen(true); }} style={{
-                              width: 24, height: 24, borderRadius: 6, border: "1px solid var(--border)",
-                              background: "transparent", color: "var(--text-3)", cursor: "pointer",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                            }} title="Edit">
-                              <BookOpen size={11} />
-                            </button>
-                            <button onClick={() => setDeleteId(deleteId === t.id ? null : t.id)} style={{
-                              width: 24, height: 24, borderRadius: 6, border: "1px solid var(--border)",
-                              background: "transparent", color: "var(--text-3)", cursor: "pointer",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                            }} title="Delete">
-                              <Trash2 size={11} />
-                            </button>
-                            {deleteId === t.id && (
-                              <DeleteConfirm onConfirm={() => onDelete(t.id)} onCancel={() => setDeleteId(null)} />
+                              background: t.tradeType === "Swing" ? "rgba(106,98,86,0.15)"
+                                : t.tradeType === "Intraday" ? "rgba(139,92,246,0.15)" : "rgba(39,174,96,0.12)",
+                              color: t.tradeType === "Swing" ? "var(--accent)"
+                                : t.tradeType === "Intraday" ? "#a78bfa" : "var(--green)",
+                            }}>{t.tradeType}</span>
+                          </td>
+                          {/* BUY */}
+                          <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)", whiteSpace: "nowrap" }}>
+                            ₹{t.buyPrice.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                          </td>
+                          {/* SELL */}
+                          <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)", whiteSpace: "nowrap" }}>
+                            {t.sellPrice ? `₹${t.sellPrice.toLocaleString("en-IN", { maximumFractionDigits: 2 })}` : cmp != null ? <span style={{ color: "var(--green)", fontWeight: 700 }}>₹{cmp.toLocaleString("en-IN")}</span> : "—"}
+                          </td>
+                          {/* QTY */}
+                          <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)", textAlign: "right" }}>
+                            {t.quantity.toLocaleString("en-IN")}
+                          </td>
+                          {/* INVESTED */}
+                          <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)", whiteSpace: "nowrap" }}>
+                            ₹{t.capitalUsed.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                          </td>
+                          {/* RECV */}
+                          <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-2)", whiteSpace: "nowrap" }}>
+                            {received != null ? `₹${received.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—"}
+                          </td>
+                          {/* DAYS */}
+                          <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-3)", textAlign: "center" }}>
+                            {t.daysHeld != null ? t.daysHeld : "—"}
+                          </td>
+                          {/* P&L */}
+                          <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700,
+                            color: displayPl ? pnlColor(displayPl.pnl) : "var(--text-4)", whiteSpace: "nowrap" }}>
+                            {displayPl ? rupees(displayPl.pnl) : "—"}
+                            {brokerPl != null && computedPl && Math.abs(brokerPl - computedPl.pnl) > 1 && (
+                              <span style={{ fontSize: 8, color: "var(--text-4)", marginLeft: 3 }}>★</span>
                             )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </td>
+                          {/* P&L% */}
+                          <td style={{ padding: "8px 12px", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700,
+                            color: displayPl ? pnlColor(displayPl.pct) : "var(--text-4)" }}>
+                            {displayPl ? `${displayPl.pct >= 0 ? "+" : ""}${displayPl.pct.toFixed(2)}%` : "—"}
+                          </td>
+                          {/* TAX */}
+                          <td style={{ padding: "8px 12px" }}>
+                            {taxLabel && (
+                              <span style={{
+                                padding: "2px 6px", borderRadius: 4, fontSize: 9, fontWeight: 700,
+                                background: taxLabel === "ST" ? "rgba(251,191,36,0.12)" : taxLabel === "LT" ? "rgba(16,185,129,0.12)" : "rgba(139,92,246,0.12)",
+                                color: taxLabel === "ST" ? "#fbbf24" : taxLabel === "LT" ? "#10b981" : "#a78bfa",
+                              }}>{taxLabel}</span>
+                            )}
+                          </td>
+                          {/* RULE */}
+                          <td style={{ padding: "8px 12px" }}>
+                            {t.ruleFollowed ? (
+                              <span style={{
+                                padding: "2px 7px", borderRadius: 9999, fontSize: 9, fontWeight: 700,
+                                background: t.ruleFollowed === "Yes" ? "rgba(39,174,96,0.12)" : t.ruleFollowed === "No" ? "rgba(231,76,60,0.12)" : "rgba(255,176,23,0.12)",
+                                color: t.ruleFollowed === "Yes" ? "var(--green)" : t.ruleFollowed === "No" ? "var(--red)" : "var(--amber)",
+                              }}>{t.ruleFollowed}</span>
+                            ) : "—"}
+                          </td>
+                          {/* STRATEGY */}
+                          <td style={{ padding: "8px 12px", color: "var(--text-3)", fontSize: 11, maxWidth: 120,
+                            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {t.strategy ?? "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </motion.div>
         )}

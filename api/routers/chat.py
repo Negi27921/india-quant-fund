@@ -347,7 +347,7 @@ def _nvidia_complete(system: str, user_msg: str, history: list[dict] | None = No
     key = os.getenv("NVIDIA_API_KEY", "").strip()
     if not key:
         raise ValueError("NVIDIA_API_KEY not set")
-    model = os.getenv("NVIDIA_MODEL", "meta/llama-3.3-70b-instruct").strip()
+    model = os.getenv("NVIDIA_MODEL", "nvidia/llama-3.3-nemotron-super-49b-v1").strip()
     messages: list[dict] = [{"role": "system", "content": system}]
     if history:
         for turn in history[-4:]:

@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   DollarSign, TrendingDown, Layers, Activity, TrendingUp,
   Plus, Trash2, LogOut, BarChart3,
   CalendarDays, BarChart2, Target, Flame,
-  ChevronLeft, ChevronRight, Wifi, WifiOff,
+  ChevronLeft, ChevronRight, Wifi, WifiOff, X,
 } from "lucide-react";
 import {
   AreaChart, Area, ResponsiveContainer, Tooltip as ReTip,
@@ -33,6 +34,7 @@ import {
   type PaperPosition,
 } from "@/api/pnl-queries";
 import { useEnvSummary, useAgentConfig } from "@/api/settings-queries";
+import { api } from "@/api/client";
 import { formatCurrency, formatPct, pctColor, formatDateTime } from "@/lib/utils";
 import { useUIStore } from "@/store/ui";
 import { useLiveStore } from "@/store/live";
@@ -431,8 +433,12 @@ function HoldingsTab({ equityCurveDays, setEquityCurveDays, openChart }: {
 }
 
 // ── P&L TAB ───────────────────────────────────────────────────────────────────
-function CalendarHeatmap({ year, month, data }: {
-  year: number; month: number; data: { date: string; pnl: number; pnl_pct: number }[];
+function CalendarHeatmap({ year, month, data, selectedDay, setSelectedDay }: {
+  year: number;
+  month: number;
+  data: { date: string; pnl: number; pnl_pct: number }[];
+  selectedDay: string | null;
+  setSelectedDay: (d: string | null) => void;
 }) {
   const dataMap = useMemo(() => {
     const m: Record<string, { pnl: number; pnl_pct: number }> = {};
@@ -463,20 +469,26 @@ function CalendarHeatmap({ year, month, data }: {
           const entry = dataMap[cell.dateStr];
           const pct = entry?.pnl_pct ?? 0;
           const isToday = cell.dateStr === new Date().toISOString().slice(0, 10);
+          const isSelected = cell.dateStr === selectedDay;
           return (
             <div
               key={cell.dateStr}
               className="aspect-square flex flex-col items-center justify-center relative"
               style={{
                 background: entry ? pnlCellBg(pct) : "rgba(255,255,255,0.02)",
-                border: isToday ? "1px solid rgba(251,191,36,0.6)" : "1px solid rgba(255,255,255,0.04)",
+                border: isSelected
+                  ? "2px solid var(--accent)"
+                  : isToday
+                    ? "1px solid rgba(251,191,36,0.6)"
+                    : "1px solid rgba(255,255,255,0.04)",
                 borderRadius: 3,
                 transition: "all 80ms",
                 transform: hovered === cell.dateStr ? "scale(1.12)" : "scale(1)",
-                cursor: entry ? "default" : "default",
+                cursor: entry ? "pointer" : "default",
               }}
               onMouseEnter={() => setHovered(cell.dateStr)}
               onMouseLeave={() => setHovered(null)}
+              onClick={() => entry ? setSelectedDay(isSelected ? null : cell.dateStr) : null}
             >
               <span style={{ fontSize: 9, color: entry ? "var(--text-1)" : "var(--text-4)", fontFamily: "var(--font-mono)", lineHeight: 1 }}>{cell.day}</span>
               {entry && (
@@ -497,6 +509,7 @@ function CalendarHeatmap({ year, month, data }: {
                   <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-1)" }}>
                     {entry.pnl >= 0 ? "+" : ""}₹{Math.abs(entry.pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                   </div>
+                  <div style={{ fontSize: 9, color: "var(--text-4)", marginTop: 2 }}>Click to view trades</div>
                 </div>
               )}
             </div>
@@ -513,9 +526,17 @@ function PnLTab() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [rangeStart, setRangeStart] = useState(monthStart(now.getFullYear(), now.getMonth() + 1));
   const [rangeEnd,   setRangeEnd]   = useState(monthEnd(now.getFullYear(), now.getMonth() + 1));
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   const { data: calData = [] } = useJournalPnLCalendar(year, month);
   const { data: allData = [] } = useJournalPnLCalendar(year);
+
+  // Fetch all journal trades for the day-detail panel
+  const { data: allJournalTrades = [] } = useQuery<any[]>({
+    queryKey: ["journal-trades-all"],
+    queryFn: () => api.get<any[]>("/journal/trades"),
+    staleTime: 60_000,
+  });
 
   // Stats computed from journal calendar — no paper_trades dependency
   const winDays  = allData.filter(d => d.pnl > 0).length;
@@ -632,7 +653,13 @@ function PnLTab() {
           </div>
 
           <div style={{ padding: 16 }}>
-            <CalendarHeatmap year={year} month={month} data={filteredCalData} />
+            <CalendarHeatmap
+              year={year}
+              month={month}
+              data={filteredCalData}
+              selectedDay={selectedDay}
+              setSelectedDay={setSelectedDay}
+            />
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
               {[
                 { label: "MONTH P&L", val: `${monthPnL >= 0 ? "+" : ""}${monthPnLPct.toFixed(2)}%`, color: numColor(monthPnL) },
@@ -646,6 +673,88 @@ function PnLTab() {
                 </div>
               ))}
             </div>
+
+            {/* ── Day trades panel ── */}
+            {selectedDay && (() => {
+              const dayTrades = allJournalTrades.filter((t: any) => {
+                const exitDate = t.exit_date ?? t.exitDate ?? null;
+                return exitDate && exitDate.slice(0, 10) === selectedDay;
+              });
+              return (
+                <div style={{
+                  marginTop: 16, padding: "12px 14px",
+                  background: "var(--surface-2)", border: "1px solid var(--accent-border)",
+                  borderRadius: 8,
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-1)", fontFamily: "var(--font-body)", letterSpacing: "0.06em" }}>
+                      Trades closed on {selectedDay}
+                    </span>
+                    <button
+                      onClick={() => setSelectedDay(null)}
+                      style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-3)", display: "flex", alignItems: "center" }}
+                    >
+                      <X style={{ width: 13, height: 13 }} />
+                    </button>
+                  </div>
+                  {dayTrades.length === 0 ? (
+                    <div style={{ fontSize: 12, color: "var(--text-4)", padding: "8px 0" }}>
+                      No trades closed on this date
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                        <thead>
+                          <tr>
+                            {["SYMBOL", "BUY ₹", "SELL ₹", "QTY", "P&L", "P&L%"].map((h, i) => (
+                              <th key={h} style={{
+                                padding: "5px 10px", textAlign: i >= 1 ? "right" : "left",
+                                fontSize: 9, fontWeight: 700, letterSpacing: "0.08em",
+                                color: "var(--text-3)", borderBottom: "1px solid rgba(255,255,255,0.06)",
+                                fontFamily: "var(--font-body)", whiteSpace: "nowrap",
+                              }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dayTrades.map((t: any, i: number) => {
+                            const symbol      = t.stockName ?? t.stock_name ?? t.ticker ?? "—";
+                            const buyPrice    = t.buyPrice  ?? t.buy_price  ?? 0;
+                            const sellPrice   = t.sellPrice ?? t.sell_price ?? 0;
+                            const qty         = t.quantity  ?? t.qty        ?? 0;
+                            const pnl         = t.brokerPl  ?? t.broker_pl  ?? ((sellPrice - buyPrice) * qty);
+                            const pct         = buyPrice > 0 ? ((sellPrice - buyPrice) / buyPrice) * 100 : 0;
+                            const pnlPos      = pnl >= 0;
+                            return (
+                              <tr key={i} style={{ background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)" }}>
+                                <td style={{ padding: "5px 10px", fontWeight: 700, color: "var(--accent)", fontFamily: "var(--font-mono)", fontSize: 12 }}>
+                                  {symbol}
+                                </td>
+                                <td style={{ padding: "5px 10px", textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--text-2)" }}>
+                                  ₹{buyPrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                </td>
+                                <td style={{ padding: "5px 10px", textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--text-2)" }}>
+                                  {sellPrice ? `₹${sellPrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "—"}
+                                </td>
+                                <td style={{ padding: "5px 10px", textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--text-2)" }}>
+                                  {qty.toLocaleString("en-IN")}
+                                </td>
+                                <td style={{ padding: "5px 10px", textAlign: "right", fontFamily: "var(--font-mono)", fontWeight: 700, color: pnlPos ? "var(--green)" : "var(--red)" }}>
+                                  {pnlPos ? "+" : ""}₹{Math.abs(pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                </td>
+                                <td style={{ padding: "5px 10px", textAlign: "right", fontFamily: "var(--font-mono)", fontWeight: 700, color: pnlPos ? "var(--green)" : "var(--red)" }}>
+                                  {pct >= 0 ? "+" : ""}{pct.toFixed(2)}%
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
