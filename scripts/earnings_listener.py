@@ -3,22 +3,25 @@
 Earnings Pulse Listener
 =======================
 Monitors @earnings_pulse Telegram channel for new earnings cards,
-extracts structured data using Gemini Flash 1.5 vision (free tier),
-validates numbers for internal consistency, cross-checks against BSE
-API when confidence is low, then upserts into Supabase.
+extracts structured data using vision LLMs, validates numbers, and
+upserts into Supabase.
+
+Vision provider priority:
+  1. NVIDIA NIM  — llama-3.2-90b-vision (free 1000 credits, best accuracy)
+  2. Gemini Flash — fallback if NVIDIA fails / quota exhausted
 
 Run ONCE to authenticate (Telethon saves session to earnings_session.session):
   python scripts/earnings_listener.py
 
-On subsequent runs it resumes automatically. Keep the process running
-during market hours — Railway/Render free tier works fine.
+On subsequent runs it resumes automatically.
 
 Dependencies:
-  pip install telethon google-generativeai httpx python-dotenv
+  pip install telethon httpx python-dotenv openai
 
 Free credentials:
   Telegram API: https://my.telegram.org/apps  (API_ID + API_HASH)
-  Gemini API:   https://aistudio.google.com/apikey
+  NVIDIA NIM:   https://build.nvidia.com       (NVIDIA_API_KEY → nvapi-...)
+  Gemini:       https://aistudio.google.com/apikey (fallback)
 """
 
 from __future__ import annotations
@@ -41,24 +44,27 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 # ── Configuration ─────────────────────────────────────────────────────────────
 TELEGRAM_API_ID   = int(os.environ.get("TELEGRAM_API_ID", "0"))
 TELEGRAM_API_HASH = os.environ.get("TELEGRAM_API_HASH", "")
-TELEGRAM_PHONE    = os.environ.get("TELEGRAM_PHONE", "")   # +919XXXXXXXXX
+TELEGRAM_PHONE    = os.environ.get("TELEGRAM_PHONE", "")
+NVIDIA_API_KEY    = os.environ.get("NVIDIA_API_KEY", "")
 GEMINI_API_KEY    = os.environ.get("GEMINI_API_KEY", "")
 SB_URL            = os.environ.get("SUPABASE_URL", "")
 SB_KEY            = os.environ.get("SUPABASE_SERVICE_KEY", "")
 CHANNEL           = "earnings_pulse"
 
+# Need at least one vision provider
 _MISSING = [k for k, v in {
     "TELEGRAM_API_ID": TELEGRAM_API_ID,
     "TELEGRAM_API_HASH": TELEGRAM_API_HASH,
     "TELEGRAM_PHONE": TELEGRAM_PHONE,
-    "GEMINI_API_KEY": GEMINI_API_KEY,
     "SUPABASE_URL": SB_URL,
     "SUPABASE_SERVICE_KEY": SB_KEY,
 }.items() if not v or v == "0"]
 
+if not NVIDIA_API_KEY and not GEMINI_API_KEY:
+    _MISSING.append("NVIDIA_API_KEY or GEMINI_API_KEY")
+
 if _MISSING:
     print(f"[Config] Missing env vars: {', '.join(_MISSING)}")
-    print("Add them to your .env file. See SETUP section in this file.")
     sys.exit(1)
 
 _SB_HEADERS = {
@@ -67,11 +73,14 @@ _SB_HEADERS = {
     "Content-Type": "application/json",
 }
 
-# ── Gemini Setup ──────────────────────────────────────────────────────────────
-import google.generativeai as genai
+# ── Vision providers ──────────────────────────────────────────────────────────
+# NVIDIA NIM (primary) — OpenAI-compatible, free 1000 credits
+# https://build.nvidia.com → "Get API Key"
+_NVIDIA_BASE = "https://integrate.api.nvidia.com/v1"
+_NVIDIA_MODEL = "meta/llama-3.2-90b-vision-instruct"
 
-genai.configure(api_key=GEMINI_API_KEY)
-_GEMINI = genai.GenerativeModel("gemini-1.5-flash")
+# Gemini (fallback)
+_GEMINI_MODEL = "gemini-2.0-flash"
 
 EXTRACT_PROMPT = """You are a financial data extraction specialist for Indian stock markets.
 
@@ -129,7 +138,6 @@ Rules:
 
 def _parse_json_from_text(text: str) -> Optional[dict]:
     text = text.strip()
-    # Strip markdown fences
     if text.startswith("```"):
         text = re.sub(r"^```[a-z]*\n?", "", text)
         text = re.sub(r"\n?```$", "", text.strip())
@@ -145,21 +153,85 @@ def _parse_json_from_text(text: str) -> Optional[dict]:
     return None
 
 
-async def extract_from_image(image_bytes: bytes) -> Optional[dict]:
-    """Run Gemini Flash vision OCR on an earnings card image."""
-    img_part = {"mime_type": "image/jpeg", "data": image_bytes}
+async def _extract_nvidia(image_bytes: bytes) -> Optional[dict]:
+    """NVIDIA NIM llama-3.2-90b-vision — primary provider."""
+    if not NVIDIA_API_KEY:
+        return None
+    import base64
+    b64 = base64.b64encode(image_bytes).decode()
+    payload = {
+        "model": _NVIDIA_MODEL,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text",      "text": EXTRACT_PROMPT},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+            ],
+        }],
+        "temperature": 0,
+        "max_tokens": 1024,
+    }
+    async with httpx.AsyncClient(timeout=40) as client:
+        r = await client.post(
+            f"{_NVIDIA_BASE}/chat/completions",
+            headers={"Authorization": f"Bearer {NVIDIA_API_KEY}", "Content-Type": "application/json"},
+            json=payload,
+        )
+    if r.status_code != 200:
+        print(f"  [NVIDIA] HTTP {r.status_code}: {r.text[:200]}")
+        return None
+    text = r.json()["choices"][0]["message"]["content"]
+    data = _parse_json_from_text(text)
+    if data:
+        print(f"  [NVIDIA] {data.get('ticker')} {data.get('quarter')} — {data.get('pulse_rating')}")
+    return data
+
+
+async def _extract_gemini(image_bytes: bytes) -> Optional[dict]:
+    """Gemini Flash — fallback provider."""
+    if not GEMINI_API_KEY:
+        return None
+    import base64
     try:
-        resp = _GEMINI.generate_content(
-            [EXTRACT_PROMPT, img_part],
-            generation_config=genai.GenerationConfig(temperature=0.0),
+        from google import genai as _gai
+        client = _gai.Client(api_key=GEMINI_API_KEY)
+        import google.genai.types as _gtypes
+        resp = client.models.generate_content(
+            model=_GEMINI_MODEL,
+            contents=[
+                EXTRACT_PROMPT,
+                _gtypes.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+            ],
         )
         data = _parse_json_from_text(resp.text)
         if data:
-            print(f"  [Gemini] {data.get('ticker')} {data.get('quarter')} — rating: {data.get('pulse_rating')}")
+            print(f"  [Gemini] {data.get('ticker')} {data.get('quarter')} — {data.get('pulse_rating')}")
         return data
     except Exception as e:
         print(f"  [Gemini] Error: {e}")
         return None
+
+
+async def extract_from_image(image_bytes: bytes) -> Optional[dict]:
+    """Try NVIDIA first, fall back to Gemini."""
+    # Primary: NVIDIA NIM
+    if NVIDIA_API_KEY:
+        try:
+            data = await _extract_nvidia(image_bytes)
+            if data and data.get("ticker"):
+                return data
+        except Exception as e:
+            print(f"  [NVIDIA] Exception: {e}")
+
+    # Fallback: Gemini
+    if GEMINI_API_KEY:
+        print("  [Vision] Falling back to Gemini...")
+        data = await _extract_gemini(image_bytes)
+        if data and data.get("ticker"):
+            return data
+
+    print("  [Vision] All providers failed")
+    return None
 
 
 # ── Validation ────────────────────────────────────────────────────────────────
