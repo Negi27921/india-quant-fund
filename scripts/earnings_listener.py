@@ -284,9 +284,9 @@ def validate_and_score(data: dict) -> tuple[dict, float]:
     score = 1.0
 
     try:
-        sales = data["sales"]["current"]
-        op    = data["op"]["current"]
-        opm_c = data["opm"]["current_pct"]
+        sales = (data.get("sales") or {}).get("current")
+        op    = (data.get("op")    or {}).get("current")
+        opm_c = (data.get("opm")   or {}).get("current_pct")
         if sales and op and opm_c is not None:
             computed = round((op / sales) * 100, 1)
             if abs(computed - opm_c) > 0.6:
@@ -298,11 +298,12 @@ def validate_and_score(data: dict) -> tuple[dict, float]:
 
     for metric in ("sales", "op", "pat", "eps"):
         try:
-            curr  = data[metric]["current"]
-            prev_q = data[metric]["prev_q"]
-            prev_y = data[metric]["prev_y"]
-            claimed_qoq = data[metric]["qoq_pct"]
-            claimed_yoy = data[metric]["yoy_pct"]
+            m = data.get(metric) or {}
+            curr        = m.get("current")
+            prev_q      = m.get("prev_q")
+            prev_y      = m.get("prev_y")
+            claimed_qoq = m.get("qoq_pct")
+            claimed_yoy = m.get("yoy_pct")
 
             comp_qoq = _safe_pct(curr, prev_q)
             comp_yoy = _safe_pct(curr, prev_y)
@@ -325,10 +326,10 @@ def validate_and_score(data: dict) -> tuple[dict, float]:
 def compute_pulse_rating(data: dict) -> str:
     """Recompute Pulse Rating from extracted financials."""
     try:
-        sales_yoy = data["sales"].get("yoy_pct") or 0
-        pat_yoy   = data["pat"].get("yoy_pct") or 0
-        opm_yoy   = data["opm"].get("yoy_bps") or 0
-        eps_yoy   = data["eps"].get("yoy_pct") or 0
+        sales_yoy = (data.get("sales") or {}).get("yoy_pct") or 0
+        pat_yoy   = (data.get("pat")   or {}).get("yoy_pct") or 0
+        opm_yoy   = (data.get("opm")   or {}).get("yoy_bps") or 0
+        eps_yoy   = (data.get("eps")   or {}).get("yoy_pct") or 0
 
         pts = 0
         # Revenue
@@ -487,39 +488,40 @@ async def upsert_earnings(data: dict, confidence: float, source: str,
         "sector":  data.get("sector"),
         "quarter": data.get("quarter"),
 
-        "sales_cr":      data.get("sales", {}).get("current"),
-        "sales_prev_q_cr": data.get("sales", {}).get("prev_q"),
-        "sales_prev_y_cr": data.get("sales", {}).get("prev_y"),
-        "sales_qoq_pct": data.get("sales", {}).get("qoq_pct"),
-        "sales_yoy_pct": data.get("sales", {}).get("yoy_pct"),
+        # use `or {}` so explicit null values from JSON don't crash .get()
+        "sales_cr":        (data.get("sales")        or {}).get("current"),
+        "sales_prev_q_cr": (data.get("sales")        or {}).get("prev_q"),
+        "sales_prev_y_cr": (data.get("sales")        or {}).get("prev_y"),
+        "sales_qoq_pct":   (data.get("sales")        or {}).get("qoq_pct"),
+        "sales_yoy_pct":   (data.get("sales")        or {}).get("yoy_pct"),
 
-        "other_income_cr":       data.get("other_income", {}).get("current"),
-        "other_income_prev_q_cr": data.get("other_income", {}).get("prev_q"),
-        "other_income_prev_y_cr": data.get("other_income", {}).get("prev_y"),
+        "other_income_cr":        (data.get("other_income") or {}).get("current"),
+        "other_income_prev_q_cr": (data.get("other_income") or {}).get("prev_q"),
+        "other_income_prev_y_cr": (data.get("other_income") or {}).get("prev_y"),
 
-        "op_cr":      data.get("op", {}).get("current"),
-        "op_prev_q_cr": data.get("op", {}).get("prev_q"),
-        "op_prev_y_cr": data.get("op", {}).get("prev_y"),
-        "op_qoq_pct": data.get("op", {}).get("qoq_pct"),
-        "op_yoy_pct": data.get("op", {}).get("yoy_pct"),
+        "op_cr":        (data.get("op")  or {}).get("current"),
+        "op_prev_q_cr": (data.get("op")  or {}).get("prev_q"),
+        "op_prev_y_cr": (data.get("op")  or {}).get("prev_y"),
+        "op_qoq_pct":   (data.get("op")  or {}).get("qoq_pct"),
+        "op_yoy_pct":   (data.get("op")  or {}).get("yoy_pct"),
 
-        "opm_pct":         data.get("opm", {}).get("current_pct"),
-        "opm_prev_q_pct":  data.get("opm", {}).get("prev_q_pct"),
-        "opm_prev_y_pct":  data.get("opm", {}).get("prev_y_pct"),
-        "opm_qoq_bps":     data.get("opm", {}).get("qoq_bps"),
-        "opm_yoy_bps":     data.get("opm", {}).get("yoy_bps"),
+        "opm_pct":        (data.get("opm") or {}).get("current_pct"),
+        "opm_prev_q_pct": (data.get("opm") or {}).get("prev_q_pct"),
+        "opm_prev_y_pct": (data.get("opm") or {}).get("prev_y_pct"),
+        "opm_qoq_bps":    (data.get("opm") or {}).get("qoq_bps"),
+        "opm_yoy_bps":    (data.get("opm") or {}).get("yoy_bps"),
 
-        "pat_cr":       data.get("pat", {}).get("current"),
-        "pat_prev_q_cr": data.get("pat", {}).get("prev_q"),
-        "pat_prev_y_cr": data.get("pat", {}).get("prev_y"),
-        "pat_qoq_pct":  data.get("pat", {}).get("qoq_pct"),
-        "pat_yoy_pct":  data.get("pat", {}).get("yoy_pct"),
+        "pat_cr":        (data.get("pat") or {}).get("current"),
+        "pat_prev_q_cr": (data.get("pat") or {}).get("prev_q"),
+        "pat_prev_y_cr": (data.get("pat") or {}).get("prev_y"),
+        "pat_qoq_pct":   (data.get("pat") or {}).get("qoq_pct"),
+        "pat_yoy_pct":   (data.get("pat") or {}).get("yoy_pct"),
 
-        "eps":         data.get("eps", {}).get("current"),
-        "eps_prev_q":  data.get("eps", {}).get("prev_q"),
-        "eps_prev_y":  data.get("eps", {}).get("prev_y"),
-        "eps_qoq_pct": data.get("eps", {}).get("qoq_pct"),
-        "eps_yoy_pct": data.get("eps", {}).get("yoy_pct"),
+        "eps":         (data.get("eps") or {}).get("current"),
+        "eps_prev_q":  (data.get("eps") or {}).get("prev_q"),
+        "eps_prev_y":  (data.get("eps") or {}).get("prev_y"),
+        "eps_qoq_pct": (data.get("eps") or {}).get("qoq_pct"),
+        "eps_yoy_pct": (data.get("eps") or {}).get("yoy_pct"),
 
         "cmp":           data.get("cmp"),
         "pe_ratio":      data.get("pe_ratio"),
