@@ -241,7 +241,7 @@ async def _extract_gemini(image_bytes: bytes) -> Optional[dict]:
 
 
 async def extract_from_image(image_bytes: bytes) -> Optional[dict]:
-    """Try NVIDIA first, fall back to Gemini."""
+    """Try NVIDIA first, fall back to Gemini only if quota is not exhausted."""
     # Primary: NVIDIA NIM
     if NVIDIA_API_KEY:
         try:
@@ -249,17 +249,22 @@ async def extract_from_image(image_bytes: bytes) -> Optional[dict]:
             if data and data.get("ticker"):
                 return data
         except Exception as e:
-            print(f"  [NVIDIA] Exception: {e}")
+            print(f"  [NVIDIA] Exception: {type(e).__name__}: {e}")
 
-    # Fallback: Gemini
+    # Fallback: Gemini (skip silently if quota is dead)
     if GEMINI_API_KEY:
-        print("  [Vision] Falling back to Gemini...")
-        data = await _extract_gemini(image_bytes)
-        if data and data.get("ticker"):
-            return data
+        try:
+            data = await _extract_gemini(image_bytes)
+            if data and data.get("ticker"):
+                return data
+        except Exception as e:
+            err = str(e)
+            if "RESOURCE_EXHAUSTED" in err or "limit: 0" in err:
+                pass  # Quota dead — skip silently
+            else:
+                print(f"  [Gemini] Error: {e}")
 
-    print("  [Vision] All providers failed")
-    return None
+    return None  # Not every channel message is an earnings card — skip quietly
 
 
 # ── Validation ────────────────────────────────────────────────────────────────
@@ -589,7 +594,7 @@ async def backfill_history(n_messages: int = 200):
                 data, confidence = validate_and_score(data)
         await upsert_earnings(data, confidence, "telegram_ocr", msg.id)
         count += 1
-        await asyncio.sleep(1.5)  # Gemini free tier rate limit
+        await asyncio.sleep(2.0)  # NVIDIA free tier: ~30 RPM, 2s gap keeps us safe
 
     print(f"\n[Backfill] Done — processed {count} earnings cards")
     await client.disconnect()
