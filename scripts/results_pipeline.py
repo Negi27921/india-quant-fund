@@ -557,11 +557,32 @@ _FINANCIAL_TABLE_MARKERS = [
 def _smart_pdf_window(text: str, max_chars: int = 12000) -> str:
     """
     Returns the most financially relevant slice of PDF text.
-    Finds the P&L table start and returns a window around it.
+    Prefers the Consolidated Financial Results section over Standalone.
+    Falls back to first P&L table marker if no explicit consolidated heading found.
     """
     text_lower = text.lower()
-    best_idx = len(text)
 
+    # 1. Try to anchor on the explicit consolidated section heading
+    consolidated_markers = [
+        "consolidated financial results",
+        "consolidated statement of profit",
+        "consolidated statement of assets",
+    ]
+    for cm in consolidated_markers:
+        idx = text_lower.find(cm)
+        if 0 < idx:
+            # Look for first financial row label AFTER this heading (within 8000 chars)
+            search_region = text_lower[idx: idx + 8000]
+            for marker in _FINANCIAL_TABLE_MARKERS:
+                tbl_idx = search_region.find(marker)
+                if tbl_idx >= 0:
+                    abs_start = max(0, idx + tbl_idx - 200)
+                    return text[abs_start: abs_start + max_chars]
+            # No table found after heading — return from heading onward
+            return text[max(0, idx - 100): idx - 100 + max_chars]
+
+    # 2. Fallback: first occurrence of any financial table marker
+    best_idx = len(text)
     for marker in _FINANCIAL_TABLE_MARKERS:
         idx = text_lower.find(marker)
         if 0 < idx < best_idx:
@@ -570,9 +591,8 @@ def _smart_pdf_window(text: str, max_chars: int = 12000) -> str:
     if best_idx >= len(text):
         return text[:max_chars]
 
-    # Start a bit before the marker (grab table header context)
     table_start = max(0, best_idx - 200)
-    return text[table_start:table_start + max_chars]
+    return text[table_start: table_start + max_chars]
 
 
 def _extract_pdf_text(pdf_url: str, max_chars: int = 12000) -> str:
@@ -954,13 +974,22 @@ If LAKHS → divide every financial number by 100 to convert to Crores.
 If CRORES → use directly.
 Record the unit in "currency_unit".
 
-STEP 2 — FIND THE P&L TABLE
-Look for the row labels: "Revenue from Operations", "Total Income", "EBITDA",
-"Profit Before Tax", "Tax Expense", "Profit After Tax", "EPS".
+STEP 2 — FIND THE CONSOLIDATED P&L TABLE
+PRIORITY: If the PDF contains BOTH "Consolidated Financial Results" AND "Standalone Financial Results" tables,
+USE ONLY the CONSOLIDATED table. Consolidated = group performance = what investors care about.
+Standalone = parent company only = secondary.
+
+To identify the consolidated table: look for the heading "Consolidated Financial Results"
+or "Consolidated Statement of Profit and Loss". If neither is labelled, use the second table
+(consolidated typically follows standalone in Indian filings).
+
+In the consolidated table, look for the row labels: "Revenue from Operations", "Total Income",
+"EBITDA", "Profit Before Tax", "Tax Expense", "Profit After Tax", "EPS".
 NOTE: Under Indian Accounting Standards (Ind AS), PAT may be labelled:
   "Profit for the period", "Profit for the year", "Profit for the period/year",
   "Net Profit", or "Total Comprehensive Income". Use the first one found.
 The table has columns: Current Quarter | Previous Quarter | Same Quarter Last Year.
+Mark "consolidated": true in output if consolidated table was used, else false.
 
 STEP 3 — EXTRACT NUMBERS
 For each metric, find the number in the CURRENT QUARTER column.
@@ -1020,6 +1049,7 @@ Return ONLY valid JSON. No markdown fences. No extra text. No trailing commas.
   "insight"              : "Two concise sentences on this quarter's result and market implication.",
   "report_time"          : "After Market Hours",
   "currency_unit"        : "Cr",
+  "consolidated"         : true,
   "confidence_score"     : 20
 }}
 
