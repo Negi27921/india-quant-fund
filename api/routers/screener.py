@@ -1,6 +1,7 @@
 """
 Stock screener — VCP, IPO Base, Rocket Base, Multibagger strategies.
 Results are cached in-process AND in Supabase so tab-switching never re-triggers scans.
+Universe: canonical dim_company stocks with market_cap >= UNIVERSE_MIN_MCAP_CR (1000 Cr).
 """
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ import threading as _threading
 import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 warnings.filterwarnings("ignore")
@@ -22,6 +23,7 @@ import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 
 from api.middleware.security import require_internal_key
+from api.universe import get_canonical_tickers_ns, UNIVERSE_MIN_MCAP_CR
 
 router = APIRouter()
 _executor = ThreadPoolExecutor(max_workers=20)
@@ -87,7 +89,19 @@ def _period_for_strategy(strategy: str) -> str:
         return "120d"
     return "60d"  # vcp, ipo_base, rsi_reversal
 
-# ── Universe: Full Nifty 500 (503 stocks from NSE EQUITY_L.csv + sharewatch) ────
+# ── Universe: resolved lazily from canonical dim_company source ───────────────
+# SCAN_UNIVERSE / FULL_UNIVERSE kept as aliases so existing call-sites compile.
+# Both are replaced at runtime by get_canonical_tickers_ns() (dim_company ≥ 1000 Cr).
+_UNIVERSE_FALLBACK: list[str] = []   # populated on first scan if Supabase is reachable
+
+def _get_screener_universe() -> list[str]:
+    """Return canonical .NS ticker list; fall back to old hardcoded list if unavailable."""
+    tickers = get_canonical_tickers_ns()
+    if tickers:
+        return tickers
+    return _LEGACY_SCAN_UNIVERSE  # see below
+
+# Legacy Nifty 500 kept as fallback ────────────────────────────────────────────
 SCAN_UNIVERSE = [
     "360ONE.NS", "3MINDIA.NS", "ABB.NS", "ACC.NS", "ACMESOLAR.NS", "AIAENG.NS", "APLAPOLLO.NS", "AUBANK.NS",
     "AWL.NS", "AADHARHFC.NS", "AARTIIND.NS", "AAVAS.NS", "ABBOTINDIA.NS", "ACE.NS", "ACUTAAS.NS", "ADANIENSOL.NS",
@@ -154,20 +168,66 @@ SCAN_UNIVERSE = [
     "ZFCVINDIA.NS", "ZEEL.NS", "ZENTEC.NS", "ZENSARTECH.NS", "ZYDUSLIFE.NS", "ZYDUSWELL.NS", "ECLERX.NS",
 ]
 
-# Deduplicate preserving order
+# Deduplicate and alias as legacy fallback
 _seen: set[str] = set()
 _uniq: list[str] = []
 for _t in SCAN_UNIVERSE:
     if _t not in _seen:
         _seen.add(_t); _uniq.append(_t)
 SCAN_UNIVERSE = _uniq
+_LEGACY_SCAN_UNIVERSE: list[str] = SCAN_UNIVERSE  # used as fallback when Supabase unavailable
 
-# ── Full NSE universe (2137 stocks from EQUITY_L.csv via sharewatch) ──────────
-try:
-    from api.full_universe import FULL_NSE_TICKERS
-    FULL_UNIVERSE: list[str] = FULL_NSE_TICKERS
-except ImportError:
-    FULL_UNIVERSE: list[str] = list(SCAN_UNIVERSE)  # fallback to Nifty 500
+# FULL_UNIVERSE kept for backwards compat but superseded by _get_screener_universe()
+FULL_UNIVERSE: list[str] = SCAN_UNIVERSE
+
+
+# ── Paper trade auto-insert ───────────────────────────────────────────────────
+
+def _auto_create_paper_trades(results: list[dict], strategy: str) -> None:
+    """Insert new OPEN paper trades for screener hits (confidence >= 60).
+    Skips any ticker that already has an OPEN trade for this strategy.
+    Non-fatal — failures never abort the scan.
+    """
+    if not results:
+        return
+    try:
+        from data.storage import supabase_db as sdb
+        today = date.today().isoformat()
+        # Fetch existing OPEN trades for this strategy to avoid duplicates
+        existing_open: set[str] = set()
+        try:
+            rows = sdb.select("paper_trades", filters={"strategy": strategy, "status": "OPEN"}, limit=500)
+            existing_open = {r.get("ticker", "") for r in rows}
+        except Exception:
+            pass
+
+        inserted = 0
+        for hit in results:
+            if hit.get("confidence", 0) < 60:
+                continue
+            ticker = hit.get("symbol", "").replace(".NS", "").replace(".BO", "")
+            if not ticker or ticker in existing_open:
+                continue
+            entry = {
+                "strategy":     strategy,
+                "ticker":       ticker,
+                "entry_date":   today,
+                "entry_price":  round(float(hit.get("ltp", 0)), 2),
+                "target_price": round(float(hit.get("tp1", 0)), 2),
+                "sl_price":     round(float(hit.get("sl", 0)), 2),
+                "shares":       100,
+                "confidence":   int(hit.get("confidence", 0)),
+                "status":       "OPEN",
+                "notes":        f"Auto from {strategy} scan · score {hit.get('confidence', 0)}",
+            }
+            try:
+                sdb.insert("paper_trades", entry)
+                existing_open.add(ticker)
+                inserted += 1
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 # ── Technical helpers ──────────────────────────────────────────────────────
@@ -636,7 +696,7 @@ def _scan_slice(ticker_slice: list[str], strategy: str) -> list[dict]:
 def _run_scan(strategy: str, universe_name: str = "nifty500", cache_key: str = "") -> list[dict]:
     """Download all batches in parallel then evaluate each stock.
     Writes partial results to L2 every 3 batches so progress survives Lambda restarts."""
-    universe = FULL_UNIVERSE if universe_name == "full" else SCAN_UNIVERSE
+    universe = _get_screener_universe()
     period = _period_for_strategy(strategy)
     batch_size = 100
     batches = [universe[i:i + batch_size] for i in range(0, len(universe), batch_size)]
@@ -696,6 +756,7 @@ def _launch_bg_scan(cache_key: str, strategy: str, universe_name: str) -> None:
             results = _run_scan(strategy, universe_name, cache_key=cache_key)
             _cache[cache_key] = (time.monotonic(), results)
             _l2_write(strategy, universe_name, results)
+            _auto_create_paper_trades(results, strategy)
         finally:
             _scan_running.discard(cache_key)
             _scan_progress.pop(cache_key, None)
@@ -779,7 +840,7 @@ async def get_screener_results(
     )
 
     cache_key = f"{strategy}_{universe}"
-    active_universe = FULL_UNIVERSE if universe == "full" else SCAN_UNIVERSE
+    active_universe = _get_screener_universe()
 
     # While scanning, merge in-progress partial results with stale cache
     if is_scanning and progress.get("partial"):

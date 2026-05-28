@@ -16,21 +16,20 @@ def _has_key(env_var: str) -> bool:
 async def get_providers():
     """Return configured LLM providers and their key status (no key material)."""
     return {
-        "active": os.getenv("LLM_PROVIDER", "nvidia"),
+        "active": os.getenv("LLM_PROVIDER", "groq"),
         "providers": [
             {
                 "id":      "nvidia",
-                "label":   "NVIDIA NIM — DeepSeek R1",
+                "label":   "NVIDIA NIM — Nemotron 49B",
                 "tier":    "free",
-                "model":   os.getenv("NVIDIA_MODEL", "deepseek-ai/deepseek-r1"),
+                "model":   os.getenv("NVIDIA_MODEL", "nvidia/llama-3.3-nemotron-super-49b-v1"),
                 "has_key": _has_key("NVIDIA_API_KEY"),
                 "url":     "https://build.nvidia.com",
                 "models":  [
-                    "deepseek-ai/deepseek-r1",
-                    "deepseek-ai/deepseek-r1-distill-llama-70b",
-                    "deepseek-ai/deepseek-r1-distill-qwen-32b",
-                    "deepseek-ai/deepseek-r1-distill-qwen-14b",
+                    "nvidia/llama-3.3-nemotron-super-49b-v1",
                     "meta/llama-3.3-70b-instruct",
+                    "meta/llama-3.1-405b-instruct",
+                    "mistralai/mistral-large-2-instruct",
                 ],
             },
             {
@@ -221,6 +220,116 @@ async def update_agent_config(body: dict, _: None = Depends(require_internal_key
             sdb.update("app_config", {"value": update}, {"key": "agent_config"})
         else:
             sdb.insert("app_config", {"key": "agent_config", "value": update})
+        return {"ok": True, "saved": update}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ── Paper Execution Config ─────────────────────────────────────────────────────
+
+_PAPER_DEFAULTS = {
+    "enabled":            True,
+    "capital":            500_000,
+    "max_open_trades":    20,
+    "trade_amount":       25_000,
+    "min_confidence":     60,
+    "auto_exit_target":   True,
+    "auto_exit_sl":       True,
+    "fill_mode":          "cmp",       # "cmp" = current market price at scan time
+    "check_exits_every":  30,          # minutes
+    "strategies": ["vcp", "breakout", "golden_cross", "multibagger", "ipo_base", "rocket_base", "rsi_reversal"],
+}
+
+_LIVE_DEFAULTS = {
+    "enabled":            False,       # ENABLE_LIVE_TRADING=false default
+    "broker":             "dhan",
+    "capital":            1_000_000,
+    "max_open_trades":    10,
+    "trade_amount":       50_000,
+    "min_confidence":     80,
+    "risk_pct_per_trade": 2.0,
+    "kill_drawdown":      10.0,
+    "require_confirmation": True,
+    "strategies": ["vcp", "breakout"],
+}
+
+
+@router.get("/paper-config")
+async def get_paper_config():
+    """Return paper trading execution configuration."""
+    cfg = dict(_PAPER_DEFAULTS)
+    try:
+        from data.storage import supabase_db as sdb
+        import json
+        rows = sdb.select("app_config", cols="value", filters={"key": "paper_config"}, limit=1)
+        if rows:
+            stored = rows[0].get("value") or {}
+            if isinstance(stored, str):
+                stored = json.loads(stored)
+            cfg.update(stored)
+    except Exception:
+        pass
+    return cfg
+
+
+@router.put("/paper-config")
+async def update_paper_config(body: dict, _: None = Depends(require_internal_key)):
+    """Persist paper trading execution config."""
+    ALLOWED = {
+        "enabled", "capital", "max_open_trades", "trade_amount", "min_confidence",
+        "auto_exit_target", "auto_exit_sl", "fill_mode", "check_exits_every", "strategies",
+    }
+    update = {k: v for k, v in body.items() if k in ALLOWED}
+    try:
+        from data.storage import supabase_db as sdb
+        existing = sdb.select("app_config", cols="key", filters={"key": "paper_config"}, limit=1)
+        if existing:
+            sdb.update("app_config", {"value": update}, {"key": "paper_config"})
+        else:
+            sdb.insert("app_config", {"key": "paper_config", "value": update})
+        return {"ok": True, "saved": update}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.get("/live-config")
+async def get_live_config():
+    """Return live trading execution configuration."""
+    env_enabled = os.getenv("ENABLE_LIVE_TRADING", "false").lower() == "true"
+    cfg = {**_LIVE_DEFAULTS, "enabled": env_enabled}
+    try:
+        from data.storage import supabase_db as sdb
+        import json
+        rows = sdb.select("app_config", cols="value", filters={"key": "live_config"}, limit=1)
+        if rows:
+            stored = rows[0].get("value") or {}
+            if isinstance(stored, str):
+                stored = json.loads(stored)
+            cfg.update(stored)
+    except Exception:
+        pass
+    # env var always wins on enabled flag — prevent accidental DB override
+    cfg["enabled"] = env_enabled
+    return cfg
+
+
+@router.put("/live-config")
+async def update_live_config(body: dict, _: None = Depends(require_internal_key)):
+    """Persist live trading execution config. Cannot override ENABLE_LIVE_TRADING env var."""
+    ALLOWED = {
+        "broker", "capital", "max_open_trades", "trade_amount", "min_confidence",
+        "risk_pct_per_trade", "kill_drawdown", "require_confirmation", "strategies",
+    }
+    update = {k: v for k, v in body.items() if k in ALLOWED}
+    # Never let the API enable live trading — that must come from env var
+    update.pop("enabled", None)
+    try:
+        from data.storage import supabase_db as sdb
+        existing = sdb.select("app_config", cols="key", filters={"key": "live_config"}, limit=1)
+        if existing:
+            sdb.update("app_config", {"value": update}, {"key": "live_config"})
+        else:
+            sdb.insert("app_config", {"key": "live_config", "value": update})
         return {"ok": True, "saved": update}
     except Exception as e:
         return {"ok": False, "error": str(e)}

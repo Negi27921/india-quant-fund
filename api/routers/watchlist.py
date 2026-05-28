@@ -244,20 +244,7 @@ def _analyse_with_fallback(symbol: str, question: str,
 
     errors: list[str] = []
 
-    # ── 1. NVIDIA NIM ────────────────────────────────────────────────────────
-    nim_key = os.getenv("NVIDIA_API_KEY", "").strip()
-    nim_model = os.getenv("NVIDIA_MODEL", "meta/llama-3.1-70b-instruct").strip()
-    if nim_key:
-        try:
-            raw = _openai_compat_call(
-                "https://integrate.api.nvidia.com/v1/chat/completions",
-                nim_key, nim_model, messages, timeout=25,
-            )
-            return _strip_think(raw)
-        except Exception as exc:
-            errors.append(f"NIM({nim_model}): {exc}")
-
-    # ── 2. Groq — llama-3.3-70b-versatile ───────────────────────────────────
+    # ── 1. Groq — llama-3.3-70b-versatile (fastest, ~1s) ────────────────────
     groq_key   = os.getenv("GROQ_API_KEY", "").strip()
     groq_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
     if groq_key:
@@ -269,6 +256,19 @@ def _analyse_with_fallback(symbol: str, question: str,
             return _strip_think(raw)
         except Exception as exc:
             errors.append(f"Groq({groq_model}): {exc}")
+
+    # ── 2. NVIDIA NIM — Nemotron 49B ─────────────────────────────────────────
+    nim_key = os.getenv("NVIDIA_API_KEY", "").strip()
+    nim_model = os.getenv("NVIDIA_MODEL", "nvidia/llama-3.3-nemotron-super-49b-v1").strip()
+    if nim_key:
+        try:
+            raw = _openai_compat_call(
+                "https://integrate.api.nvidia.com/v1/chat/completions",
+                nim_key, nim_model, messages, timeout=35,
+            )
+            return _strip_think(raw)
+        except Exception as exc:
+            errors.append(f"NIM({nim_model}): {exc}")
 
     # ── 3. Gemini — gemini-2.5-flash (OpenAI-compatible endpoint) ───────────
     gemini_key   = os.getenv("GEMINI_API_KEY", "").strip()
@@ -605,12 +605,13 @@ async def get_watchlist_items(watchlist_id: str) -> list[dict]:
         except Exception:
             pass
 
-        # ── Universe watchlist: stream all dim_company rows ───────────────────
+        # ── Universe watchlist: canonical dim_company universe (market_cap >= 1000 Cr) ─
         if wl_type == "universe":
             dc_rows = _sb_get_all(
                 "dim_company?select=ticker,company_name,sector,industry,"
                 "basic_industry,macro_sector,marketcap_category,"
                 "market_cap_inr_cr,current_price_inr,high_52w_inr,low_52w_inr"
+                "&market_cap_inr_cr=gte.1000"
                 "&order=market_cap_inr_cr.desc.nullslast"
             )
             now_iso = __import__("datetime").datetime.utcnow().isoformat() + "Z"

@@ -142,3 +142,61 @@ export const useSystemInfo = () =>
     queryFn: () => api.get<SystemInfo>("/settings/system-info"),
     staleTime: 60_000,
   });
+
+export interface PaperConfig {
+  enabled: boolean;
+  capital: number;
+  max_open_trades: number;
+  trade_amount: number;
+  min_confidence: number;
+  auto_exit_target: boolean;
+  auto_exit_sl: boolean;
+  fill_mode: string;
+  check_exits_every: number;
+  strategies: string[];
+}
+
+export interface LiveConfig {
+  enabled: boolean;
+  broker: string;
+  capital: number;
+  max_open_trades: number;
+  trade_amount: number;
+  min_confidence: number;
+  risk_pct_per_trade: number;
+  kill_drawdown: number;
+  require_confirmation: boolean;
+  strategies: string[];
+}
+
+export const usePaperConfig = () =>
+  useQuery({
+    queryKey: ["settings", "paper-config"],
+    queryFn: () => api.get<PaperConfig>("/settings/paper-config"),
+    staleTime: 30_000,
+  });
+
+export const useUpdatePaperConfig = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (config: Partial<PaperConfig>) =>
+      api.put<{ ok: boolean }>("/settings/paper-config", config),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["settings", "paper-config"] }),
+  });
+};
+
+export const useLiveConfig = () =>
+  useQuery({
+    queryKey: ["settings", "live-config"],
+    queryFn: () => api.get<LiveConfig>("/settings/live-config"),
+    staleTime: 30_000,
+  });
+
+export const useUpdateLiveConfig = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (config: Partial<LiveConfig>) =>
+      api.put<{ ok: boolean }>("/settings/live-config", config),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["settings", "live-config"] }),
+  });
+};

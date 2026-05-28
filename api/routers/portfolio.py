@@ -439,8 +439,84 @@ async def paper_trades_list(status: str = "all", limit: int = 100):
         if status != "all":
             rows = [r for r in rows if r.get("status", "").upper() == status.upper()]
         return rows
-    except Exception as e:
+    except Exception:
         return []
+
+
+@router.post("/paper-trades/check-exits")
+async def check_paper_trade_exits(_: None = Depends(require_internal_key)):
+    """Check all OPEN paper trades against current prices; auto-close those that hit target or SL.
+
+    Returns summary of exits triggered.
+    """
+    try:
+        open_trades = [
+            r for r in sdb.select("paper_trades", order="-entry_date", limit=500)
+            if (r.get("status") or "").upper() == "OPEN"
+        ]
+    except Exception:
+        return {"error": "failed to fetch open trades", "exits": []}
+
+    if not open_trades:
+        return {"exits": [], "checked": 0, "closed": 0}
+
+    # Fetch current prices in bulk
+    tickers_ns = [
+        (t if "." in t else f"{t}.NS")
+        for r in open_trades
+        if (t := r.get("ticker", ""))
+    ]
+    prices = _live_prices(list(set(tickers_ns)))
+
+    exits = []
+    today = date.today().isoformat()
+
+    for trade in open_trades:
+        ticker = trade.get("ticker", "")
+        if not ticker:
+            continue
+        key = ticker if "." in ticker else f"{ticker}.NS"
+        cmp = prices.get(key, 0)
+        if cmp <= 0:
+            continue
+
+        entry   = float(trade.get("entry_price") or 0)
+        target  = float(trade.get("target_price") or 0)
+        sl      = float(trade.get("sl_price") or 0)
+        shares  = int(trade.get("shares") or 0)
+        trade_id = trade.get("id")
+
+        hit_target = target > 0 and cmp >= target
+        hit_sl     = sl > 0 and cmp <= sl
+
+        if not (hit_target or hit_sl) or not trade_id:
+            continue
+
+        exit_price  = target if hit_target else sl
+        outcome     = "WIN" if hit_target else "LOSS"
+        pnl         = round((exit_price - entry) * shares, 2) if entry > 0 and shares > 0 else 0.0
+        pnl_pct     = round((exit_price - entry) / entry * 100, 2) if entry > 0 else 0.0
+
+        try:
+            sdb.update("paper_trades", {
+                "status":     "CLOSED",
+                "exit_date":  today,
+                "exit_price": round(exit_price, 2),
+                "pnl":        pnl,
+                "pnl_pct":    pnl_pct,
+                "notes":      (trade.get("notes") or "") + f" · Auto-exit {outcome} @ ₹{exit_price:.2f}",
+            }, {"id": trade_id})
+            exits.append({
+                "ticker":      ticker,
+                "outcome":     outcome,
+                "exit_price":  round(exit_price, 2),
+                "pnl":         pnl,
+                "pnl_pct":     pnl_pct,
+            })
+        except Exception:
+            pass
+
+    return {"exits": exits, "checked": len(open_trades), "closed": len(exits)}
 
 
 @router.get("/strategy-pnl")

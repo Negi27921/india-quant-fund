@@ -134,6 +134,19 @@ export const useDeleteLivePosition = () => {
   });
 };
 
+export const useCheckPaperTradeExits = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ exits: unknown[]; checked: number; closed: number }>("/portfolio/paper-trades/check-exits"),
+    onSuccess: (data) => {
+      if (data.closed > 0) {
+        qc.invalidateQueries({ queryKey: ["portfolio", "paper-trades"] });
+        qc.invalidateQueries({ queryKey: ["portfolio", "strategy-pnl"] });
+      }
+    },
+  });
+};
+
 export interface PaperTrade {
   id?: number;
   strategy: string;

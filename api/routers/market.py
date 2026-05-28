@@ -71,14 +71,25 @@ def _sb_headers_mkt() -> dict:
         "Prefer":        "count=none",
     }
 
-# Universe symbols cache (1h TTL — symbols don't change often)
+# Universe symbols cache (1h TTL — backed by canonical dim_company universe)
 _UNIVERSE_CACHE: tuple[float, list[str]] = (0.0, [])
 
 def _get_universe_symbols() -> list[str]:
+    """Return canonical universe ticker symbols (NSE bare tickers)."""
     global _UNIVERSE_CACHE
     ts, syms = _UNIVERSE_CACHE
     if syms and time.monotonic() - ts < 3600:
         return syms
+    try:
+        from api.universe import get_canonical_universe
+        rows = get_canonical_universe()
+        syms = [r["ticker"] for r in rows if r.get("ticker")]
+        if syms:
+            _UNIVERSE_CACHE = (time.monotonic(), syms)
+            return syms
+    except Exception:
+        pass
+    # Fallback: stock_universe table (legacy)
     if not (_SB_URL and _SB_KEY):
         return []
     try:
@@ -96,7 +107,69 @@ def _get_universe_symbols() -> list[str]:
         return []
 
 def _get_universe_breadth() -> dict | None:
-    """Query stock_universe for advances/declines — paginated to bypass 1000-row server cap."""
+    """Compute advances/declines from canonical dim_company universe (market_cap >= 1000 Cr)."""
+    if not (_SB_URL and _SB_KEY):
+        return None
+    try:
+        from api.universe import UNIVERSE_MIN_MCAP_CR
+        all_rows: list[dict] = []
+        page_size = 1000
+        offset = 0
+        while True:
+            headers = {
+                **_sb_headers_mkt(),
+                "Range":      f"{offset}-{offset + page_size - 1}",
+                "Range-Unit": "items",
+            }
+            req = _ur.Request(
+                f"{_SB_URL}/rest/v1/dim_company"
+                "?select=current_price_inr,prev_close_inr"
+                f"&market_cap_inr_cr=gte.{UNIVERSE_MIN_MCAP_CR}"
+                "&current_price_inr=gt.0"
+                "&prev_close_inr=not.is.null",
+                headers=headers,
+            )
+            with _ur.urlopen(req, timeout=10) as r:
+                batch = json.loads(r.read())
+            if not batch:
+                break
+            all_rows.extend(batch)
+            if len(batch) < page_size:
+                break
+            offset += page_size
+
+        adv = dec = unc = counted = 0
+        for row in all_rows:
+            lp = row.get("current_price_inr")
+            pc = row.get("prev_close_inr")
+            if not lp or not pc or pc == 0:
+                continue
+            if lp > pc:
+                adv += 1
+            elif lp < pc:
+                dec += 1
+            else:
+                unc += 1
+            counted += 1
+
+        # Fallback to stock_universe if dim_company has no price data yet
+        if counted < 50:
+            return _get_breadth_from_stock_universe()
+        now_ist = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%I:%M %p IST")
+        return {
+            "advances": adv, "declines": dec, "unchanged": unc,
+            "total": counted,
+            "ratio": round(adv / max(dec, 1), 2),
+            "index_name": f"Canonical Universe ≥₹{UNIVERSE_MIN_MCAP_CR}Cr ({counted} stocks)",
+            "source": "Supabase · dim_company",
+            "as_of": now_ist,
+        }
+    except Exception:
+        return _get_breadth_from_stock_universe()
+
+
+def _get_breadth_from_stock_universe() -> dict | None:
+    """Legacy fallback: compute breadth from stock_universe table."""
     if not (_SB_URL and _SB_KEY):
         return None
     try:
@@ -1882,7 +1955,7 @@ async def get_advances_declines():
         except Exception:
             return None
 
-    # Primary: project stock_universe via Supabase (instant query, 2142 stocks)
+    # Primary: canonical dim_company universe (≥1000 Cr market cap) via Supabase
     result = await loop.run_in_executor(_executor, _get_universe_breadth)
     if result:
         return result
@@ -2560,6 +2633,22 @@ async def universe_sync(dry_run: bool = Query(False)):
         added += len(chunk)
 
     return {"added": added, "message": f"Expanded universe by {added} stocks"}
+
+
+@router.get("/universe/stats")
+async def universe_stats():
+    """Return canonical universe size and config."""
+    loop = asyncio.get_running_loop()
+    try:
+        from api.universe import get_canonical_universe, UNIVERSE_MIN_MCAP_CR
+        rows = await loop.run_in_executor(_executor, get_canonical_universe)
+        return {
+            "total": len(rows),
+            "min_mcap_cr": UNIVERSE_MIN_MCAP_CR,
+            "source": "dim_company",
+        }
+    except Exception as e:
+        return {"total": 0, "min_mcap_cr": 1000, "source": "dim_company", "error": str(e)}
 
 
 async def _sb_get_all(url: str, headers: dict) -> list[dict]:
