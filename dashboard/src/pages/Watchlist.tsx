@@ -1242,7 +1242,7 @@ function StockListPane({
       r = r.filter(i => i.symbol.toLowerCase().includes(q) || (i.company || "").toLowerCase().includes(q));
     }
     if (industryFilter) r = r.filter(i => i.industry === industryFilter || i.sector === industryFilter);
-    if (letterFilter) r = r.filter(i => i.symbol.startsWith(letterFilter));
+    if (letterFilter) r = r.filter(i => i.symbol.toUpperCase().replace(/\.(NS|BO)$/, "").startsWith(letterFilter));
     return r;
   }, [items, search, industryFilter, letterFilter, isUniverse]);
 

@@ -648,14 +648,53 @@ async def get_movers(limit: int = Query(8, le=20)):
 
     gainers = sorted([q for q in quotes if q["change_pct"] > 0], key=lambda x: -x["change_pct"])[:limit]
     losers  = sorted([q for q in quotes if q["change_pct"] < 0], key=lambda x: x["change_pct"])[:limit]
-    adv = sum(1 for q in quotes if q["change_pct"] > 0)
-    dec = sum(1 for q in quotes if q["change_pct"] < 0)
-    unc = len(quotes) - adv - dec
+
+    # Supabase stock_universe fallback — covers 900+ canonical stocks from EOD data
+    if not gainers and not losers and _SB_URL and _SB_KEY:
+        def _from_supabase_movers() -> tuple[list[dict], list[dict]]:
+            import urllib.request as _urq2, json as _j2
+            def _fetch(order: str, filt: str, n: int) -> list[dict]:
+                url = (
+                    f"{_SB_URL}/rest/v1/stock_universe"
+                    f"?select=symbol,company,sector,last_price,prev_close,pct_change"
+                    f"&is_active=eq.true&last_price=gt.0&prev_close=gt.0"
+                    f"&pct_change={filt}&order=pct_change.{order}&limit={n}"
+                )
+                req = _urq2.Request(url, headers={**_sb_headers_mkt(), "Range": f"0-{n-1}", "Range-Unit": "items"})
+                with _urq2.urlopen(req, timeout=8) as r:
+                    return _j2.loads(r.read())
+            g_rows = _fetch("desc", "gt.0", limit)
+            l_rows = _fetch("asc",  "lt.0", limit)
+            def _fmt(row: dict, is_gainer: bool) -> dict:
+                sym = str(row.get("symbol") or "")
+                ltp = float(row.get("last_price") or 0)
+                pct = float(row.get("pct_change") or 0)
+                pc  = float(row.get("prev_close") or ltp)
+                return {
+                    "ticker":     sym,
+                    "price":      round(ltp, 2),
+                    "change":     round(ltp - pc, 2),
+                    "change_pct": round(pct, 2),
+                }
+            return (
+                [_fmt(r, True)  for r in g_rows if r.get("symbol")],
+                [_fmt(r, False) for r in l_rows if r.get("symbol")],
+            )
+        try:
+            sb_gainers, sb_losers = await loop.run_in_executor(_executor, _from_supabase_movers)
+            if sb_gainers or sb_losers:
+                gainers, losers = sb_gainers, sb_losers
+        except Exception:
+            pass
+
+    adv = sum(1 for q in quotes if q["change_pct"] > 0) if quotes else len(gainers)
+    dec = sum(1 for q in quotes if q["change_pct"] < 0) if quotes else len(losers)
+    unc = (len(quotes) - adv - dec) if quotes else 0
 
     result = {
         "gainers": gainers,
         "losers":  losers,
-        "breadth": {"advances": adv, "declines": dec, "unchanged": unc, "total": len(quotes)},
+        "breadth": {"advances": adv, "declines": dec, "unchanged": unc, "total": len(quotes) or adv + dec + unc},
     }
 
     if gainers or losers:
@@ -1855,20 +1894,62 @@ async def get_corporate_actions(symbol: str = Query("", description="NSE symbol 
         except Exception:
             pass
 
-    from datetime import timedelta
-    today = datetime.now(IST).date()
-    mock_actions = [
-        {"symbol": "TCS", "company": "Tata Consultancy Services", "action": "Dividend", "ex_date": (today + timedelta(days=3)).strftime("%d-%b-%Y"), "record_date": (today + timedelta(days=4)).strftime("%d-%b-%Y"), "details": "Final Dividend Rs 28 per share"},
-        {"symbol": "INFY", "company": "Infosys", "action": "Dividend", "ex_date": (today + timedelta(days=7)).strftime("%d-%b-%Y"), "record_date": (today + timedelta(days=8)).strftime("%d-%b-%Y"), "details": "Final Dividend Rs 21 per share"},
-        {"symbol": "WIPRO", "company": "Wipro", "action": "Bonus", "ex_date": (today + timedelta(days=14)).strftime("%d-%b-%Y"), "record_date": (today + timedelta(days=15)).strftime("%d-%b-%Y"), "details": "Bonus 1:1"},
-        {"symbol": "HDFCBANK", "company": "HDFC Bank", "action": "Dividend", "ex_date": (today + timedelta(days=5)).strftime("%d-%b-%Y"), "record_date": (today + timedelta(days=6)).strftime("%d-%b-%Y"), "details": "Interim Dividend Rs 19.50 per share"},
-        {"symbol": "RELIANCE", "company": "Reliance Industries", "action": "AGM", "ex_date": (today + timedelta(days=21)).strftime("%d-%b-%Y"), "record_date": "", "details": "Annual General Meeting FY2026"},
-        {"symbol": "SUNPHARMA", "company": "Sun Pharma", "action": "Dividend", "ex_date": (today + timedelta(days=10)).strftime("%d-%b-%Y"), "record_date": (today + timedelta(days=11)).strftime("%d-%b-%Y"), "details": "Final Dividend Rs 5 per share"},
-        {"symbol": "LTIM", "company": "LTIMindtree", "action": "Split", "ex_date": (today + timedelta(days=18)).strftime("%d-%b-%Y"), "record_date": (today + timedelta(days=19)).strftime("%d-%b-%Y"), "details": "Stock Split 5:1"},
-    ]
-    if symbol:
-        return [a for a in mock_actions if a["symbol"].upper() == symbol.upper()]
-    return mock_actions
+    # BSE fallback: fetch announcements with corporate action keywords
+    def _fetch_bse_corp_actions() -> list[dict]:
+        import urllib.request as _ur3, json as _j3
+        url = (
+            "https://api.bseindia.com/BseIndiaAPI/api/AnnSubCategoryGetData/w"
+            "?pageno=1&strCat=-1&strPrevDate=&strScrip=&strSearch=P"
+            "&strToDate=&strType=C&subcategory=-1"
+        )
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Referer": "https://www.bseindia.com/corporates/ann.html",
+            "Accept":  "application/json",
+        }
+        req = _ur3.Request(url, headers=headers)
+        with _ur3.urlopen(req, timeout=8) as r:
+            data = _j3.loads(r.read())
+        CORP_KEYWORDS = {"dividend", "bonus", "rights", "split", "agm", "egm", "buyback", "buy-back"}
+        results = []
+        for item in data.get("Table", []):
+            cat = (item.get("CATEGORYNAME") or "").lower()
+            sub = (item.get("NEWSSUB") or "").lower()
+            if not any(kw in cat or kw in sub for kw in CORP_KEYWORDS):
+                continue
+            dt_raw = (item.get("DT_TM") or item.get("NEWS_DT") or "")[:10]
+            company = str(
+                item.get("SLONGNAME") or item.get("SHORT_NAME") or item.get("SCRIP_CD", "")
+            ).strip()
+            scrip = str(item.get("SCRIP_CD", "")).strip()
+            headline = (item.get("NEWSSUB") or "")[:200]
+            action_type = item.get("CATEGORYNAME", "Corporate Action")
+            entry = {
+                "symbol":      scrip,
+                "company":     company,
+                "action":      action_type,
+                "ex_date":     dt_raw,
+                "record_date": "",
+                "details":     headline,
+            }
+            if symbol and scrip != symbol and company.upper() != symbol.upper():
+                continue
+            results.append(entry)
+            if len(results) >= 25:
+                break
+        return results
+
+    try:
+        bse_corp = await loop.run_in_executor(_executor, _fetch_bse_corp_actions)
+        if bse_corp:
+            return bse_corp
+    except Exception:
+        pass
+
+    return []
 
 
 @router.get("/advances-declines")
