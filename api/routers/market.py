@@ -653,33 +653,32 @@ async def get_movers(limit: int = Query(8, le=20)):
     if not gainers and not losers and _SB_URL and _SB_KEY:
         def _from_supabase_movers() -> tuple[list[dict], list[dict]]:
             import urllib.request as _urq2, json as _j2
-            def _fetch(order: str, filt: str, n: int) -> list[dict]:
-                url = (
-                    f"{_SB_URL}/rest/v1/stock_universe"
-                    f"?select=symbol,company,sector,last_price,prev_close,pct_change"
-                    f"&is_active=eq.true&last_price=gt.0&prev_close=gt.0"
-                    f"&pct_change={filt}&order=pct_change.{order}&limit={n}"
-                )
-                req = _urq2.Request(url, headers={**_sb_headers_mkt(), "Range": f"0-{n-1}", "Range-Unit": "items"})
-                with _urq2.urlopen(req, timeout=8) as r:
-                    return _j2.loads(r.read())
-            g_rows = _fetch("desc", "gt.0", limit)
-            l_rows = _fetch("asc",  "lt.0", limit)
-            def _fmt(row: dict, is_gainer: bool) -> dict:
-                sym = str(row.get("symbol") or "")
+            # Fetch all active stocks with price data; compute pct_change in Python
+            url = (
+                f"{_SB_URL}/rest/v1/stock_universe"
+                f"?select=symbol,company,last_price,prev_close"
+                f"&is_active=eq.true&last_price=gt.0&prev_close=gt.0"
+            )
+            req = _urq2.Request(url, headers={**_sb_headers_mkt(), "Range": "0-1499", "Range-Unit": "items"})
+            with _urq2.urlopen(req, timeout=8) as r:
+                rows = _j2.loads(r.read())
+            computed = []
+            for row in (rows if isinstance(rows, list) else []):
                 ltp = float(row.get("last_price") or 0)
-                pct = float(row.get("pct_change") or 0)
-                pc  = float(row.get("prev_close") or ltp)
-                return {
-                    "ticker":     sym,
+                pc  = float(row.get("prev_close") or 0)
+                if ltp <= 0 or pc <= 0:
+                    continue
+                pct = round((ltp - pc) / pc * 100, 2)
+                computed.append({
+                    "ticker":     str(row.get("symbol") or ""),
                     "price":      round(ltp, 2),
                     "change":     round(ltp - pc, 2),
-                    "change_pct": round(pct, 2),
-                }
-            return (
-                [_fmt(r, True)  for r in g_rows if r.get("symbol")],
-                [_fmt(r, False) for r in l_rows if r.get("symbol")],
-            )
+                    "change_pct": pct,
+                })
+            computed.sort(key=lambda x: -x["change_pct"])
+            g = [c for c in computed if c["change_pct"] > 0][:limit]
+            l = [c for c in reversed(computed) if c["change_pct"] < 0][:limit]
+            return g, l
         try:
             sb_gainers, sb_losers = await loop.run_in_executor(_executor, _from_supabase_movers)
             if sb_gainers or sb_losers:
