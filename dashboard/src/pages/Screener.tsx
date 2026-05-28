@@ -535,7 +535,7 @@ function PaperTradeRow({ trade }: { trade: PaperTrade }) {
 export function ScreenerPage() {
   const [strategy, setStrategy] = useState<Strategy>("vcp");
   const [tab, setTab] = useState<"screener" | "trades">("screener");
-  const [universe, setUniverse] = useState<Universe>("full");
+  const universe: Universe = "full"; // canonical universe — always "full" (dim_company ≥ 1000 Cr)
   const [minConf, setMinConf] = useState(0);
   const [minPrice, setMinPrice] = useState(0);
   const [maxPrice, setMaxPrice] = useState(0);
@@ -577,7 +577,7 @@ export function ScreenerPage() {
     setScanning(true);
     scanAbortRef.current = false;
     const CHUNK = 100;
-    const universeSize = universe === "full" ? 2137 : 503;
+    const universeSize = data?.universe_size ?? 1500; // canonical universe size from API
     setChunkProgress({ scanned: 0, total: universeSize });
 
     try {
@@ -676,7 +676,7 @@ export function ScreenerPage() {
               Stock Screener
             </h1>
             <div style={{ fontSize: 11.5, color: "var(--text-3)", fontFamily: "var(--font-body)", marginTop: 4 }}>
-              Universe: <span style={{ color: "var(--accent)", fontWeight: 700 }}>{data?.universe_size ?? (universe === "full" ? 2137 : 503)}</span> NSE stocks
+              Universe: <span style={{ color: "var(--accent)", fontWeight: 700 }}>{data?.universe_size ?? "..."}</span> stocks ≥₹1,000Cr market cap
               {scanning && chunkProgress ? (
                 <>
                   {" · "}
@@ -800,24 +800,22 @@ export function ScreenerPage() {
             ))}
           </div>
 
-          {/* Universe selector */}
-          <button
-            onClick={() => setUniverse(u => u === "nifty500" ? "full" : "nifty500")}
+          {/* Universe selector — canonical dim_company (≥₹1000Cr) */}
+          <div
             style={{
               display: "flex", alignItems: "center", gap: 7,
               padding: "8px 14px", borderRadius: 10,
-              background: universe === "full" ? "var(--accent-dim)" : "var(--surface)",
-              border: `1px solid ${universe === "full" ? "var(--accent-border)" : "var(--border)"}`,
-              color: universe === "full" ? "var(--accent)" : "var(--text-3)",
-              cursor: "pointer", fontFamily: "var(--font-body)",
-              fontSize: 11.5, fontWeight: universe === "full" ? 700 : 500,
-              transition: "all 150ms",
+              background: "var(--accent-dim)",
+              border: "1px solid var(--accent-border)",
+              color: "var(--accent)",
+              fontFamily: "var(--font-body)",
+              fontSize: 11.5, fontWeight: 700,
             }}
-            title={universe === "full" ? "Scanning all 2,137 NSE stocks (15-20 min first scan)" : "Switch to Nifty 500 (503 stocks, faster)"}
+            title="Canonical universe: dim_company stocks with market cap ≥ ₹1,000 Cr"
           >
             <Globe style={{ width: 12, height: 12 }} />
-            {universe === "full" ? "All NSE · 2,137" : "Nifty 500 · 503"}
-          </button>
+            Canonical · {data?.universe_size ?? "≥1000Cr"}
+          </div>
         </div>
 
         {/* Multibagger info banner */}

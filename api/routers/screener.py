@@ -887,7 +887,7 @@ async def scan_chunk(
     if strategy == "custom":
         strategy = "multibagger"
 
-    active_universe = FULL_UNIVERSE if universe == "full" else SCAN_UNIVERSE
+    active_universe = _get_screener_universe()
     total = len(active_universe)
     ticker_slice = active_universe[offset : offset + limit]
 
