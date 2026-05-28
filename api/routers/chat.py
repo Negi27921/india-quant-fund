@@ -347,7 +347,7 @@ def _nvidia_complete(system: str, user_msg: str, history: list[dict] | None = No
     key = os.getenv("NVIDIA_API_KEY", "").strip()
     if not key:
         raise ValueError("NVIDIA_API_KEY not set")
-    model = os.getenv("NVIDIA_MODEL", "deepseek-ai/deepseek-r1").strip()
+    model = os.getenv("NVIDIA_MODEL", "meta/llama-3.3-70b-instruct").strip()
     messages: list[dict] = [{"role": "system", "content": system}]
     if history:
         for turn in history[-4:]:
@@ -528,7 +528,7 @@ async def chat_probe():
          {"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": "Say OK"}], "max_tokens": 5}),
         ("gemini", "GEMINI_API_KEY", None, None, None),
     ]:
-        key = os.getenv(key_env, "")
+        key = os.getenv(key_env, "").strip()
         results[f"{name}_key"] = bool(key)
         if key and name == "groq":
             try:
