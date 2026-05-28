@@ -490,25 +490,32 @@ def _build_stock_context(symbol: str) -> str:
 @router.get("/universe/search")
 async def universe_search(q: str = "", limit: int = 40) -> list[dict]:
     """
-    Search dim_company (NEO universe: 5,400+ NSE/BSE stocks) for the stock picker.
-    Returns {symbol, company, sector, industry} sorted by ticker.
-    q="" returns the first N stocks alphabetically.
+    Search dim_company (canonical universe ≥₹1,000Cr) for the stock picker.
+    Returns {symbol, company, sector, industry} sorted by market cap desc.
+    q="" returns top-N stocks by market cap.
     """
+    import urllib.parse as _up
     if not (_SB_URL and _SB_KEY):
         return []
     try:
         q_clean = q.strip().upper()
         cap = min(limit, 80)
+        base_filters = "&market_cap_inr_cr=gte.1000&ticker=not.is.null"
         if q_clean:
+            # Use %25 as URL-encoded % wildcard for PostgREST ilike
+            q_enc = _up.quote(q.strip(), safe="")
+            q_ticker = _up.quote(q_clean, safe="")
             path = (
-                f"dim_company?select=ticker,company_name,sector,industry"
-                f"&or=(ticker.ilike.{q_clean}*,company_name.ilike.*{q.strip()}*)"
-                f"&order=ticker.asc&limit={cap}"
+                f"dim_company?select=ticker,company_name,sector,industry,market_cap_inr_cr"
+                f"&or=(ticker.ilike.{q_ticker}%25,company_name.ilike.%25{q_enc}%25)"
+                f"{base_filters}"
+                f"&order=market_cap_inr_cr.desc.nullslast&limit={cap}"
             )
         else:
             path = (
-                f"dim_company?select=ticker,company_name,sector,industry"
-                f"&order=ticker.asc&limit={cap}"
+                f"dim_company?select=ticker,company_name,sector,industry,market_cap_inr_cr"
+                f"{base_filters}"
+                f"&order=market_cap_inr_cr.desc.nullslast&limit={cap}"
             )
         rows = _sb_get(path)
         if not isinstance(rows, list):
@@ -521,6 +528,7 @@ async def universe_search(q: str = "", limit: int = 40) -> list[dict]:
                 "industry": r.get("industry", ""),
             }
             for r in rows
+            if r.get("ticker")
         ]
     except Exception:
         return []

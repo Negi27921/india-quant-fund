@@ -220,7 +220,7 @@ def _get_breadth_from_stock_universe() -> dict | None:
             "advances": adv, "declines": dec, "unchanged": unc,
             "total": counted,
             "ratio": round(adv / max(dec, 1), 2),
-            "index_name": f"Project Universe ({counted} stocks)",
+            "index_name": f"NSE Active Universe ({counted} stocks)",
             "source": "Supabase · stock_universe",
             "as_of": now_ist,
         }
@@ -2012,44 +2012,84 @@ async def get_global_indices():
 
 
 @router.get("/results-calendar")
-@_cached("results_cal", ttl=3600)
+@_cached("results_cal", ttl=1800)
 async def get_results_calendar():
-    """Upcoming quarterly results calendar from NSE."""
+    """Recent financial results filings — BSE primary, NSE board meetings fallback."""
     loop = asyncio.get_running_loop()
+
+    def _fetch_bse_results() -> list[dict]:
+        """Fetch recent Financial Results announcements from BSE."""
+        import urllib.request as _ur2, json as _json2
+        url = (
+            "https://api.bseindia.com/BseIndiaAPI/api/AnnSubCategoryGetData/w"
+            "?pageno=1&strCat=-1&strPrevDate=&strScrip=&strSearch=P"
+            "&strToDate=&strType=C&subcategory=-1"
+        )
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Referer": "https://www.bseindia.com/corporates/ann.html",
+            "Accept":  "application/json",
+        }
+        req = _ur2.Request(url, headers=headers)
+        with _ur2.urlopen(req, timeout=8) as r:
+            data = _json2.loads(r.read())
+        results = []
+        for item in data.get("Table", []):
+            cat = (item.get("CATEGORYNAME") or "").lower()
+            sub = (item.get("NEWSSUB") or "").lower()
+            if "result" not in cat and "result" not in sub:
+                continue
+            dt_raw = (item.get("DT_TM") or item.get("NEWS_DT") or "")[:10]
+            company = str(
+                item.get("SLONGNAME") or item.get("SHORT_NAME") or item.get("SCRIP_CD", "")
+            ).strip()
+            scrip = str(item.get("SCRIP_CD", "")).strip()
+            headline = (item.get("NEWSSUB") or "")[:200]
+            results.append({
+                "symbol":       scrip,
+                "company":      company,
+                "meeting_date": dt_raw,
+                "purpose":      item.get("CATEGORYNAME", "Financial Results"),
+                "description":  headline,
+            })
+            if len(results) >= 30:
+                break
+        return results
+
+    # 1. Try BSE financial results (real-time, same source as Live Filings)
+    try:
+        bse_results = await loop.run_in_executor(_executor, _fetch_bse_results)
+        if bse_results:
+            return bse_results
+    except Exception:
+        pass
+
+    # 2. Try NSE board meetings
     if _NSE_AVAILABLE:
         try:
-            def _fetch():
+            def _fetch_nse():
                 url = "https://www.nseindia.com/api/corporates-boardMeetings?index=equities"
                 data = _nsefetch(url)
                 results = []
                 for item in (data if isinstance(data, list) else [])[:30]:
                     results.append({
-                        "symbol": item.get("symbol",""),
-                        "company": item.get("companyName",""),
-                        "meeting_date": item.get("bm_date",""),
-                        "purpose": item.get("bm_purpose",""),
-                        "description": item.get("bm_desc",""),
+                        "symbol":       item.get("symbol", ""),
+                        "company":      item.get("companyName", ""),
+                        "meeting_date": item.get("bm_date", ""),
+                        "purpose":      item.get("bm_purpose", ""),
+                        "description":  item.get("bm_desc", ""),
                     })
                 return [r for r in results if r["symbol"]]
-            result = await loop.run_in_executor(_executor, _fetch)
-            if result:
-                return result
+            nse_result = await loop.run_in_executor(_executor, _fetch_nse)
+            if nse_result:
+                return nse_result
         except Exception:
             pass
-    from datetime import timedelta
-    today = datetime.now(IST).date()
-    return [
-        {"symbol": "RELIANCE", "company": "Reliance Industries", "meeting_date": (today + timedelta(days=2)).strftime("%d-%b-%Y"), "purpose": "Financial Results", "description": "Board Meeting for Q4 FY26 results"},
-        {"symbol": "HDFCBANK", "company": "HDFC Bank", "meeting_date": (today + timedelta(days=3)).strftime("%d-%b-%Y"), "purpose": "Financial Results", "description": "Q4 FY26 results and final dividend"},
-        {"symbol": "ICICIBANK", "company": "ICICI Bank", "meeting_date": (today + timedelta(days=5)).strftime("%d-%b-%Y"), "purpose": "Financial Results", "description": "Q4 and Full Year FY26 results"},
-        {"symbol": "TCS", "company": "TCS", "meeting_date": (today + timedelta(days=7)).strftime("%d-%b-%Y"), "purpose": "Financial Results & Dividend", "description": "Q4 results + Final Dividend announcement"},
-        {"symbol": "INFY", "company": "Infosys", "meeting_date": (today + timedelta(days=8)).strftime("%d-%b-%Y"), "purpose": "Financial Results", "description": "Q4 FY26 earnings with guidance"},
-        {"symbol": "WIPRO", "company": "Wipro", "meeting_date": (today + timedelta(days=9)).strftime("%d-%b-%Y"), "purpose": "Financial Results", "description": "Q4 FY26 revenue and margin update"},
-        {"symbol": "BAJFINANCE", "company": "Bajaj Finance", "meeting_date": (today + timedelta(days=11)).strftime("%d-%b-%Y"), "purpose": "Financial Results", "description": "Q4 AUM growth and NPA data"},
-        {"symbol": "AXISBANK", "company": "Axis Bank", "meeting_date": (today + timedelta(days=12)).strftime("%d-%b-%Y"), "purpose": "Financial Results", "description": "Q4 FY26 credit growth and NIM"},
-        {"symbol": "MARUTI", "company": "Maruti Suzuki", "meeting_date": (today + timedelta(days=14)).strftime("%d-%b-%Y"), "purpose": "Financial Results", "description": "Q4 FY26 volume and realisation"},
-        {"symbol": "SUNPHARMA", "company": "Sun Pharma", "meeting_date": (today + timedelta(days=15)).strftime("%d-%b-%Y"), "purpose": "Financial Results", "description": "Q4 specialty business update"},
-    ]
+
+    return []
 
 
 # ── Quarterly Results ─────────────────────────────────────────────────────────
