@@ -77,7 +77,7 @@ _SB_HEADERS = {
 # NVIDIA NIM (primary) — OpenAI-compatible, free 1000 credits
 # https://build.nvidia.com → "Get API Key"
 _NVIDIA_BASE = "https://integrate.api.nvidia.com/v1"
-_NVIDIA_MODEL = "meta/llama-3.2-90b-vision-instruct"
+_NVIDIA_MODEL = "meta/llama-3.2-11b-vision-instruct"   # 11b responds fast; 90b times out on free tier
 
 # Gemini (fallback)
 _GEMINI_MODEL = "gemini-2.0-flash"
@@ -153,11 +153,39 @@ def _parse_json_from_text(text: str) -> Optional[dict]:
     return None
 
 
+def _compress_image(image_bytes: bytes, max_kb: int = 800) -> bytes:
+    """Compress image if > max_kb to stay within API payload limits."""
+    if len(image_bytes) <= max_kb * 1024:
+        return image_bytes
+    try:
+        from PIL import Image
+        import io
+        img = Image.open(io.BytesIO(image_bytes))
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+        quality = 75
+        while quality >= 30:
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=quality, optimize=True)
+            if buf.tell() <= max_kb * 1024:
+                print(f"  [Image] Compressed {len(image_bytes)//1024}KB → {buf.tell()//1024}KB (q={quality})")
+                return buf.getvalue()
+            quality -= 15
+        # Last resort: resize
+        buf = io.BytesIO()
+        img.thumbnail((1024, 1024))
+        img.save(buf, format="JPEG", quality=60)
+        return buf.getvalue()
+    except ImportError:
+        return image_bytes  # Pillow not installed, send as-is
+
+
 async def _extract_nvidia(image_bytes: bytes) -> Optional[dict]:
-    """NVIDIA NIM llama-3.2-90b-vision — primary provider."""
+    """NVIDIA NIM llama-3.2-11b-vision — primary provider."""
     if not NVIDIA_API_KEY:
         return None
     import base64
+    image_bytes = _compress_image(image_bytes)
     b64 = base64.b64encode(image_bytes).decode()
     payload = {
         "model": _NVIDIA_MODEL,
@@ -171,14 +199,14 @@ async def _extract_nvidia(image_bytes: bytes) -> Optional[dict]:
         "temperature": 0,
         "max_tokens": 1024,
     }
-    async with httpx.AsyncClient(timeout=40) as client:
+    async with httpx.AsyncClient(timeout=90) as client:
         r = await client.post(
             f"{_NVIDIA_BASE}/chat/completions",
             headers={"Authorization": f"Bearer {NVIDIA_API_KEY}", "Content-Type": "application/json"},
             json=payload,
         )
     if r.status_code != 200:
-        print(f"  [NVIDIA] HTTP {r.status_code}: {r.text[:200]}")
+        print(f"  [NVIDIA] HTTP {r.status_code}: {r.text[:300]}")
         return None
     text = r.json()["choices"][0]["message"]["content"]
     data = _parse_json_from_text(text)
